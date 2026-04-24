@@ -1,0 +1,15 @@
+# --- Core Image Processing & Math ---
+opencv-python==4.8.1.78
+numpy==1.26.2
+scipy==1.11.4
+
+# --- Face Recognition (SFace/VGG-Face) ---
+deepface==0.0.84
+
+# --- Anti-Spoofing (MiniFASNetV2) ---
+torch==2.1.2
+torchvision==0.16.2
+
+# --- Utility (เตรียมไว้สำหรับเชื่อม Backend) ---
+requests==2.31.0
+python-dotenv==1.0.0
