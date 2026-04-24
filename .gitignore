@@ -1,19 +1,27 @@
-# --- Frontend (React/Node) ---
+# ==============================
+# 🚫 Global Git Ignore File
+# ==============================
+
+# --- Node / Frontend ---
 node_modules/
 dist/
 build/
 .npm/
-.env
 
-# --- Backend (Python/FastAPI) ---
+# --- Python / Backend / Gatekeeper / Agent ---
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
-env/
 .venv/
-uploads/
-*.db  # ละเว้นไฟล์ Database (ถอยให้รัน seed_data ใหม่เอง)
+env/
+*.pkl       # ละเว้นไฟล์ความจำใบหน้า
+*.dat
+*.pth       # ละเว้นไฟล์โมเดล AI (ขนาดใหญ่)
+
+# --- Secrets & Configs ---
+.env
+*.db        # ละเว้นไฟล์ Database
 
 # --- OS Files ---
 .DS_Store
