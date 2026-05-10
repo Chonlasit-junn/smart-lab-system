@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Box, Typography, Avatar, IconButton, Paper, Button, Grid, Divider,
-  Slide, Fade, Chip, Dialog, DialogContent 
+  Slide, Fade, Chip, Dialog, DialogContent
 } from '@mui/material';
 import { 
   Search, Notifications, EventNote, Assignment, History, 
@@ -39,7 +39,7 @@ const SLOT_TIMES = {
 // ============================================================================
 export default function Booking() {
   
-  // --- Contexts & Hooks ---
+  // Contexts & Hooks
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
 
@@ -47,16 +47,16 @@ export default function Booking() {
   // 3. STATE MANAGEMENT
   // ============================================================================
   
-  /** @description UI States - สำหรับจัดการการแสดงผลบนหน้าจอ */
+  // UI States
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
 
-  /** @description Data States - สำหรับเก็บข้อมูลที่ดึงมาจาก API */
+  // Data States
   const [labs, setLabs] = useState([]);
   const [availability, setAvailability] = useState(null);
 
-  /** @description Selection States - สำหรับเก็บข้อมูลที่ผู้ใช้กำลังเลือกอยู่ (Room -> Date -> Time) */
+  // Selection States
   const [selectedRoom, setSelectedRoom] = useState(null); 
   const [currentDateObj, setCurrentDateObj] = useState(new Date()); 
   const [selectedDate, setSelectedDate] = useState(null); 
@@ -72,8 +72,7 @@ export default function Booking() {
   }, []);
 
   /**
-   * @function fetchLabs
-   * @description ดึงข้อมูลห้องแล็บทั้งหมดจาก Backend
+   * Fetches all available lab rooms from the backend.
    */
   const fetchLabs = async () => {
     try {
@@ -81,17 +80,16 @@ export default function Booking() {
       setLabs(response.data.data);
     } catch (error) {
       console.error("[API Error] Failed to fetch labs:", error);
-      alert("❌ ไม่สามารถดึงข้อมูลห้องแล็บได้ กรุณาเช็กว่า Backend เปิดทำงานอยู่หรือไม่");
+      alert("Error: Unable to fetch lab data. Please check backend connection.");
     }
   };
 
   /**
-   * @function fetchAvailability
-   * @description ดึงสถานะคิวว่างของห้องแล็บตามวันที่ระบุ
-   * @param {number} labId - ID ของห้องแล็บ
-   * @param {number} year - ปี ค.ศ.
-   * @param {number} monthIndex - Index ของเดือน (0-11)
-   * @param {number} dayNumber - วันที่ (1-31)
+   * Fetches availability for a specific lab room on a given date.
+   * @param {number} labId - The ID of the selected lab
+   * @param {number} year - The selected year
+   * @param {number} monthIndex - The selected month (0-11)
+   * @param {number} dayNumber - The selected day (1-31)
    */
   const fetchAvailability = async (labId, year, monthIndex, dayNumber) => {
     const dateStr = getFormattedDateString(year, monthIndex, dayNumber);
@@ -102,7 +100,7 @@ export default function Booking() {
       setAvailability(response.data.slots);
     } catch (error) {
       console.error("[API Error] Failed to fetch availability:", error);
-      alert("❌ เกิดข้อผิดพลาดตอนดึงตารางเวลา! กรุณารีเฟรชหน้าเว็บ");
+      alert("Error: Failed to retrieve schedule. Please refresh the page.");
       setAvailability(null);
     }
   };
@@ -111,7 +109,7 @@ export default function Booking() {
   // 5. MEMOIZATION & COMPUTED VALUES
   // ============================================================================
   
-  /** * @description ค้นหาห้องแล็บ (ใช้ useMemo เพื่อป้องกันการ Filter ใหม่ทุกครั้งที่ State อื่นเปลี่ยน) 
+  /** * Filters the lab list based on the search query. 
    */
   const filteredLabs = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -122,20 +120,20 @@ export default function Booking() {
     );
   }, [labs, searchQuery]);
 
-  // --- Date Math for Calendar Rendering ---
+  // Date Math for Calendar Rendering
   const currentYear = currentDateObj.getFullYear();
   const currentMonth = currentDateObj.getMonth();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonthJS = new Date(currentYear, currentMonth, 1).getDay();
-  // แปลงวันอาทิตย์ (0) ให้อยู่ท้ายสุด เพื่อให้ปฏิทินเริ่มที่วันจันทร์
+  
+  // Shift Sunday (0) to the end to start the calendar on Monday
   const emptySlots = firstDayOfMonthJS === 0 ? 6 : firstDayOfMonthJS - 1;
 
   const monthName = currentDateObj.toLocaleString('en-US', { month: 'long' });
   const monthNameShort = currentDateObj.toLocaleString('en-US', { month: 'short' });
 
   /**
-   * @function getFormattedDateString
-   * @description แปลงข้อมูลวัน/เดือน/ปี ให้เป็น String รูปแบบ YYYY-MM-DD
+   * Formats year, month, and day into YYYY-MM-DD string format.
    */
   const getFormattedDateString = useCallback((year, monthIndex, day) => {
     const padMonth = String(monthIndex + 1).padStart(2, '0');
@@ -144,38 +142,30 @@ export default function Booking() {
   }, []);
 
   /**
-   * @function checkSlotTimeValidity
-   * @description ตรวจสอบว่า Slot เวลานี้ สามารถกดจองได้หรือไม่ตาม Business Logic (ล่วงหน้า 2 ชม.)
+   * Validates if the selected time slot can be booked based on the 2-hour advance rule.
    * @returns {"valid" | "passed" | "too_close"}
    */
   const checkSlotTimeValidity = useCallback((slotNumber) => {
     if (!selectedDate) return "valid";
 
-    // 1. จำลองเวลาที่ผู้ใช้เลือก (ให้เป็น 00:00:00 ของวันนั้น)
     const selectedDateObj = new Date(currentYear, currentMonth, selectedDate);
     selectedDateObj.setHours(0, 0, 0, 0);
 
-    // 2. จำลองเวลาวันนี้ (00:00:00)
     const todayMidnight = new Date();
     todayMidnight.setHours(0, 0, 0, 0);
 
-    // Rule A: ถ้าเลือกวันพรุ่งนี้หรือมะรืน ถือว่าผ่านกฎ 2 ชม. ทันที
     if (selectedDateObj.getTime() > todayMidnight.getTime()) return "valid";
 
-    // Rule B: ถ้าเป็นวันนี้ ต้องเช็กเวลาเป๊ะๆ
     const slotTimeObj = new Date(currentYear, currentMonth, selectedDate);
     slotTimeObj.setHours(SLOT_TIMES[slotNumber].hours, SLOT_TIMES[slotNumber].minutes, 0, 0);
 
     const now = new Date();
     
-    // Check: เวลาของ Slot นั้นผ่านไปแล้ว
     if (slotTimeObj.getTime() <= now.getTime()) return "passed";
     
-    // Check: เวลากระชั้นชิดไม่ถึง 2 ชั่วโมง
     const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
     if (slotTimeObj.getTime() < twoHoursFromNow.getTime()) return "too_close";
 
-    // ผ่านทุกเงื่อนไข
     return "valid";
   }, [selectedDate, currentYear, currentMonth]);
 
@@ -185,10 +175,12 @@ export default function Booking() {
   
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/'); 
   };
 
-  // เคลียร์ค่าที่เลือกไว้ในขั้นตอนการจอง
+  /**
+   * Clears the current selection states during the booking process.
+   */
   const resetSelections = () => {
     setSelectedDate(null);
     setSelectedTimeSlot(null);
@@ -205,7 +197,6 @@ export default function Booking() {
     resetSelections();
   };
 
-  // ผู้ใช้เลือกห้อง
   const handleSelectRoom = (room) => {
     if (room.status !== 'active') return;
     setSelectedRoom(room);
@@ -213,23 +204,20 @@ export default function Booking() {
     resetSelections();
   };
 
-  // กดย้อนกลับไปหน้าเลือกห้อง
   const handleBackToRooms = () => {
     setSelectedRoom(null);
     resetSelections();
   };
 
-  // ผู้ใช้เลือกวันที่ในปฏิทิน
   const handleSelectDate = (dayNumber) => {
     setSelectedDate(dayNumber);
     setSelectedTimeSlot(null); 
-    setAvailability(null); // เคลียร์ตารางของวันเก่าทิ้งก่อน
+    setAvailability(null); 
     fetchAvailability(selectedRoom.id, currentYear, currentMonth, dayNumber);
   };
 
   /**
-   * @function handleConfirmBooking
-   * @description ส่ง Request ไปยัง Backend เพื่อสร้างการจอง
+   * Sends the booking payload to the backend API.
    */
   const handleConfirmBooking = async () => {
     if (!selectedDate || !selectedTimeSlot) return;
@@ -242,20 +230,18 @@ export default function Booking() {
         email: currentUser.email, 
         booking_date: dateStr,
         slot_number: selectedTimeSlot,
-        purpose: "General Study",
+        purpose: "General Usage", // 🌟 กำหนดค่าเริ่มต้นให้ไปเลยโดยที่ผู้ใช้ไม่ต้องพิมพ์
         total_participants: 1
       };
 
       await axios.post(`${API_URL}/bookings`, payload);
-      // ยิง API ผ่าน จะเปิด Pop-up เขียว
       setSuccessDialogOpen(true);
     } catch (error) {
       const errMsg = error.response?.data?.detail || "Failed to confirm booking";
-      alert(`❌ Booking Failed: ${errMsg}`); 
+      alert(`Booking Failed: ${errMsg}`); 
     }
   };
 
-  // เมื่อกดปิด Pop-up ให้เคลียร์หน้าจอกลับสู่สภาพเริ่มต้น
   const handleCloseSuccessDialog = () => {
     setSuccessDialogOpen(false);
     handleBackToRooms(); 
@@ -277,13 +263,13 @@ export default function Booking() {
   // ============================================================================
   return (
     <div className="app-layout">
-      {/* --- OVERLAY (Mobile) --- */}
+      {/* OVERLAY (Mobile) */}
       {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)}></div>}
 
-      {/* --- SIDEBAR --- */}
+      {/* SIDEBAR */}
       <div className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-logo">
-          <Computer sx={{ fontSize: 40, color: '#0052cc' }} />
+          <Computer sx={{ fontSize: 40, color: '#1877f2' }} />
           <div>
             <Typography variant="h6" fontWeight="bold" lineHeight={1.2}>Smart Lab</Typography>
             <Typography variant="caption" color="textSecondary">Reserve Lab to use</Typography>
@@ -308,10 +294,10 @@ export default function Booking() {
         </div>
       </div>
 
-      {/* --- MAIN AREA --- */}
+      {/* MAIN AREA */}
       <div className="main-area">
         
-        {/* --- HEADER --- */}
+        {/* HEADER */}
         <div className="top-header">
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <IconButton sx={{ display: { xs: 'block', md: 'none' }, color: '#111827' }} onClick={() => setIsSidebarOpen(true)}>
@@ -346,7 +332,7 @@ export default function Booking() {
                 <Avatar sx={{ bgcolor: '#111827', width: 36, height: 36 }}>{currentUser.initial}</Avatar>
               </Box>
             ) : (
-              <Box onClick={() => navigate('/login')} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, borderLeft: '1px solid #e2e8f0', pl: { xs: 1, sm: 3 }, cursor: 'pointer', transition: '0.2s', '&:hover': { opacity: 0.7 } }}>
+              <Box onClick={() => navigate('/')} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, borderLeft: '1px solid #e2e8f0', pl: { xs: 1, sm: 3 }, cursor: 'pointer', transition: '0.2s', '&:hover': { opacity: 0.7 } }}>
                 <Box className="profile-text-container" sx={{ textAlign: 'right' }}>
                   <Typography variant="subtitle2" fontWeight="bold" lineHeight={1.2} color="textSecondary">Guest User</Typography>
                   <Typography variant="caption" color="primary.main">Click to Log in</Typography>
@@ -357,7 +343,7 @@ export default function Booking() {
           </Box>
         </div>
 
-        {/* --- CONTENT AREA --- */}
+        {/* CONTENT AREA */}
         <div className="content-area" style={{ position: 'relative', overflowX: 'hidden' }}>
           
           {/* VIEW 1: ROOM SELECTION */}
@@ -403,7 +389,7 @@ export default function Booking() {
                                 <Typography variant="body2" fontWeight="bold">{room.capacity} Users</Typography>
                               </Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                📍 {room.location || '-'}
+                                Location: {room.location || '-'}
                               </Box>
                             </Box>
                           </Box>
@@ -493,7 +479,6 @@ export default function Booking() {
                           const dayNumber = i + 1;
                           const isSelected = dayNumber === selectedDate; 
                           
-                          // คำนวณสถานะปุ่มวันที่ ว่ากดได้หรือไม่
                           const iterationDate = new Date(currentYear, currentMonth, dayNumber);
                           iterationDate.setHours(0, 0, 0, 0); 
                           const isPastDate = iterationDate.getTime() < todayMidnightForCalendar.getTime();
@@ -534,18 +519,15 @@ export default function Booking() {
                       <Paper elevation={0} sx={{ p: 3, border: '1px solid #e2e8f0', borderRadius: 4 }}>
                         <Grid container spacing={2}>
                           {[1, 2, 3, 4].map((slotNumber) => {
-                            // ดึงข้อมูล Slot จาก API response
                             const slotInfo = availability?.[slotNumber];
                             const isAvailable = slotInfo?.status === "available";
                             const isClass = slotInfo?.status === "class";
                             const isFull = slotInfo?.status === "full";
                             
-                            // เช็กข้อจำกัดด้านเวลา (ล่วงหน้า 2 ชม.)
                             const timeStatus = checkSlotTimeValidity(slotNumber);
                             const isTimeValid = timeStatus === "valid";
 
                             const isSelected = selectedTimeSlot === slotNumber;
-                            // ปุ่มจะถูกล็อกถ้า 1. ไม่ว่าง 2. ผิดเงื่อนไขเวลา
                             const isDisabled = !isAvailable || !isTimeValid;
                             
                             return (
@@ -580,37 +562,43 @@ export default function Booking() {
                     </Box>
                   </Fade>
 
-                  {/* STEP 3: ACTION CONFIRMATION */}
+                  {/* STEP 3: ACTION CONFIRMATION (เอาช่องกรอก Purpose ออก) */}
                   <Slide direction="up" in={!!selectedTimeSlot} mountOnEnter unmountOnExit>
-                    <Paper 
-                      elevation={0} 
-                      sx={{ 
-                        p: { xs: 2, md: 3 }, bgcolor: '#e0f2fe', borderRadius: 4, 
-                        display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, 
-                        justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' },
-                        gap: 2, border: '1px solid #bae6fd'
-                      }}
-                    >
-                      <Box>
-                        <Typography variant="caption" color="textSecondary" fontWeight="bold">YOUR SELECTION</Typography>
-                        <Typography variant="h6" fontWeight="bold" color="#0c4a6e">
-                          {selectedRoom?.code} • {monthNameShort} {selectedDate}, {SLOT_DISPLAY_MAPPING[selectedTimeSlot]}
-                        </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="h6" fontWeight="bold">3. Confirm Your Booking</Typography>
                       </Box>
-                      
-                      <Button 
-                        variant="contained" 
-                        onClick={currentUser ? handleConfirmBooking : () => navigate('/login')} 
+
+                      <Paper 
+                        elevation={0} 
                         sx={{ 
-                          bgcolor: '#0284c7', color: 'white', px: 4, py: 1.5, borderRadius: 3, 
-                          fontWeight: 'bold', width: { xs: '100%', sm: 'auto' },
-                          transition: 'all 0.2s',
-                          '&:hover': { bgcolor: '#0369a1', transform: 'scale(1.03)' }
+                          p: { xs: 2, md: 3 }, bgcolor: '#e0f2fe', borderRadius: 4, 
+                          display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, 
+                          justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' },
+                          gap: 2, border: '1px solid #bae6fd'
                         }}
                       >
-                        {currentUser ? 'Confirm Booking' : 'Log in to Book'}
-                      </Button>
-                    </Paper>
+                        <Box>
+                          <Typography variant="caption" color="textSecondary" fontWeight="bold">YOUR SELECTION</Typography>
+                          <Typography variant="h6" fontWeight="bold" color="#0c4a6e">
+                            {selectedRoom?.code} • {monthNameShort} {selectedDate}, {SLOT_DISPLAY_MAPPING[selectedTimeSlot]}
+                          </Typography>
+                        </Box>
+                        
+                        <Button 
+                          variant="contained" 
+                          onClick={currentUser ? handleConfirmBooking : () => navigate('/')} 
+                          sx={{ 
+                            bgcolor: '#0284c7', color: 'white', px: 4, py: 1.5, borderRadius: 3, 
+                            fontWeight: 'bold', width: { xs: '100%', sm: 'auto' },
+                            transition: 'all 0.2s',
+                            '&:hover': { bgcolor: '#0369a1', transform: 'scale(1.03)' }
+                          }}
+                        >
+                          {currentUser ? 'Confirm Booking' : 'Log in to Book'}
+                        </Button>
+                      </Paper>
+                    </Box>
                   </Slide>
 
                 </Box>
@@ -635,10 +623,10 @@ export default function Booking() {
             <CheckCircle sx={{ fontSize: 64, color: '#16a34a' }} />
           </Box>
           <Typography variant="h5" fontWeight="800" color="#0f172a" gutterBottom>
-            Booking Request Sent!
+            Booking Confirmed!
           </Typography>
           <Typography variant="body1" color="#64748b" sx={{ mb: 3, lineHeight: 1.6 }}>
-            Your reservation for <strong>{selectedRoom?.code}</strong> on <strong>{monthNameShort} {selectedDate}</strong> at <strong>{SLOT_DISPLAY_MAPPING[selectedTimeSlot]}</strong> has been received and is pending approval.
+            Your reservation for <strong>{selectedRoom?.code}</strong> on <strong>{monthNameShort} {selectedDate}</strong> at <strong>{SLOT_DISPLAY_MAPPING[selectedTimeSlot]}</strong> has been successfully confirmed.
           </Typography>
           <Button 
             fullWidth

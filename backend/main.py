@@ -1,19 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.staticfiles import StaticFiles
 
 import models
-from database import engine
+from database import engine, Base
+from routers import auth, users, labs, agent, gatekeeper, admin, blacklist
 
-# Import Routers ที่เพิ่งสร้าง
-from routers import auth, labs, agent
-
-# สร้างตารางใน Database (ถ้ายังไม่มี)
-models.Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Smart Lab API")
 
-# ตั้งค่า CORS ให้ Frontend ยิง API มาได้
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,11 +18,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# เสียบปลั๊ก Router เข้าสู่ระบบหลัก
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(labs.router)
 app.include_router(agent.router)
+app.include_router(gatekeeper.router)
+app.include_router(admin.router)
+app.include_router(blacklist.router)
+
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to Smart Lab API"}
+    return {"message": "Welcome to Smart Lab API", "status": "Online"}

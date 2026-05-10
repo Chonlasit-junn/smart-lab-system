@@ -1,197 +1,205 @@
-// ============================================================================
-// 1. IMPORTS & CONFIGURATION
-// ============================================================================
-import React, { useState } from 'react';
-import axios from 'axios'; 
-import { 
-  TextField, Button, IconButton, InputAdornment, Alert, CircularProgress 
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import {
+  TextField, Button, IconButton, InputAdornment, Alert, CircularProgress, Box, Divider
 } from '@mui/material';
-import { useNavigate, Link as RouterLink } from 'react-router-dom'; 
-
+import { useNavigate } from 'react-router-dom';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
-
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import LanguageIcon from '@mui/icons-material/Language';
 import { useAuth } from '../context/AuthContext';
+import { loginLocales } from '../utils/locales';
 
-// API Endpoint configuration
-const API_URL = 'http://localhost:8000'; 
+const API_URL = 'http://localhost:8000';
 
-// ============================================================================
-// 2. MAIN COMPONENT
-// ============================================================================
 export default function Login() {
-  
-  // --- Contexts & Hooks ---
   const navigate = useNavigate();
-  const { login } = useAuth(); 
+  const { login } = useAuth();
 
-  // ============================================================================
-  // 3. STATE MANAGEMENT
-  // ============================================================================
-  
-  /** @description Form Data States - เก็บข้อมูลที่ผู้ใช้พิมพ์เข้ามา */
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // default ภาษาไทย — กดปุ่มมุมขวาบนเพื่อสลับเป็น EN
+  const [lang, setLang]               = useState('th');
+  const t = loginLocales[lang];
 
-  /** @description Error States - เก็บข้อความแจ้งเตือนข้อผิดพลาดแต่ละจุด */
-  const [emailError, setEmailError] = useState('');
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
+  const [emailError, setEmailError]   = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [apiError, setApiError] = useState(''); 
-
-  /** @description UI States - ควบคุมการแสดงผล (เช่น โหลดดิ้ง, ปิดเปิดตาดูรหัสผ่าน) */
-  const [loading, setLoading] = useState(false); 
+  const [apiError, setApiError]       = useState('');
+  const [isPending, setIsPending]     = useState(false);
+  const [loading, setLoading]         = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // ============================================================================
-  // 4. EVENT HANDLERS
-  // ============================================================================
+  // อัปเดต tab title ทุกครั้งที่ภาษาเปลี่ยน
+  useEffect(() => {
+    document.title = t.tabTitle;
+  }, [t]);
 
-  /**
-   * @function handleClickShowPassword
-   * @description สลับสถานะการแสดงผลรหัสผ่าน (ซ่อน/แสดง)
-   */
-  const handleClickShowPassword = () => {
-    setShowPassword(!showPassword);
-  };
-
-  /**
-   * @function handleLogin
-   * @description ตรวจสอบข้อมูลเบื้องต้น (Validation) และส่ง Request ไปล็อกอินที่ Backend
-   */
   const handleLogin = async () => {
     let isValid = true;
-    setApiError(''); 
+    setApiError('');
+    setIsPending(false);
 
-    // --- Validation: เช็กเงื่อนไข Email ---
     if (!email) {
-      setEmailError('Please enter your email address');
+      setEmailError(t.errEmail);
       isValid = false;
     } else if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError('Invalid email format');
+      setEmailError(t.errEmailFormat);
       isValid = false;
     } else {
       setEmailError('');
     }
 
-    // --- Validation: เช็กเงื่อนไข Password ---
     if (!password) {
-      setPasswordError('Please enter your password');
+      setPasswordError(t.errPassword);
       isValid = false;
     } else {
       setPasswordError('');
     }
 
-    // --- API Call: ถ้าข้อมูลผ่านเกณฑ์ ให้ยิง API ---
-    if (isValid) {
-      setLoading(true);
-      try {
-        // FastAPI OAuth2PasswordRequestForm รับข้อมูลแบบ x-www-form-urlencoded
-        const params = new URLSearchParams();
-        params.append('username', email);
-        params.append('password', password);
+    if (!isValid) return;
 
-        const response = await axios.post(`${API_URL}/login`, params, {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          }
-        });
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('username', email);
+      params.append('password', password);
 
-        // 🌟 อัปเดต Context แจ้งส่วนกลางว่าล็อกอินสำเร็จ พร้อมเก็บ Token
-        login(response.data.access_token);
-        
-        // 🌟 วาร์ปผู้ใช้เข้าไปที่หน้าหลัก (Dashboard/Booking)
-        navigate('/'); 
+      const response = await axios.post(`${API_URL}/login`, params, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
 
-      } catch (err) {
-        // ดักจับ Error จาก Backend เช่น รหัสผ่านผิด หรือไม่มีอีเมลนี้ในระบบ
-        setApiError(err.response?.data?.detail || "เกิดข้อผิดพลาดในการเข้าสู่ระบบ");
-      } finally {
-        setLoading(false);
+      login(response.data.access_token);
+      navigate('/booking');
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setIsPending(true);
+        setApiError(err.response?.data?.detail || t.pendingMsg);
+      } else {
+        setApiError(err.response?.data?.detail || t.invalidMsg);
       }
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ============================================================================
-  // 5. RENDER UI
-  // ============================================================================
   return (
-    <div className="login-wrapper">
+    <div className="login-wrapper" style={{ position: 'relative' }}>
+
+      {/* ปุ่มสลับภาษา มุมขวาบน */}
+      <Box sx={{ position: 'absolute', top: 24, right: 24, zIndex: 10 }}>
+        <Button
+          onClick={() => setLang(prev => prev === 'th' ? 'en' : 'th')}
+          startIcon={<LanguageIcon />}
+          variant="outlined"
+          size="small"
+          sx={{
+            color: '#64748b', borderColor: '#e2e8f0', bgcolor: 'white',
+            fontWeight: 'bold', borderRadius: 2, textTransform: 'none',
+            '&:hover': { bgcolor: '#f8fafc', borderColor: '#cbd5e1' },
+          }}
+        >
+          {lang === 'th' ? 'English' : 'ภาษาไทย'}
+        </Button>
+      </Box>
+
       <div className="login-container">
-        
-        {/* --- LEFT PANEL: Branding & Visuals --- */}
+
+        {/* ฝั่งซ้าย: banner */}
         <div className="login-banner">
-          <div className="login-banner-icon">🖥️</div>
-          <h2 className="login-banner-title">Smart Lab</h2>
-          <p className="login-banner-subtitle">
-            Reserve your lab space effortlessly.<br />
-            For students and guests.
-          </p>
+          <h1 className="login-banner-title">
+            {lang === 'th' ? (
+              <>สำรวจห้องแล็บ<br />ที่คุณ<br /><span style={{ color: '#1877f2' }}>ต้องการ</span></>
+            ) : (
+              <>Explore<br />the labs<br /><span style={{ color: '#1877f2' }}>you need.</span></>
+            )}
+          </h1>
         </div>
 
-        {/* --- RIGHT PANEL: Login Form --- */}
+        {/* ฝั่งขวา: ฟอร์ม login */}
         <div className="login-form-section">
-          <h1 className="login-title">Log in</h1>
-          <p className="login-subtitle">Please enter your details to access the lab.</p>
+          <div className="login-form-content">
+            <h2 className="login-title">{t.pageTitle}</h2>
 
-          {/* API Error Alert */}
-          {apiError && (
-            <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }}>
-              {apiError}
-            </Alert>
-          )}
+            {apiError && (
+              <Alert
+                severity={isPending ? 'warning' : 'error'}
+                icon={isPending ? <HourglassEmptyIcon fontSize="inherit" /> : undefined}
+                sx={{ mb: 3, borderRadius: '8px', fontWeight: '600' }}
+              >
+                {apiError}
+              </Alert>
+            )}
 
-          {/* Email Input */}
-          <TextField 
-            fullWidth 
-            label="Email address" 
-            variant="outlined" 
-            className="login-input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)} 
-            error={!!emailError} 
-            helperText={emailError} 
-            sx={{ mb: 2 }} 
-          />
+            <TextField
+              fullWidth
+              label={t.emailLabel}
+              variant="outlined"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              error={!!emailError}
+              helperText={emailError}
+              sx={{ mb: 2 }}
+            />
 
-          {/* Password Input */}
-          <TextField 
-            fullWidth 
-            label="Password" 
-            type={showPassword ? 'text' : 'password'} 
-            variant="outlined" 
-            className="login-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            error={!!passwordError}
-            helperText={passwordError}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton onClick={handleClickShowPassword} edge="end">
-                    {showPassword ? <VisibilityOff /> : <Visibility />}
-                  </IconButton>
-                </InputAdornment>
-              )
-            }}
-            sx={{ mb: 3 }}
-          />
+            <TextField
+              fullWidth
+              label={t.passwordLabel}
+              type={showPassword ? 'text' : 'password'}
+              variant="outlined"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              error={!!passwordError}
+              helperText={passwordError}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ mb: 3 }}
+            />
 
-          {/* Submit Button */}
-          <Button 
-            fullWidth 
-            variant="contained" 
-            className="login-button"
-            onClick={handleLogin}
-            disabled={loading} 
-            sx={{ height: '54px', fontSize: '1rem', fontWeight: 'bold' }}
-          >
-            {loading ? <CircularProgress size={24} color="inherit" /> : 'Log in'}
-          </Button>
+            <Button
+              fullWidth
+              variant="contained"
+              onClick={handleLogin}
+              disabled={loading}
+              sx={{
+                height: '48px', fontSize: '1.1rem', fontWeight: 'bold',
+                borderRadius: '24px', textTransform: 'none',
+                backgroundColor: '#1877f2',
+                '&:hover': { backgroundColor: '#166fe5' },
+                mb: 2,
+              }}
+            >
+              {loading ? <CircularProgress size={24} color="inherit" /> : t.loginBtn}
+            </Button>
 
-          {/* Footer Links */}
-          <div className="login-links">
-            <a href="#" className="login-link">Forget Password?</a>
-            <RouterLink to="/register" className="login-link">Create Account</RouterLink>
+            <Box sx={{ textAlign: 'center', mb: 3 }}>
+              <a href="#" style={{ color: '#1877f2', textDecoration: 'none', fontSize: '0.95rem' }}>
+                {t.forgotPassword}
+              </a>
+            </Box>
+
+            <Divider sx={{ mb: 3 }} />
+
+            <Button
+              fullWidth
+              variant="outlined"
+              onClick={() => navigate('/register')}
+              sx={{
+                height: '48px', fontSize: '1.05rem', fontWeight: 'bold',
+                borderRadius: '24px', textTransform: 'none',
+                color: '#1877f2', borderColor: '#1877f2',
+                '&:hover': { borderColor: '#166fe5', backgroundColor: '#e7f3ff' },
+              }}
+            >
+              {t.createAccount}
+            </Button>
           </div>
         </div>
 

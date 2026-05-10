@@ -1,14 +1,11 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Date, Time, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from database import Base
 
-# ==============================================================================
-# AUTHENTICATION & USER MANAGEMENT
-# ==============================================================================
 
 class UserOTP(Base):
-    """Stores temporary OTPs for user registration and verification."""
     __tablename__ = "user_otps"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -16,8 +13,8 @@ class UserOTP(Base):
     otp_code = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+
 class User(Base):
-    """Core user account details."""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -25,24 +22,30 @@ class User(Base):
     last_name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
-    profile_pic = Column(String, nullable=True)     
-    face_embedding = Column(JSONB, nullable=True) # Facial recognition vector data
+    profile_pic = Column(String, nullable=True)
+    face_embedding = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    roles = relationship("Role", secondary="user_roles", back_populates="users")
+    bookings = relationship("Booking", back_populates="user", cascade="all, delete-orphan")
+
+
 class Student(Base):
-    """Extended profile specific to university students."""
     __tablename__ = "students"
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(String, unique=True, index=True, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    faculty = Column(String, nullable=True)     # คณะ
+    department = Column(String, nullable=True)  # สาขาวิชา
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+
 class UserPassport(Base):
-    """Extended profile for external or guest users."""
+    # guest users only — is_active=False means pending admin approval
     __tablename__ = "user_passport"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -52,12 +55,8 @@ class UserPassport(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-# ==============================================================================
-# ROLE-BASED ACCESS CONTROL (RBAC)
-# ==============================================================================
 
 class Role(Base):
-    """Defines system roles (e.g., admin, student, guest)."""
     __tablename__ = "roles"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -66,19 +65,17 @@ class Role(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    users = relationship("User", secondary="user_roles", back_populates="roles")
+
+
 class UserRole(Base):
-    """Mapping table for User and Role (Many-to-Many)."""
     __tablename__ = "user_roles"
 
     user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     role_id = Column(Integer, ForeignKey("roles.id"), primary_key=True)
 
-# ==============================================================================
-# LABORATORY & RESOURCE MANAGEMENT
-# ==============================================================================
 
 class Lab(Base):
-    """Master data for laboratory rooms."""
     __tablename__ = "labs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -86,11 +83,14 @@ class Lab(Base):
     code = Column(String, unique=True, index=True, nullable=False)
     capacity = Column(Integer, default=0)
     location = Column(String, nullable=True)
-    status = Column(String, default="active") # Expected values: 'active', 'disabled', 'maintenance'
+    status = Column(String, default="active")  # active | inactive | maintenance
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    bookings = relationship("Booking", back_populates="lab", cascade="all, delete-orphan")
+    schedules = relationship("ClassSchedule", back_populates="lab", cascade="all, delete-orphan")
+
+
 class BlacklistedApp(Base):
-    """List of restricted applications monitored by the hardware agent."""
     __tablename__ = "blacklisted_apps"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -98,12 +98,8 @@ class BlacklistedApp(Base):
     description = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-# ==============================================================================
-# MONITORING & LOGGING
-# ==============================================================================
 
 class LabAccessLog(Base):
-    """Records physical or system entry and exit events for a lab session."""
     __tablename__ = "lab_access_logs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -111,12 +107,12 @@ class LabAccessLog(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     entry_time = Column(DateTime(timezone=True), server_default=func.now())
     exit_time = Column(DateTime(timezone=True), nullable=True)
-    access_type = Column(String, nullable=False) # e.g., 'face', 'manual'
-    status = Column(String, nullable=False)      # e.g., 'success', 'violation'
-    device_used = Column(String, nullable=True)  # Hardware identifier or hostname
+    access_type = Column(String, nullable=False)  # entry | manual
+    status = Column(String, nullable=False)        # success | denied
+    device_used = Column(String, nullable=True)
+
 
 class ProgramUsageLog(Base):
-    """Records specific software usage duration during a lab session."""
     __tablename__ = "program_usage_logs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -127,12 +123,8 @@ class ProgramUsageLog(Base):
     duration_seconds = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-# ==============================================================================
-# SCHEDULING & BOOKING SYSTEM
-# ==============================================================================
 
 class ClassSchedule(Base):
-    """Fixed academic schedules that block standard lab availability."""
     __tablename__ = "class_schedules"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -142,15 +134,17 @@ class ClassSchedule(Base):
     instructor_name = Column(String, nullable=True)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
-    day_of_week = Column(String, nullable=False) # e.g., 'Monday', 'Tuesday'
+    day_of_week = Column(String, nullable=False)  # Monday, Tuesday, ...
     semester = Column(String, nullable=False)
     academic_year = Column(String, nullable=False)
     valid_from = Column(Date, nullable=False)
     valid_until = Column(Date, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    lab = relationship("Lab", back_populates="schedules")
+
+
 class Booking(Base):
-    """Student seat or room reservations."""
     __tablename__ = "bookings"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -161,5 +155,7 @@ class Booking(Base):
     end_time = Column(Time, nullable=False)
     purpose = Column(Text, nullable=True)
     total_participants = Column(Integer, nullable=False, default=1)
-    status = Column(String, default="pending") # Expected values: 'pending', 'approved', 'rejected', 'cancelled'
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="bookings")
+    lab = relationship("Lab", back_populates="bookings")

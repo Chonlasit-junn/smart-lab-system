@@ -9,32 +9,39 @@ import {
   MenuItem, Select, FormControl, InputLabel, InputBase, Fade, Slide 
 } from '@mui/material';
 import { 
-  Search, Notifications, ConfirmationNumber, Settings, 
+  Search, Notifications, ConfirmationNumber, 
   Logout, Computer, Person, PeopleAlt, Dashboard as DashIcon, 
-  MeetingRoom, Add, ArrowBack, Save, Delete, Edit
+  MeetingRoom, Add, ArrowBack, Save, Delete, Edit, HowToReg, Block
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
+// นำเข้า MUI DatePicker
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import dayjs from 'dayjs';
+
 const API_URL = 'http://127.0.0.1:8000';
 
 // ============================================================================
-// 2. STATIC DATA (ย้ายออกมาข้างนอกเพื่อลดภาระการ Re-render)
+// 2. STATIC DATA 
 // ============================================================================
 const SIDE_MENU_ITEMS = [
-  { text: 'Dashboard', icon: <DashIcon sx={{ fontSize: 24 }} />, path: '/admin' },
-  { text: 'Manage Labs', icon: <MeetingRoom sx={{ fontSize: 24 }} />, path: '/manage-labs' },
-  { text: 'Ticket', icon: <ConfirmationNumber sx={{ fontSize: 24 }} />, path: '/ticket' },
-  { text: 'Control', icon: <Settings sx={{ fontSize: 24 }} />, path: '/control' }
+  { text: 'Dashboard',    icon: <DashIcon sx={{ fontSize: 24 }} />,           path: '/admin' },
+  { text: 'Manage Labs',  icon: <MeetingRoom sx={{ fontSize: 24 }} />,        path: '/manage-labs' },
+  { text: 'Verify Users', icon: <HowToReg sx={{ fontSize: 24 }} />,           path: '/verify-users' },
+  { text: 'Blacklist',    icon: <Block sx={{ fontSize: 24 }} />,              path: '/blacklist' },
+  { text: 'Ticket',       icon: <ConfirmationNumber sx={{ fontSize: 24 }} />, path: '/ticket' },
 ];
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const SLOT_OPTIONS = [
-  { value: 1, label: 'Slot 1 (08:40 - 11:00)' },
-  { value: 2, label: 'Slot 2 (12:00 - 14:20)' },
-  { value: 3, label: 'Slot 3 (14:30 - 16:50)' },
-  { value: 4, label: 'Slot 4 (17:00 - 19:20)' }
+  { value: 1, label: '08:40 - 11:00' },
+  { value: 2, label: '12:00 - 14:20' },
+  { value: 3, label: '14:30 - 16:50' },
+  { value: 4, label: '17:00 - 19:20' }
 ];
 
 // ============================================================================
@@ -47,18 +54,14 @@ export default function ManageLabs() {
   // ============================================================================
   // 4. STATE MANAGEMENT
   // ============================================================================
-  
-  /** @description View Management - ควบคุมการสลับหน้า (List / Detail) */
   const [viewMode, setViewMode] = useState('list'); 
   const [activeLab, setActiveLab] = useState(null); 
 
-  /** @description Lab States - จัดการข้อมูลห้องแล็บ */
   const [labs, setLabs] = useState([]);
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [newLab, setNewLab] = useState({ name: '', code: '', capacity: 40, location: '' });
   const [editFormData, setEditFormData] = useState({ name: '', code: '', capacity: 0, location: '' });
 
-  /** @description Schedule States - จัดการข้อมูลตารางเรียนของห้องที่เลือก */
   const [schedules, setSchedules] = useState([]);
   const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
@@ -72,20 +75,14 @@ export default function ManageLabs() {
   // ============================================================================
   // 5. LIFECYCLE & API CALLS
   // ============================================================================
-  
   useEffect(() => {
     fetchLabs();
   }, []); 
 
-  /**
-   * @function fetchLabs
-   * @description ดึงรายการห้องแล็บทั้งหมด และอัปเดตข้อมูลห้องที่กำลังดูอยู่ (ถ้ามี)
-   */
   const fetchLabs = async () => {
     try {
       const response = await axios.get(`${API_URL}/labs`);
       setLabs(response.data.data);
-      // หากกำลังอยู่ในโหมด Detail ให้อัปเดตข้อมูลของ activeLab ให้เป็นปัจจุบันด้วย
       if (activeLab) {
         const updatedLab = response.data.data.find(l => l.id === activeLab.id);
         if (updatedLab) setActiveLab(updatedLab);
@@ -95,11 +92,6 @@ export default function ManageLabs() {
     }
   };
 
-  /**
-   * @function fetchSchedules
-   * @description ดึงตารางเรียนเฉพาะของห้องแล็บที่เลือก
-   * @param {number} labId - ID ของห้องแล็บ
-   */
   const fetchSchedules = async (labId) => {
     try {
       const response = await axios.get(`${API_URL}/labs/${labId}/schedules`);
@@ -112,12 +104,11 @@ export default function ManageLabs() {
   // ============================================================================
   // 6. ACTION HANDLERS (LAB MANAGEMENT)
   // ============================================================================
-
   const handleCreateLab = async () => {
     try {
       await axios.post(`${API_URL}/admin/labs`, newLab);
       setOpenCreateDialog(false);
-      setNewLab({ name: '', code: '', capacity: 40, location: '' }); // Reset Form
+      setNewLab({ name: '', code: '', capacity: 40, location: '' }); 
       fetchLabs(); 
     } catch (error) {
       alert(error.response?.data?.detail || "Create lab failed");
@@ -140,8 +131,8 @@ export default function ManageLabs() {
     try {
       await axios.delete(`${API_URL}/admin/labs/${activeLab.id}`);
       alert("Lab deleted successfully!");
-      handleGoBack(); // เด้งกลับหน้า List
-      fetchLabs(); // โหลดข้อมูลใหม่
+      handleGoBack(); 
+      fetchLabs(); 
     } catch (error) {
       alert(`Delete failed: ${error.response?.data?.detail || error.message}`);
     }
@@ -160,7 +151,6 @@ export default function ManageLabs() {
   // ============================================================================
   // 7. VIEW TRANSITION HANDLERS
   // ============================================================================
-
   const handleSelectLab = (lab) => {
     setActiveLab(lab);
     setEditFormData({ name: lab.name, code: lab.code, capacity: lab.capacity, location: lab.location || '' });
@@ -171,17 +161,12 @@ export default function ManageLabs() {
   const handleGoBack = () => {
     setViewMode('list');
     setActiveLab(null);
-    setSchedules([]); // เคลียร์ตารางเรียนทิ้งเมื่อกลับหน้า List
+    setSchedules([]); 
   };
 
   // ============================================================================
   // 8. ACTION HANDLERS (SCHEDULE MANAGEMENT)
   // ============================================================================
-
-  /**
-   * @function getSlotFromTime
-   * @description แปลงเวลา (เช่น 08:40) กลับมาเป็นหมายเลข Slot (1-4)
-   */
   const getSlotFromTime = (timeStr) => {
     if (!timeStr) return 1;
     if (timeStr.startsWith('08:40')) return 1;
@@ -189,6 +174,12 @@ export default function ManageLabs() {
     if (timeStr.startsWith('14:30')) return 3;
     if (timeStr.startsWith('17:00')) return 4;
     return 1;
+  };
+
+  const getSlotDisplayLabel = (timeStr) => {
+    const slotValue = getSlotFromTime(timeStr);
+    const slotObj = SLOT_OPTIONS.find(s => s.value === slotValue);
+    return slotObj ? slotObj.label : timeStr;
   };
 
   const handleOpenAddSchedule = () => {
@@ -323,7 +314,7 @@ export default function ManageLabs() {
             <Divider orientation="vertical" flexItem sx={{ height: 30, my: 'auto', bgcolor: '#e2e8f0' }} />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ textAlign: 'right' }}>
-                <Typography variant="subtitle2" fontWeight="800" color="#1e293b">Khivin Admin</Typography>
+                <Typography variant="subtitle2" fontWeight="800" color="#1e293b">System Admin</Typography>
                 <Typography variant="caption" fontWeight="600" color="#94a3b8">Administrator</Typography>
               </Box>
               <Avatar sx={{ bgcolor: '#0f172a', width: 48, height: 48, boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}><Person /></Avatar>
@@ -506,7 +497,7 @@ export default function ManageLabs() {
                           <Table>
                             <TableHead>
                               <TableRow sx={{ bgcolor: '#f8fafc' }}>
-                                {['Day', 'Slot', 'Course', 'Instructor', 'Term', 'Action'].map((h, i) => (
+                                {['Day', 'Time Slot', 'Course', 'Instructor', 'Term', 'Action'].map((h, i) => (
                                   <TableCell key={h} align={i === 5 ? 'right' : 'left'} sx={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: '800', py: 2 }}>{h}</TableCell>
                                 ))}
                               </TableRow>
@@ -518,7 +509,7 @@ export default function ManageLabs() {
                                 schedules.map((sch) => (
                                   <TableRow key={sch.id} sx={{ '& td': { borderBottom: '1px solid #f1f5f9' } }}>
                                     <TableCell sx={{ fontWeight: '700', color: '#334155' }}>{sch.day_of_week}</TableCell>
-                                    <TableCell sx={{ color: '#64748b', fontWeight: '600' }}>Slot {getSlotFromTime(sch.start_time)}</TableCell>
+                                    <TableCell sx={{ color: '#64748b', fontWeight: '600' }}>{getSlotDisplayLabel(sch.start_time)}</TableCell>
                                     <TableCell sx={{ fontWeight: '700', color: '#334155' }}>{sch.course_code}</TableCell>
                                     <TableCell sx={{ color: '#64748b', fontWeight: '500' }}>{sch.instructor_name}</TableCell>
                                     <TableCell sx={{ color: '#64748b', fontWeight: '500' }}>{sch.semester}/{sch.academic_year}</TableCell>
@@ -573,7 +564,6 @@ export default function ManageLabs() {
             <Grid item xs={6}><TextField label="Course Name" fullWidth size="small" value={scheduleFormData.course_name} onChange={(e) => setScheduleFormData({...scheduleFormData, course_name: e.target.value})} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}/></Grid>
             <Grid item xs={12}><TextField label="Instructor Name" fullWidth size="small" value={scheduleFormData.instructor_name} onChange={(e) => setScheduleFormData({...scheduleFormData, instructor_name: e.target.value})} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}/></Grid>
             
-            {/* Day Dropdown */}
             <Grid item xs={6}>
               <FormControl fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}>
                 <InputLabel>Day of Week</InputLabel>
@@ -583,7 +573,6 @@ export default function ManageLabs() {
               </FormControl>
             </Grid>
             
-            {/* Slot Dropdown */}
             <Grid item xs={6}>
               <FormControl fullWidth size="small" sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}>
                 <InputLabel>Time Slot</InputLabel>
@@ -595,8 +584,28 @@ export default function ManageLabs() {
 
             <Grid item xs={6}><TextField label="Semester" fullWidth size="small" value={scheduleFormData.semester} onChange={(e) => setScheduleFormData({...scheduleFormData, semester: e.target.value})} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}/></Grid>
             <Grid item xs={6}><TextField label="Academic Year" fullWidth size="small" value={scheduleFormData.academic_year} onChange={(e) => setScheduleFormData({...scheduleFormData, academic_year: e.target.value})} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}/></Grid>
-            <Grid item xs={6}><TextField label="Valid From" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} value={scheduleFormData.valid_from} onChange={(e) => setScheduleFormData({...scheduleFormData, valid_from: e.target.value})} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}/></Grid>
-            <Grid item xs={6}><TextField label="Valid Until" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} value={scheduleFormData.valid_until} onChange={(e) => setScheduleFormData({...scheduleFormData, valid_until: e.target.value})} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}/></Grid>
+            
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <Grid item xs={6}>
+                <DatePicker
+                  label="Valid From"
+                  format="DD/MM/YYYY"
+                  value={scheduleFormData.valid_from ? dayjs(scheduleFormData.valid_from) : null}
+                  onChange={(newValue) => setScheduleFormData({...scheduleFormData, valid_from: newValue ? newValue.format('YYYY-MM-DD') : ''})}
+                  slotProps={{ textField: { fullWidth: true, size: "small", sx: { '& .MuiOutlinedInput-root': { borderRadius: 3 } } } }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <DatePicker
+                  label="Valid Until"
+                  format="DD/MM/YYYY"
+                  value={scheduleFormData.valid_until ? dayjs(scheduleFormData.valid_until) : null}
+                  onChange={(newValue) => setScheduleFormData({...scheduleFormData, valid_until: newValue ? newValue.format('YYYY-MM-DD') : ''})}
+                  slotProps={{ textField: { fullWidth: true, size: "small", sx: { '& .MuiOutlinedInput-root': { borderRadius: 3 } } } }}
+                />
+              </Grid>
+            </LocalizationProvider>
+
           </Grid>
         </DialogContent>
         <DialogActions sx={{ pb: 1, pr: 2 }}>

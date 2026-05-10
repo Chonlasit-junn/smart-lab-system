@@ -1,5 +1,5 @@
 /**
- * @file App.css
+ * @file index.css
  * @description Global Stylesheet สำหรับระบบ Smart Lab
  * ควบคุมโทนสี (CSS Variables), โครงสร้าง Layout หลัก, และ Responsive Design
  */
@@ -14,21 +14,15 @@
   --card-bg: #ffffff;        /* สีพื้นหลังของการ์ดและกล่องข้อมูล */
   
   /* --- Colors: Brand & Accents --- */
-  --primary-blue: #82c3ff;   /* สีฟ้าหลักของแบรนด์ */
-  --primary-blue-hover: #6ab5ff; /* สีฟ้าเมื่อเอาเมาส์ชี้ (เข้มขึ้นเล็กน้อย) */
+  --primary-blue: #1877f2;   /* 🌟 เปลี่ยนเป็นสีฟ้าหลักสไตล์ Facebook */
+  --primary-blue-hover: #166fe5; 
   
   /* --- Colors: Text --- */
-  --text-dark: #111827;      /* สีตัวหนังสือหลัก (ดำอมเทา) */
+  --text-dark: #1c1e21;      /* สีตัวหนังสือหลัก */
   --text-gray: #6b7280;      /* สีตัวหนังสือรอง (เทา) */
   
   /* --- Colors: Borders --- */
   --border-light: #e2e8f0;   /* สีเส้นขอบอ่อนๆ สำหรับคั่น Layout */
-
-  /* --- Colors: Login Banner (หน้าเข้าสู่ระบบ) --- */
-  --banner-title: #0052cc;
-  --banner-subtitle: #5c6c80;
-  --banner-gradient-start: #f0f7ff;
-  --banner-gradient-end: #e0f0ff;
 
   /* --- Dimensions & Radius --- */
   --border-radius-card: 24px;  /* ความโค้งของกล่อง/การ์ดใหญ่ */
@@ -44,138 +38,104 @@
 
 body {
   margin: 0;
-  font-family: 'Inter', sans-serif;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-color);
-  -webkit-font-smoothing: antialiased; /* ทำให้ตัวหนังสือเนียนขึ้นบนจอ Mac */
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ==========================================================================
-   2. LOGIN PAGE STYLES
+   2. LOGIN PAGE STYLES (🌟 อัปเดตเป็นสไตล์ Facebook)
    ========================================================================== */
 
 /* --- 2.1 Layout Container --- */
 .login-wrapper {
   display: flex;
-  min-height: 100vh;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  height: 100vh;
+  width: 100vw;
+  background-color: #ffffff; /* พื้นหลังสีขาวแบบ FB */
+  margin: 0;
 }
 
 .login-container {
   display: flex;
   width: 100%;
-  max-width: 850px; 
-  min-height: 500px; 
-  background: var(--card-bg);
-  border-radius: var(--border-radius-card);
-  overflow: hidden;
-  /* เงา 3 ชั้นสร้างมิติความลึกให้กล่อง Login ลอยขึ้นมา */
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.03),
-    0 10px 15px -3px rgba(0, 0, 0, 0.05),
-    0 30px 60px -15px rgba(0, 0, 0, 0.25);
+  height: 100%;
 }
 
 /* --- 2.2 Left Banner (Visuals & Branding) --- */
 .login-banner {
-  flex: 1; /* แบ่งพื้นที่ 50% ของกล่อง */
+  flex: 1; /* กินพื้นที่ครึ่งซ้าย 50% */
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: center;
-  padding: 40px;
-  text-align: center;
-  background: linear-gradient(135deg, var(--banner-gradient-start) 0%, var(--banner-gradient-end) 100%);
-  border-right: 1px solid #f0f5fa;
-}
-
-.login-banner-icon {
-  font-size: 72px;
-  margin-bottom: 16px;
+  align-items: flex-start;
+  padding: 5rem 10%;
+  background-color: #ffffff;
 }
 
 .login-banner-title {
-  margin: 0 0 12px;
-  font-size: 32px;
+  font-size: 4rem;
   font-weight: 800;
-  color: var(--banner-title); 
-}
-
-.login-banner-subtitle {
+  color: var(--text-dark);
+  line-height: 1.1;
   margin: 0;
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--banner-subtitle); 
+  letter-spacing: -1px;
 }
 
 /* --- 2.3 Right Panel (Input Form) --- */
 .login-form-section {
-  flex: 1; /* แบ่งพื้นที่ 50% ของกล่อง */
+  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 60px;
-  background: var(--card-bg);
+  align-items: center;
+  background-color: #ffffff;
+  border-left: 1px solid #e5e5e5;
+  overflow-y: auto;
+  padding: 2rem 1rem;
+}
+
+.login-form-content {
+  width: 100%;
+  max-width: 440px;
+  padding: 0 1rem;
 }
 
 .login-title {
-  margin: 0 0 8px;
-  font-size: 28px;
-  font-weight: bold;
+  font-size: 1.6rem;
+  font-weight: 800;
   color: var(--text-dark);
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.5px;
 }
 
 .login-subtitle {
-  margin: 0 0 32px;
-  font-size: 15px;
+  font-size: 0.95rem;
   color: var(--text-gray);
+  margin: 0 0 1.75rem 0;
+  line-height: 1.5;
 }
 
-/* MUI Overrides: ปรับสไตล์ของช่องกรอกข้อมูล Material UI */
+/* MUI Overrides สำหรับ Login */
 .MuiFormControl-root.login-input {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .MuiFormControl-root.login-input .MuiOutlinedInput-root {
   border-radius: var(--border-radius-input);
 }
 
-/* MUI Overrides: ปรับสไตล์ปุ่มกด Material UI */
-.MuiButtonBase-root.MuiButton-root.login-button {
-  margin-top: 8px;
-  margin-bottom: 24px;
-  padding: 14px;
-  border-radius: var(--border-radius-input);
-  background-color: var(--primary-blue);
-  color: #fff;
-  font-weight: bold;
-  font-size: 16px;
-  text-transform: none; /* ปิดการแปลงเป็นตัวพิมพ์ใหญ่ล้วน (UPPERCASE) */
-  box-shadow: 0 4px 12px rgba(130, 195, 255, 0.4);
-  transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-/* Hover Effect ของปุ่ม Login (ลอยขึ้นและสีเข้มขึ้น) */
-.MuiButtonBase-root.MuiButton-root.login-button:hover {
-  background-color: var(--primary-blue-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(130, 195, 255, 0.5);
-}
-
-/* --- 2.4 Login Links --- */
 .login-links {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 8px;
+  justify-content: center;
+  margin-top: 1.75rem;
+  font-size: 0.9rem;
+  color: var(--text-gray);
 }
 
 .login-link {
   color: var(--text-gray);
   text-decoration: none;
-  font-weight: 500;
-  font-size: 14px;
-  transition: color 0.2s ease;
 }
 
 .login-link:hover {
@@ -186,16 +146,16 @@ body {
    3. MAIN DASHBOARD LAYOUT
    ========================================================================== */
 
-/* --- 3.1 App Skeleton (โครงสร้างหลักของหน้า Dashboard) --- */
+/* --- 3.1 App Skeleton --- */
 .app-layout {
   display: flex;
   height: 100vh;
-  overflow: hidden; /* ป้องกันการ Scroll ทะลุจอ */
+  overflow: hidden; 
   background-color: var(--bg-color);
 }
 
 .main-area {
-  flex: 1; /* ใช้พื้นที่ส่วนที่เหลือทั้งหมดจาก Sidebar */
+  flex: 1; 
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -239,14 +199,13 @@ body {
 }
 
 .menu-item:hover {
-  background-color: rgba(130, 195, 255, 0.15);
-  color: #3b82f6; /* สีฟ้า */
+  background-color: rgba(24, 119, 242, 0.1);
+  color: var(--primary-blue);
 }
 
-/* เมนูที่กำลังถูกเลือกอยู่ (Active State) */
 .menu-item.active {
   background-color: #fff;
-  color: #3b82f6;
+  color: var(--primary-blue);
   font-weight: 600;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
@@ -262,7 +221,6 @@ body {
   border-bottom: 1px solid var(--border-light);
 }
 
-/* แถบคำค้นหา (Search) */
 .search-bar {
   display: flex;
   align-items: center;
@@ -277,21 +235,21 @@ body {
   margin-left: 8px;
   border: none;
   background: transparent;
-  outline: none; /* เอาเส้นขอบสีฟ้าของ Browser ออกเวลาคลิก */
+  outline: none; 
 }
 
 /* --- 3.4 Main Content Area --- */
 .content-area {
   flex: 1;
   padding: 32px;
-  overflow-y: auto; /* ให้เลื่อนเฉพาะส่วนเนื้อหา ไม่กระทบ Header */
+  overflow-y: auto; 
 }
 
 /* ==========================================================================
    4. COMPONENTS
    ========================================================================== */
 
-/* --- 4.1 Room Information Card (การ์ดห้องแล็บ) --- */
+/* --- 4.1 Room Information Card --- */
 .room-card {
   display: flex;
   flex-direction: column;
@@ -306,16 +264,15 @@ body {
 }
 
 .room-card:hover {
-  transform: translateY(-2px); /* ลอยขึ้น */
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); /* เงากว้างขึ้น */
-  border-color: #b5dbff; /* ขอบเปลี่ยนเป็นสีฟ้า */
+  transform: translateY(-2px); 
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); 
+  border-color: #b5dbff; 
 }
 
 /* ==========================================================================
    5. ANIMATIONS & MICRO-INTERACTIONS
    ========================================================================== */
 
-/* --- 5.1 Keyframes (กำหนดจังหวะแอนิเมชัน) --- */
 @keyframes slideInLeft {
   0% { opacity: 0; transform: translateX(-40px); }
   100% { opacity: 1; transform: translateX(0); }
@@ -332,15 +289,11 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-/* --- 5.2 Animation Classes (คลาสสำหรับเรียกใช้แอนิเมชัน) --- */
-
-/* ป้ายสถานะกระพริบ (ใช้กับ Status: Active) */
 .animated-chip {
   border-radius: 16px;
   animation: pulse 2s infinite;
 }
 
-/* เอฟเฟกต์เวลาคลิกที่ช่อง Input */
 .animated-form-input:focus-within {
   transition: all 0.3s ease-in-out;
   transform: scale(1.005);
@@ -351,7 +304,6 @@ body {
   animation: slideInLeft 0.5s ease-out forwards;
 }
 
-/* NOTE: เลื่อนขึ้นจากด้านล่าง (ดีเลย์ 0.1s เพื่อให้เกิดเอฟเฟกต์ไหลตามกัน - Cascading) */
 .slide-in-up {
   opacity: 0; 
   animation: slideInUp 0.5s ease-out 0.1s forwards; 
@@ -364,7 +316,7 @@ body {
 /* --- Tablet / หน้าจอขนาดกลาง (ต่ำกว่า 900px) --- */
 @media (max-width: 900px) {
   
-  /* ดัน Sidebar ไปซ่อนด้านซ้าย (Canvas Menu) */
+  /* Dashboard Sidebar */
   .sidebar {
     position: fixed;
     top: 0;
@@ -374,11 +326,7 @@ body {
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.1);
     transition: left 0.3s ease-in-out;
   }
-
-  /* แสดง Sidebar เมื่อมีคลาส .open */
   .sidebar.open { left: 0; }
-
-  /* พื้นหลังสีดำจางๆ เวลา Sidebar เปิดทับหน้าต่างหลัก */
   .sidebar-overlay {
     position: fixed;
     inset: 0;
@@ -387,28 +335,45 @@ body {
   }
 
   .top-header { padding: 0 16px; }
-  .search-bar { display: none; } /* ซ่อนช่องค้นหาบนมือถือ */
-  .profile-text-container { display: none !important; } /* ซ่อนชื่อ ทิ้งไว้แค่รูป Profile */
+  .search-bar { display: none; } 
+  .profile-text-container { display: none !important; } 
   .content-area { padding: 16px; }
+
+  /* 🌟 Login สลับมาเรียงแนวตั้งบน Tablet */
+  .login-container {
+    flex-direction: column;
+  }
+  .login-banner {
+    padding: 3rem 2rem 1rem 2rem;
+    align-items: center;
+    text-align: center;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  .login-banner-title {
+    font-size: 3rem;
+  }
+  .login-form-section {
+    border-left: none;
+    padding: 2rem 1rem;
+  }
+  .login-form-content {
+    max-width: 100%;
+    padding: 0 0.5rem;
+  }
 }
 
 /* --- Mobile / หน้าจอขนาดเล็ก (ต่ำกว่า 768px) --- */
 @media (max-width: 768px) {
+  /* 🌟 ซ่อมส่วนที่ขาดหายไปจากโค้ดของคุณ */
+  .login-banner-title { 
+    font-size: 2rem; /* ย่อขนาดอักษรในมือถือ */
+  }
   
-  /* ปรับหน้า Login ให้ซ้อนกันเป็นแนวตั้ง (Stack) */
-  .login-container {
-    flex-direction: column;
-    min-height: auto;
+  .login-form-content {
+    padding: 1rem;
   }
-
-  .login-banner {
-    padding: 30px 20px;
-    border-right: none;
-    border-bottom: 1px solid #f0f5fa;
+  
+  .login-form-section { 
+    padding: 30px 20px; 
   }
-
-  .login-banner-icon { font-size: 50px; margin-bottom: 8px; }
-  .login-banner-title { font-size: 24px; }
-  .login-banner-subtitle { font-size: 14px; }
-
-  .login-form-section { padding: 30px 20px
+}
