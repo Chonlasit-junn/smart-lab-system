@@ -12,7 +12,11 @@ load_dotenv()
 UPLOAD_DIR = "uploads/profiles"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__truncate_error=False,
+)
 
 # in production these should all come from .env — never hardcode in source
 SECRET_KEY = os.getenv("SECRET_KEY", "SmartLab_Super_Secret_Key_2026")

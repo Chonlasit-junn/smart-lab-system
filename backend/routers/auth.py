@@ -93,7 +93,7 @@ async def register(
 
     try:
         # bcrypt silently truncates at 72 bytes, so we do it explicitly
-        hashed_password = pwd_context.hash(password.encode("utf-8")[:72].decode("utf-8", "ignore"))
+        hashed_password = pwd_context.hash(password)
         new_user = models.User(
             email=email,
             password=hashed_password,
@@ -138,7 +138,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
     # bcrypt 72-byte limit — keep consistent with register
     safe_pwd = form_data.password.encode("utf-8")[:72].decode("utf-8", "ignore")
-    if not user or not pwd_context.verify(safe_pwd, user.password):
+    if not user or not pwd_context.verify(form_data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     user_role = db.query(models.Role.name).join(models.UserRole).filter(
