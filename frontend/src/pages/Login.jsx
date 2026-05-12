@@ -11,7 +11,7 @@ import LanguageIcon from '@mui/icons-material/Language';
 import { useAuth } from '../context/AuthContext';
 import { loginLocales } from '../utils/locales';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function Login() {
   const navigate = useNavigate();

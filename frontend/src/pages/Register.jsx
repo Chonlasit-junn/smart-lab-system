@@ -19,7 +19,7 @@ import LanguageIcon from '@mui/icons-material/Language';
 import { registerLocales } from '../utils/locales';
 import { BU_FACULTIES } from '../utils/buFaculties';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const videoConstraints = { width: 400, height: 400, facingMode: 'user' };
 
 export default function Register() {
