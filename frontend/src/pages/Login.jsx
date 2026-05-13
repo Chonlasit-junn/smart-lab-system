@@ -70,7 +70,14 @@ export default function Login() {
       });
 
       login(response.data.access_token);
-      navigate('/booking');
+
+      const base64 = response.data.access_token.split('.')[1];
+      const payload = JSON.parse(atob(base64));
+      if (payload.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/booking');
+      }
     } catch (err) {
       if (err.response?.status === 403) {
         setIsPending(true);

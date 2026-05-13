@@ -3,6 +3,7 @@ import os
 import psutil
 import json
 import socket
+import time
 import requests
 import pygetwindow as gw
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -11,10 +12,25 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QFont, QColor
 
+# Hugging Face Space อาจ sleep อยู่ — retry ให้อัตโนมัติ
+def post_with_retry(url, data=None, json_data=None, retries=3, timeout=15):
+    for attempt in range(retries):
+        try:
+            if json_data:
+                return requests.post(url, json=json_data, timeout=timeout)
+            return requests.post(url, data=data, timeout=timeout)
+        except requests.exceptions.ConnectionError:
+            if attempt < retries - 1:
+                time.sleep(3)  # รอ 3 วิแล้ว retry — ให้ HF space wake up ก่อน
+        except requests.exceptions.Timeout:
+            if attempt < retries - 1:
+                time.sleep(2)
+    return None  # ถ้าหมด retry แล้วยังไม่ได้ คืน None
+
 # --- ⚙️ CONFIGURATION ---
-API_URL = "http://localhost:8000"
+API_URL = "https://h0sh1na-smart-lab-backend.hf.space"  # ← ใส่ URL ของ Hugging Face Space ตรงนี้
 LAB_CODE = "LAB01"
-DEBUG_MODE = True 
+DEBUG_MODE = True  # ← เปลี่ยนเป็น False ก่อน deploy จริง
 
 # 🚨 บัญชีดำโปรแกรมต้องห้าม (เกม, บิท ฯลฯ)
 FORBIDDEN_WORDS = ["Cheat", "Game", "BitTorrent", "Porn", "Star Rail", "StarRail", "Genshin"]
@@ -182,10 +198,13 @@ class LoginOverlay(QWidget):
     def handle_login(self):
         email, password = self.email_input.text(), self.pass_input.text()
         try:
-            res = requests.post(f"{API_URL}/login", data={"username": email, "password": password})
+            res = post_with_retry(f"{API_URL}/login", data={"username": email, "password": password})
+            if not res:
+                QMessageBox.critical(self, "Connection Error", "ไม่สามารถเชื่อมต่อ Server ได้\nกรุณาตรวจสอบอินเทอร์เน็ต")
+                return
             if res.status_code == 200:
                 device_name = socket.gethostname()
-                session_res = requests.post(f"{API_URL}/agent/start-session", data={"email": email, "lab_code": LAB_CODE, "device": device_name})
+                session_res = post_with_retry(f"{API_URL}/agent/start-session", data={"email": email, "lab_code": LAB_CODE, "device": device_name})
                 if session_res.status_code == 200:
                     session_id = session_res.json()["session_id"]
                     self.is_authenticated = True
@@ -254,7 +273,7 @@ class SmartLabAgent:
         
         if summary:
             try:
-                r = requests.post(f"{API_URL}/agent/log-usage", data={"session_id": session_id, "usage_data": json.dumps(summary)})
+                r = post_with_retry(f"{API_URL}/agent/log-usage", data={"session_id": session_id, "usage_data": json.dumps(summary)})
                 print(f"✅ Server Response: {r.status_code}")
             except Exception as e: print(f"❌ Failed to send: {e}")
         else:
