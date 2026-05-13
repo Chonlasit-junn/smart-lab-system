@@ -30,7 +30,6 @@ export default function Login() {
   const [loading, setLoading]         = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // อัปเดต tab title ทุกครั้งที่ภาษาเปลี่ยน
   useEffect(() => {
     document.title = t.tabTitle;
   }, [t]);
@@ -71,8 +70,11 @@ export default function Login() {
 
       login(response.data.access_token);
 
-      const base64 = response.data.access_token.split('.')[1];
-      const payload = JSON.parse(atob(base64));
+      const base64Url = response.data.access_token.split('.')[1];
+      const base64Safe = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(base64Safe));
+
+
       if (payload.role === 'admin') {
         navigate('/admin');
       } else {
