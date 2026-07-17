@@ -159,3 +159,33 @@ class Booking(Base):
 
     user = relationship("User", back_populates="bookings")
     lab = relationship("Lab", back_populates="bookings")
+
+class UserPoints(Base):
+    __tablename__ = "user_points"
+
+    user_id    = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    points     = Column(Integer, default=100, nullable=False)  # เริ่มที่ 100
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", backref="points_record")
+
+
+class PointLog(Base):
+    __tablename__ = "point_logs"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    change     = Column(Integer, nullable=False)   # -5, +1 etc.
+    reason     = Column(String, nullable=False)    # "no_show" | "forbidden_app" | "late_cancel" | "complete_session"
+    note       = Column(String, nullable=True)     # รายละเอียดเพิ่ม เช่น ชื่อโปรแกรมที่โดน detect
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class BanRecord(Base):
+    __tablename__ = "ban_records"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    ban_until  = Column(DateTime(timezone=True), nullable=False)
+    reason     = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

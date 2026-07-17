@@ -11,6 +11,7 @@ import Reserved from './pages/Reserved';
 import History from './pages/History';
 import VerifyUsers from './pages/VerifyUsers';
 import BlacklistManager from './pages/BlacklistManager';
+import Profile from './pages/Profile';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
           <Route path="/verify-users" element={<VerifyUsers />} />
           <Route path="/blacklist" element={<BlacklistManager />} />
           <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/profile" element={<Profile />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

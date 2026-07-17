@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 import models
 from database import engine, Base
-from routers import auth, users, labs, agent, gatekeeper, admin, blacklist
+from routers import auth, users, labs, agent, gatekeeper, admin, blacklist, points
 
 Base.metadata.create_all(bind=engine)
 
@@ -27,7 +27,7 @@ app.include_router(agent.router)
 app.include_router(gatekeeper.router)
 app.include_router(admin.router)
 app.include_router(blacklist.router)
-
+app.include_router(points.router)
 
 @app.get("/")
 def root():

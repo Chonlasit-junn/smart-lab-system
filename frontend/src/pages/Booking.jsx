@@ -324,7 +324,10 @@ export default function Booking() {
 
             {/* Profile Section */}
             {currentUser ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, borderLeft: '1px solid #e2e8f0', pl: { xs: 1, sm: 3 }, cursor: 'pointer' }}>
+              <Box
+                onClick={() => navigate('/profile')}
+                sx={{ display: 'flex', alignItems: 'center', gap: 1.5, borderLeft: '1px solid #e2e8f0', pl: { xs: 1, sm: 3 }, cursor: 'pointer', transition: '0.2s', '&:hover': { opacity: 0.75 } }}
+              >
                 <Box className="profile-text-container" sx={{ textAlign: 'right' }}>
                   <Typography variant="subtitle2" fontWeight="bold" lineHeight={1.2}>{currentUser.name}</Typography>
                   <Typography variant="caption" color="textSecondary">{currentUser.role}</Typography>
