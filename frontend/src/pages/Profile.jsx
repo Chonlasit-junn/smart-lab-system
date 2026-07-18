@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'https://h0sh1na-smart-lab-backend.hf.space';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // maps faculty id → display name (ใช้ EN สำหรับ profile)
 const FACULTY_NAMES = {
