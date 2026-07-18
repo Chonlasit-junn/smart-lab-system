@@ -18,19 +18,19 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <CssBaseline /> 
-        <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/booking" element={<Booking />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/reserved" element={<Reserved />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/manage-labs" element={<ManageLabs />} />
-          <Route path="/verify-users" element={<VerifyUsers />} />
-          <Route path="/blacklist" element={<BlacklistManager />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-          <Route path="/profile" element={<Profile />} />
-        </Routes>
+          <Routes>
+            <Route path="/" element={<Login />} />
+            <Route path="/booking" element={<Booking />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/reserved" element={<Reserved />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/manage-labs" element={<ManageLabs />} />
+            <Route path="/verify-users" element={<VerifyUsers />} />
+            <Route path="/blacklist" element={<BlacklistManager />} />
+            <Route path="/profile" element={<Profile />} />   {/* ← ย้ายขึ้นมาก่อน * */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
       </BrowserRouter>
     </AuthProvider>
   );
