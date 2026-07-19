@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Avatar, IconButton, Paper, CircularProgress,
-  Divider, Chip, Grid
+  Divider, Chip, Grid, LinearProgress
 } from '@mui/material';
 import {
   Notifications, EventNote, Assignment, History,
   SupportAgent, Logout, Computer, Menu as MenuIcon,
-  Person, Email, Phone, School, Badge, CalendarMonth
+  Email, Phone, School, Badge, CalendarMonth, Star
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = 'https://h0sh1na-smart-lab-backend.hf.space';
 
-// maps faculty id → display name (ใช้ EN สำหรับ profile)
 const FACULTY_NAMES = {
   business:      'School of Business Administration',
   communication: 'School of Communication Arts',
@@ -29,7 +28,7 @@ const FACULTY_NAMES = {
 };
 
 export default function Profile() {
-  const navigate  = useNavigate();
+  const navigate              = useNavigate();
   const { currentUser, logout } = useAuth();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -45,17 +44,19 @@ export default function Profile() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('access_token');
+      const token   = localStorage.getItem('access_token');
       const headers = { Authorization: `Bearer ${token}` };
 
-      // step 1: ดึง profile ก่อน — ได้ user id มา
       const profileRes = await axios.get(`${API_URL}/users/me`, { headers });
       const profileData = profileRes.data;
 
-      // step 2: ดึง points โดยใช้ id จาก step 1
-      const pointsRes = await axios.get(`${API_URL}/users/${profileData.id}/points`, { headers });
-
-      setProfile({ ...profileData, ...pointsRes.data });
+      try {
+        const pointsRes = await axios.get(`${API_URL}/users/${profileData.id}/points`, { headers });
+        setProfile({ ...profileData, ...pointsRes.data });
+      } catch {
+        // ถ้า points ยังไม่มีใน DB ก็ใช้ profile อย่างเดียวก่อน
+        setProfile({ ...profileData, points: 100, is_banned: false });
+      }
     } catch (err) {
       setError('ไม่สามารถโหลดข้อมูลโปรไฟล์ได้');
       console.error('[Profile] fetch failed:', err);
@@ -66,13 +67,20 @@ export default function Profile() {
 
   const handleLogout = () => { logout(); navigate('/'); };
 
-  const formatDate = (dateString) =>
-    dateString
-      ? new Date(dateString).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-      : '—';
+  const formatDate = (d) =>
+    d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
-  const roleColor = profile?.role === 'student' ? '#3b82f6' : profile?.role === 'admin' ? '#8b5cf6' : '#f59e0b';
-  const roleLabel = profile?.role === 'student' ? 'นักศึกษา' : profile?.role === 'admin' ? 'ผู้ดูแลระบบ' : 'บุคคลทั่วไป';
+  const roleColor = profile?.role === 'student' ? '#3b82f6'
+    : profile?.role === 'admin'   ? '#8b5cf6'
+    : '#f59e0b';
+
+  const roleLabel = profile?.role === 'student' ? 'นักศึกษา'
+    : profile?.role === 'admin'   ? 'ผู้ดูแลระบบ'
+    : 'บุคคลทั่วไป';
+
+  const pointColor = (profile?.points ?? 100) >= 80 ? '#10b981'
+    : (profile?.points ?? 100) >= 60 ? '#f59e0b'
+    : '#ef4444';
 
   return (
     <div className="app-layout">
@@ -112,11 +120,8 @@ export default function Profile() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 3 } }}>
             <IconButton><Notifications sx={{ color: '#111827' }} /></IconButton>
             {currentUser && (
-              <Box
-                sx={{ display: 'flex', alignItems: 'center', gap: 1.5, borderLeft: '1px solid #e2e8f0', pl: { xs: 1, sm: 3 }, cursor: 'pointer' }}
-                onClick={() => navigate('/profile')}
-              >
-                <Box className="profile-text-container" sx={{ textAlign: 'right' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, borderLeft: '1px solid #e2e8f0', pl: { xs: 1, sm: 3 } }}>
+                <Box sx={{ textAlign: 'right' }}>
                   <Typography variant="subtitle2" fontWeight="bold" lineHeight={1.2}>{currentUser.name}</Typography>
                   <Typography variant="caption" color="textSecondary">{currentUser.role}</Typography>
                 </Box>
@@ -131,183 +136,138 @@ export default function Profile() {
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}><CircularProgress /></Box>
           ) : error ? (
-            <Box sx={{ textAlign: 'center', mt: 10, color: '#ef4444' }}>
-              <Typography>{error}</Typography>
+            <Box sx={{ textAlign: 'center', mt: 10 }}>
+              <Typography color="error">{error}</Typography>
             </Box>
           ) : profile && (
-            <Box sx={{ maxWidth: '860px', mx: 'auto' }}>
+            <Box sx={{ maxWidth: '900px', mx: 'auto', px: { xs: 0, sm: 2 } }}>
               <Grid container spacing={3}>
 
-                {/* left: avatar + name card */}
+                {/* ── LEFT COLUMN ── */}
                 <Grid item xs={12} md={4}>
-                  <Paper elevation={0} sx={{ p: 4, border: '1px solid #e2e8f0', borderRadius: 4, bgcolor: 'white', textAlign: 'center' }}>
 
-                    {/* profile picture */}
-                    <Box sx={{ position: 'relative', display: 'inline-block', mb: 2 }}>
-                      {profile.profile_pic ? (
-                        <Avatar
-                          src={`${API_URL}/${profile.profile_pic}`}
-                          sx={{ width: 110, height: 110, border: '4px solid #e2e8f0', mx: 'auto' }}
-                        />
-                      ) : (
-                        <Avatar sx={{ width: 110, height: 110, bgcolor: '#1e293b', fontSize: 42, mx: 'auto' }}>
-                          {profile.first_name?.charAt(0).toUpperCase()}
-                        </Avatar>
-                      )}
-                    </Box>
+                  {/* avatar card */}
+                  <Paper elevation={0} sx={{ borderRadius: 4, border: '1px solid #e2e8f0', overflow: 'hidden', bgcolor: 'white' }}>
+                    {/* color banner */}
+                    <Box sx={{ height: 80, bgcolor: roleColor, opacity: 0.12 }} />
+                    <Box sx={{ px: 3, pb: 3, mt: '-48px', textAlign: 'center' }}>
+                      <Avatar
+                        src={profile.profile_pic ? `${API_URL}/${profile.profile_pic}` : undefined}
+                        sx={{ width: 96, height: 96, border: '4px solid white', mx: 'auto', bgcolor: '#1e293b', fontSize: 36, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                      >
+                        {!profile.profile_pic && profile.first_name?.charAt(0).toUpperCase()}
+                      </Avatar>
 
-                    <Typography variant="h6" fontWeight="bold" color="#0f172a">
-                      {profile.first_name} {profile.last_name}
-                    </Typography>
+                      <Typography variant="h6" fontWeight="bold" color="#0f172a" sx={{ mt: 1.5 }}>
+                        {profile.first_name} {profile.last_name}
+                      </Typography>
 
-                    <Chip
-                      label={roleLabel}
-                      size="small"
-                      sx={{ mt: 1, mb: 2, bgcolor: `${roleColor}18`, color: roleColor, fontWeight: 'bold' }}
-                    />
+                      <Chip
+                        label={roleLabel}
+                        size="small"
+                        sx={{ mt: 0.5, mb: 2, bgcolor: `${roleColor}18`, color: roleColor, fontWeight: 'bold', fontSize: '12px' }}
+                      />
 
-                    <Divider sx={{ mb: 2 }} />
-
-                    {/* joined date */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, color: '#94a3b8' }}>
-                      <CalendarMonth fontSize="small" />
-                      <Typography variant="caption">เข้าร่วมเมื่อ {formatDate(profile.created_at)}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, color: '#94a3b8' }}>
+                        <CalendarMonth sx={{ fontSize: 14 }} />
+                        <Typography variant="caption">เข้าร่วมเมื่อ {formatDate(profile.created_at)}</Typography>
+                      </Box>
                     </Box>
                   </Paper>
 
                   {/* stats card */}
                   <Paper elevation={0} sx={{ mt: 3, p: 3, border: '1px solid #e2e8f0', borderRadius: 4, bgcolor: 'white' }}>
-                    <Typography variant="subtitle2" fontWeight="bold" color="#64748b" sx={{ mb: 2 }}>สถิติการใช้งาน</Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
+                    <Typography variant="caption" fontWeight="bold" color="#94a3b8" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
+                      สถิติการใช้งาน
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-around', mt: 2, textAlign: 'center' }}>
                       <Box>
-                        <Typography variant="h4" fontWeight="bold" color="#1e293b">{profile.stats?.total_bookings ?? 0}</Typography>
-                        <Typography variant="caption" color="#94a3b8">การจองทั้งหมด</Typography>
-                      </Box>
-                      {/* placeholder สำหรับ point system */}
-                      <Divider orientation="vertical" flexItem />
-                      <Box>
-                        <Typography variant="h4" fontWeight="bold" color={
-                          profile.points >= 80 ? '#10b981' :
-                          profile.points >= 60 ? '#f59e0b' :
-                          profile.points !== undefined ? '#ef4444' : '#94a3b8'
-                        }>
-                          {profile.points ?? '—'}
+                        <Typography variant="h3" fontWeight="800" color="#1e293b" lineHeight={1}>
+                          {profile.stats?.total_bookings ?? 0}
                         </Typography>
-                        <Typography variant="caption" color="#94a3b8">คะแนน</Typography>
+                        <Typography variant="caption" color="#94a3b8" sx={{ mt: 0.5, display: 'block' }}>การจอง</Typography>
+                      </Box>
+                      <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+                      <Box>
+                        <Typography variant="h3" fontWeight="800" lineHeight={1} color={pointColor}>
+                          {profile.points ?? 100}
+                        </Typography>
+                        <Typography variant="caption" color="#94a3b8" sx={{ mt: 0.5, display: 'block' }}>คะแนน</Typography>
                       </Box>
                     </Box>
                   </Paper>
                 </Grid>
 
-                {/* right: info details */}
+                {/* ── RIGHT COLUMN ── */}
                 <Grid item xs={12} md={8}>
-                  <Paper elevation={0} sx={{ p: 4, border: '1px solid #e2e8f0', borderRadius: 4, bgcolor: 'white' }}>
-                    <Typography variant="subtitle1" fontWeight="bold" color="#0f172a" sx={{ mb: 3 }}>ข้อมูลส่วนตัว</Typography>
+                  <Paper elevation={0} sx={{ p: 4, border: '1px solid #e2e8f0', borderRadius: 4, bgcolor: 'white', mb: 3 }}>
+                    <Typography variant="caption" fontWeight="bold" color="#94a3b8" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
+                      ข้อมูลส่วนตัว
+                    </Typography>
 
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 2.5 }}>
 
                       {/* email */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar sx={{ bgcolor: '#eff6ff', width: 40, height: 40 }}>
-                          <Email sx={{ color: '#3b82f6', fontSize: 20 }} />
-                        </Avatar>
-                        <Box>
-                          <Typography variant="caption" color="#94a3b8" fontWeight="bold">อีเมล</Typography>
-                          <Typography variant="body2" fontWeight="600" color="#1e293b">{profile.email}</Typography>
-                        </Box>
-                      </Box>
+                      <InfoRow icon={<Email sx={{ color: '#3b82f6', fontSize: 18 }} />} iconBg="#eff6ff" label="อีเมล" value={profile.email} />
 
-                      {/* student fields */}
-                      {profile.role === 'student' && (
-                        <>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Avatar sx={{ bgcolor: '#eff6ff', width: 40, height: 40 }}>
-                              <Badge sx={{ color: '#3b82f6', fontSize: 20 }} />
-                            </Avatar>
-                            <Box>
-                              <Typography variant="caption" color="#94a3b8" fontWeight="bold">รหัสนักศึกษา</Typography>
-                              <Typography variant="body2" fontWeight="600" color="#1e293b">{profile.student_id || '—'}</Typography>
-                            </Box>
-                          </Box>
+                      {/* student */}
+                      {profile.role === 'student' && (<>
+                        <InfoRow icon={<Badge sx={{ color: '#3b82f6', fontSize: 18 }} />} iconBg="#eff6ff" label="รหัสนักศึกษา" value={profile.student_id || '—'} />
+                        <InfoRow
+                          icon={<School sx={{ color: '#3b82f6', fontSize: 18 }} />} iconBg="#eff6ff"
+                          label="คณะ / สาขา"
+                          value={FACULTY_NAMES[profile.faculty] || profile.faculty || '—'}
+                          sub={profile.department}
+                        />
+                      </>)}
 
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Avatar sx={{ bgcolor: '#eff6ff', width: 40, height: 40 }}>
-                              <School sx={{ color: '#3b82f6', fontSize: 20 }} />
-                            </Avatar>
-                            <Box>
-                              <Typography variant="caption" color="#94a3b8" fontWeight="bold">คณะ / สาขา</Typography>
-                              <Typography variant="body2" fontWeight="600" color="#1e293b">
-                                {FACULTY_NAMES[profile.faculty] || profile.faculty || '—'}
-                              </Typography>
-                              <Typography variant="caption" color="#64748b">{profile.department || ''}</Typography>
-                            </Box>
-                          </Box>
-                        </>
-                      )}
-
-                      {/* guest fields */}
+                      {/* guest */}
                       {profile.role === 'guest' && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Avatar sx={{ bgcolor: '#fff7ed', width: 40, height: 40 }}>
-                            <Phone sx={{ color: '#f59e0b', fontSize: 20 }} />
-                          </Avatar>
-                          <Box>
-                            <Typography variant="caption" color="#94a3b8" fontWeight="bold">เบอร์โทรศัพท์</Typography>
-                            <Typography variant="body2" fontWeight="600" color="#1e293b">{profile.phone || '—'}</Typography>
-                          </Box>
-                        </Box>
+                        <InfoRow icon={<Phone sx={{ color: '#f59e0b', fontSize: 18 }} />} iconBg="#fff7ed" label="เบอร์โทรศัพท์" value={profile.phone || '—'} />
                       )}
 
                     </Box>
+                  </Paper>
 
-                    <Divider sx={{ my: 3 }} />
+                  {/* point card */}
+                  <Paper elevation={0} sx={{ p: 4, border: '1px solid #e2e8f0', borderRadius: 4, bgcolor: 'white' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
+                      <Star sx={{ color: '#f59e0b', fontSize: 20 }} />
+                      <Typography variant="caption" fontWeight="bold" color="#94a3b8" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
+                        คะแนนของฉัน
+                      </Typography>
+                    </Box>
 
-                    {/* point system */}
-                      <Box sx={{ p: 3, bgcolor: '#f8fafc', borderRadius: 3, border: '1px solid #e2e8f0' }}>
-                        <Typography variant="subtitle2" fontWeight="bold" color="#0f172a" sx={{ mb: 2 }}>
-                          ⭐ คะแนนของฉัน
-                        </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 1 }}>
+                      <Typography variant="body2" color="#64748b">คะแนนปัจจุบัน</Typography>
+                      <Typography variant="h6" fontWeight="bold" color={pointColor}>
+                        {profile.points ?? 100} <Typography component="span" variant="body2" color="#94a3b8">/ 100</Typography>
+                      </Typography>
+                    </Box>
 
-                        {profile.points !== undefined ? (
-                          <>
-                            {/* score bar */}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                              <Typography variant="body2" color="#64748b">คะแนนปัจจุบัน</Typography>
-                              <Typography variant="body2" fontWeight="bold" color={
-                                profile.points >= 80 ? '#10b981' :
-                                profile.points >= 60 ? '#f59e0b' : '#ef4444'
-                              }>
-                                {profile.points} / 100
-                              </Typography>
-                            </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={profile.points ?? 100}
+                      sx={{
+                        height: 10, borderRadius: 5, mb: 2,
+                        bgcolor: '#f1f5f9',
+                        '& .MuiLinearProgress-bar': { borderRadius: 5, bgcolor: pointColor },
+                      }}
+                    />
 
-                            <Box sx={{ width: '100%', height: 10, bgcolor: '#e2e8f0', borderRadius: 5, overflow: 'hidden', mb: 1.5 }}>
-                              <Box sx={{
-                                width: `${profile.points}%`, height: '100%', borderRadius: 5,
-                                bgcolor: profile.points >= 80 ? '#10b981' : profile.points >= 60 ? '#f59e0b' : '#ef4444',
-                                transition: 'width 0.6s ease',
-                              }} />
-                            </Box>
-
-                            {/* ban status */}
-                            {profile.is_banned ? (
-                              <Chip
-                                label={`ถูกระงับถึง ${new Date(profile.ban_until).toLocaleDateString('th-TH')}`}
-                                size="small"
-                                sx={{ bgcolor: '#fef2f2', color: '#ef4444', fontWeight: 'bold' }}
-                              />
-                            ) : (
-                              <Chip
-                                label="สถานะปกติ"
-                                size="small"
-                                sx={{ bgcolor: '#f0fdf4', color: '#16a34a', fontWeight: 'bold' }}
-                              />
-                            )}
-                          </>
-                        ) : (
-                          <Typography variant="body2" color="#94a3b8">ไม่พบข้อมูลคะแนน</Typography>
-                        )}
-                      </Box>
+                    {profile.is_banned ? (
+                      <Chip
+                        label={`ถูกระงับถึง ${new Date(profile.ban_until).toLocaleDateString('th-TH')}`}
+                        size="small"
+                        sx={{ bgcolor: '#fef2f2', color: '#ef4444', fontWeight: 'bold' }}
+                      />
+                    ) : (
+                      <Chip
+                        label="สถานะปกติ"
+                        size="small"
+                        sx={{ bgcolor: '#f0fdf4', color: '#16a34a', fontWeight: 'bold' }}
+                      />
+                    )}
                   </Paper>
                 </Grid>
 
@@ -317,5 +277,21 @@ export default function Profile() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── reusable info row ────────────────────────────────────────────────────────
+function InfoRow({ icon, iconBg, label, value, sub }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+      <Avatar sx={{ bgcolor: iconBg, width: 38, height: 38, flexShrink: 0 }}>{icon}</Avatar>
+      <Box>
+        <Typography variant="caption" color="#94a3b8" fontWeight="bold" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {label}
+        </Typography>
+        <Typography variant="body2" fontWeight="600" color="#1e293b" sx={{ mt: 0.2 }}>{value}</Typography>
+        {sub && <Typography variant="caption" color="#64748b">{sub}</Typography>}
+      </Box>
+    </Box>
   );
 }
