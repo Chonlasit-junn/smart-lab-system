@@ -11,7 +11,7 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = 'http://localhost:8000';
 
 const SIDE_MENU_ITEMS = [
   { text: 'Dashboard',    icon: <DashIcon sx={{ fontSize: 24 }} />,           path: '/admin' },
@@ -49,35 +49,29 @@ export default function Admin() {
   }, []);
 
   const fetchDashboardData = async () => {
-  try {
-    setLoading(true);
-    // เพิ่ม axios.get ขอข้อมูล tickets
-    const [bookingsRes, usersRes, pendingRes, ticketsRes] = await Promise.all([
-      axios.get(`${API_URL}/bookings`),
-      axios.get(`${API_URL}/users`),
-      axios.get(`${API_URL}/admin/users/pending`),
-      axios.get(`${API_URL}/tickets`) // <-- เพิ่มตรงนี้
-    ]);
+    try {
+      setLoading(true);
+      const [bookingsRes, usersRes, pendingRes] = await Promise.all([
+        axios.get(`${API_URL}/bookings`),
+        axios.get(`${API_URL}/users`),
+        axios.get(`${API_URL}/admin/users/pending`),
+      ]);
 
-    const bookings = bookingsRes.data?.data || [];
-    const users    = usersRes.data?.data    || [];
-    const pending  = pendingRes.data?.data  || [];
-    const tickets  = ticketsRes.data?.data  || []; // สมมติว่าคืนค่าเป็น array ของ tickets
+      const bookings = bookingsRes.data?.data || [];
+      const users    = usersRes.data?.data    || [];
+      const pending  = pendingRes.data?.data  || [];
 
-    // นับเฉพาะ Ticket ที่ยังไม่ได้แก้ (status === 'open')
-    const openTicketsCount = tickets.filter(t => t.status === 'open').length;
+      // backend already returns newest-first, but sort locally as a safety net
+      const sorted = [...bookings].sort(
+        (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+      );
 
-    const sorted = [...bookings].sort(
-      (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
-    );
-
-    setRecentReservations(sorted.slice(0, 10));
-    setStats({
-      totalRequests: bookings.length,
-      activeUsers: users.length,
-      pendingApprovals: pending.length,
-      openTickets: openTicketsCount, // <-- เพิ่มค่าสถิติใหม่
-    });
+      setRecentReservations(sorted.slice(0, 10));
+      setStats({
+        totalRequests:   bookings.length,
+        activeUsers:     users.length,
+        pendingApprovals: pending.length,
+      });
     } catch (error) {
       console.error('[Admin] failed to fetch dashboard data:', error);
     } finally {
@@ -89,7 +83,7 @@ export default function Admin() {
     { label: 'Total Requests',  v: stats.totalRequests,    c: '#3b82f6', i: <Person /> },
     { label: 'Active Users',    v: stats.activeUsers,      c: '#10b981', i: <Group /> },
     { label: 'Pending Users',   v: stats.pendingApprovals, c: '#f59e0b', i: <PendingActions />, path: '/verify-users' },
-    { label: 'Support Tickets', v: stats.openTickets || 0, c: '#ef4444', i: <SupportAgent />, path: '/ticket' },
+    { label: 'Support Tickets', v: 0,                      c: '#ef4444', i: <SupportAgent /> },
   ];
 
   return (
