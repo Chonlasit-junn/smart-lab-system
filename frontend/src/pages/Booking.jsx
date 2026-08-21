@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import SupportModal from './SupportModal';
 
 // API Endpoint configuration
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -51,6 +52,7 @@ export default function Booking() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   // Data States
   const [labs, setLabs] = useState([]);
@@ -289,7 +291,9 @@ export default function Booking() {
         </div>
 
         <div className="sidebar-menu" style={{ flex: 'none', paddingBottom: '24px' }}>
-          <div className="menu-item"><SupportAgent /> Support</div>
+          <div className="menu-item" onClick={() => setIsSupportOpen(true)}>
+            <SupportAgent /> Support
+          </div>
           <div className="menu-item" onClick={handleLogout}><Logout /> Log Out</div>
         </div>
       </div>
@@ -645,6 +649,11 @@ export default function Booking() {
           </Button>
         </DialogContent>
       </Dialog>
+      <SupportModal 
+        open={isSupportOpen} 
+        onClose={() => setIsSupportOpen(false)} 
+        user={currentUser} 
+      />
     </div>
   );
 }

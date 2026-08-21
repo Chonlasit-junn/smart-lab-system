@@ -1,6 +1,8 @@
 from typing import Optional
+from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 from datetime import date
+
 
 
 # --- Auth ---
@@ -66,3 +68,27 @@ class BookingCreate(BaseModel):
     email: EmailStr
     purpose: Optional[str] = None
     total_participants: int = Field(1, gt=0)
+
+
+# --- Tickets ---
+# รูปแบบข้อมูลที่ User จะส่งมาตอนสร้าง Ticket
+class TicketCreate(BaseModel):
+    user_id: int
+    subject: str
+    message: str
+
+# รูปแบบข้อมูลสำหรับการอัปเดตสถานะโดย Admin
+class TicketUpdateStatus(BaseModel):
+    status: str # เช่น "closed", "in_progress"
+
+# รูปแบบข้อมูลที่ API จะส่งกลับไปให้ Frontend
+class TicketResponse(BaseModel):
+    id: int
+    user_id: int
+    subject: str
+    message: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
