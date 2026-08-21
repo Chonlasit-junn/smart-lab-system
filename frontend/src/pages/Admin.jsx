@@ -49,29 +49,35 @@ export default function Admin() {
   }, []);
 
   const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const [bookingsRes, usersRes, pendingRes] = await Promise.all([
-        axios.get(`${API_URL}/bookings`),
-        axios.get(`${API_URL}/users`),
-        axios.get(`${API_URL}/admin/users/pending`),
-      ]);
+  try {
+    setLoading(true);
+    // เพิ่ม axios.get ขอข้อมูล tickets
+    const [bookingsRes, usersRes, pendingRes, ticketsRes] = await Promise.all([
+      axios.get(`${API_URL}/bookings`),
+      axios.get(`${API_URL}/users`),
+      axios.get(`${API_URL}/admin/users/pending`),
+      axios.get(`${API_URL}/tickets`) // <-- เพิ่มตรงนี้
+    ]);
 
-      const bookings = bookingsRes.data?.data || [];
-      const users    = usersRes.data?.data    || [];
-      const pending  = pendingRes.data?.data  || [];
+    const bookings = bookingsRes.data?.data || [];
+    const users    = usersRes.data?.data    || [];
+    const pending  = pendingRes.data?.data  || [];
+    const tickets  = ticketsRes.data?.data  || []; // สมมติว่าคืนค่าเป็น array ของ tickets
 
-      // backend already returns newest-first, but sort locally as a safety net
-      const sorted = [...bookings].sort(
-        (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
-      );
+    // นับเฉพาะ Ticket ที่ยังไม่ได้แก้ (status === 'open')
+    const openTicketsCount = tickets.filter(t => t.status === 'open').length;
 
-      setRecentReservations(sorted.slice(0, 10));
-      setStats({
-        totalRequests:   bookings.length,
-        activeUsers:     users.length,
-        pendingApprovals: pending.length,
-      });
+    const sorted = [...bookings].sort(
+      (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+    );
+
+    setRecentReservations(sorted.slice(0, 10));
+    setStats({
+      totalRequests: bookings.length,
+      activeUsers: users.length,
+      pendingApprovals: pending.length,
+      openTickets: openTicketsCount, // <-- เพิ่มค่าสถิติใหม่
+    });
     } catch (error) {
       console.error('[Admin] failed to fetch dashboard data:', error);
     } finally {
@@ -83,7 +89,7 @@ export default function Admin() {
     { label: 'Total Requests',  v: stats.totalRequests,    c: '#3b82f6', i: <Person /> },
     { label: 'Active Users',    v: stats.activeUsers,      c: '#10b981', i: <Group /> },
     { label: 'Pending Users',   v: stats.pendingApprovals, c: '#f59e0b', i: <PendingActions />, path: '/verify-users' },
-    { label: 'Support Tickets', v: 0,                      c: '#ef4444', i: <SupportAgent /> },
+    { label: 'Support Tickets', v: stats.openTickets || 0, c: '#ef4444', i: <SupportAgent />, path: '/ticket' },
   ];
 
   return (
