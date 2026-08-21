@@ -17,7 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import SupportModal from './SupportModal';
 
 // API Endpoint configuration
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL;
 
 // Mapping for display texts
 const SLOT_DISPLAY_MAPPING = {

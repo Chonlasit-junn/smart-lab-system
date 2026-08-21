@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'https://h0sh1na-smart-lab-backend.hf.space';
+const API_URL = import.meta.env.VITE_API_URL;
 
 const FACULTY_NAMES = {
   business:      'School of Business Administration',
