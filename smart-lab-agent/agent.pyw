@@ -1,7 +1,11 @@
 import sys
 import os
+import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 import psutil
 import json
+import sqlite3
 import socket
 import time
 import requests
@@ -9,8 +13,48 @@ import pygetwindow as gw
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QPushButton, QFrame,
                              QGraphicsDropShadowEffect, QMessageBox, QDialog)
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
+
+# ── LOGGING SETUP ─────────────────────────────────────────────────────────────
+# ป้องกัน crash: .pyw / windowed .exe จะมี sys.stdout = None
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+LOG_DIR = Path(os.getenv("APPDATA", ".")) / "SmartLabAgent" / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+logger = logging.getLogger("SmartLabAgent")
+logger.setLevel(logging.DEBUG)
+
+_file_handler = RotatingFileHandler(
+    LOG_DIR / "agent.log",
+    maxBytes=2 * 1024 * 1024,   # 2 MB per file
+    backupCount=5,              # keep 5 rotated files
+    encoding="utf-8",
+)
+_file_handler.setLevel(logging.DEBUG)
+_file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+))
+logger.addHandler(_file_handler)
+
+# console handler เฉพาะตอน dev (stdout ใช้งานได้จริง)
+if sys.stdout is not None and hasattr(sys.stdout, "fileno"):
+    try:
+        sys.stdout.fileno()  # จะ raise ถ้าเป็น devnull redirect
+        _console_handler = logging.StreamHandler(sys.stdout)
+        _console_handler.setLevel(logging.INFO)
+        _console_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        logger.addHandler(_console_handler)
+    except (OSError, ValueError):
+        pass
+
+logger.info("Smart Lab Agent starting up...")
+
 
 # Hugging Face Space อาจ sleep อยู่ — retry ให้อัตโนมัติ
 def post_with_retry(url, data=None, json_data=None, retries=3, timeout=15):
@@ -26,6 +70,79 @@ def post_with_retry(url, data=None, json_data=None, retries=3, timeout=15):
             if attempt < retries - 1:
                 time.sleep(2)
     return None
+
+
+# ── NetworkWorker ─────────────────────────────────────────────────────────────
+class NetworkWorker(QThread):
+    """Worker thread สำหรับ network calls — ป้องกัน GUI freeze."""
+    finished = pyqtSignal(object)
+    error    = pyqtSignal(str)
+
+    def __init__(self, fn, *args, **kwargs):
+        super().__init__()
+        self._fn     = fn
+        self._args   = args
+        self._kwargs = kwargs
+
+    def run(self):
+        try:
+            result = self._fn(*self._args, **self._kwargs)
+            self.finished.emit(result)
+        except Exception as e:
+            logger.error(f"NetworkWorker error: {e}", exc_info=True)
+            self.error.emit(str(e))
+
+
+# ── PendingLogStore ────────────────────────────────────────────────────────────
+DATA_DIR = Path(os.getenv("APPDATA", ".")) / "SmartLabAgent"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+class PendingLogStore:
+    """เก็บ usage logs ลง SQLite ก่อนส่ง — ป้องกัน data loss เมื่อ network ล้มเหลว."""
+
+    def __init__(self, db_path: Path = None):
+        self._db_path = db_path or (DATA_DIR / "pending_logs.db")
+        self._ensure_table()
+
+    def _connect(self):
+        return sqlite3.connect(str(self._db_path), timeout=5)
+
+    def _ensure_table(self):
+        with self._connect() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pending_logs (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT    NOT NULL,
+                    usage_data TEXT    NOT NULL,
+                    created_at TEXT    DEFAULT (datetime('now','localtime'))
+                )
+            """)
+
+    def save(self, session_id: str, summary: list) -> int:
+        """บันทึก log ลง local DB ก่อนส่ง — return row id."""
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO pending_logs (session_id, usage_data) VALUES (?, ?)",
+                (session_id, json.dumps(summary, ensure_ascii=False)),
+            )
+            row_id = cur.lastrowid
+            logger.info(f"Saved pending log id={row_id} for session={session_id}")
+            return row_id
+
+    def delete(self, row_id: int):
+        """ลบ log ที่ส่งสำเร็จแล้ว."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM pending_logs WHERE id = ?", (row_id,))
+            logger.info(f"Deleted pending log id={row_id}")
+
+    def get_all_pending(self) -> list:
+        """ดึง logs ที่ยังค้างส่งทั้งหมด — return list of (id, session_id, usage_data_json)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, session_id, usage_data FROM pending_logs ORDER BY id"
+            ).fetchall()
+            return rows
 
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -362,40 +479,69 @@ class LoginOverlay(QWidget):
         self.error_label.hide()
         self.login_btn.setText("⏳ กำลังตรวจสอบ...")
         self.login_btn.setEnabled(False)
-        QApplication.processEvents()
 
-        try:
-            res = post_with_retry(f"{API_URL}/login", data={"username": email, "password": password})
-            if not res:
-                self._show_error("ไม่สามารถเชื่อมต่อ Server ได้ กรุณาตรวจสอบอินเทอร์เน็ต")
-                return
+        # เก็บ email ไว้ใช้ใน callback (password ไม่เก็บ — ส่งเข้า worker แล้วจบ)
+        self._login_email = email
 
-            if res.status_code == 200:
-                device_name  = socket.gethostname()
-                session_res  = post_with_retry(
-                    f"{API_URL}/agent/start-session",
-                    data={"email": email, "lab_code": LAB_CODE, "device": device_name}
-                )
-                if session_res and session_res.status_code == 200:
-                    session_id = session_res.json()["session_id"]
-                    self.is_authenticated = True
-                    self.hide()
-                    self.info_bar = SessionInfoBar(email, self, session_id)
-                    self.info_bar.show()
-                    self.agent.start_monitoring(session_id, self.info_bar)
-                else:
-                    status = session_res.status_code if session_res else "Timeout"
-                    print(f"Session Error [{status}]: {session_res.text if session_res else '-'}")
-                    self._show_error("ไม่สามารถสร้าง Session ใหม่ได้")
-            elif res.status_code == 403:
-                self._show_error("บัญชีนี้รอการอนุมัติจาก Admin")
+        self._login_worker = NetworkWorker(self._do_login, email, password)
+        self._login_worker.finished.connect(self._on_login_result)
+        self._login_worker.error.connect(self._on_login_error)
+        self._login_worker.start()
+
+    # ── runs on WORKER thread ──
+    @staticmethod
+    def _do_login(email, password):
+        res = post_with_retry(f"{API_URL}/login", data={"username": email, "password": password})
+        if not res:
+            return {"status": "connection_error"}
+
+        if res.status_code == 200:
+            device_name = socket.gethostname()
+            session_res = post_with_retry(
+                f"{API_URL}/agent/start-session",
+                data={"email": email, "lab_code": LAB_CODE, "device": device_name},
+            )
+            if session_res and session_res.status_code == 200:
+                return {"status": "ok", "session_id": session_res.json()["session_id"]}
             else:
-                self._show_error("อีเมลหรือรหัสผ่านไม่ถูกต้อง")
-        except Exception as e:
-            self._show_error(f"เกิดข้อผิดพลาดในการเชื่อมต่อ: {e}")
-        finally:
-            self.login_btn.setText("ปลดล็อกเข้าใช้งาน")
-            self.login_btn.setEnabled(True)
+                status = session_res.status_code if session_res else "Timeout"
+                text   = session_res.text if session_res else "-"
+                logger.error(f"Session Error [{status}]: {text}")
+                return {"status": "session_error"}
+        elif res.status_code == 403:
+            return {"status": "pending_approval"}
+        else:
+            return {"status": "invalid_credentials"}
+
+    # ── runs on GUI thread (signal callback) ──
+    def _on_login_result(self, result):
+        status = result.get("status")
+
+        if status == "ok":
+            session_id = result["session_id"]
+            self.is_authenticated = True
+            self.pass_input.clear()
+            self.email_input.clear()
+            self.hide()
+            self.info_bar = SessionInfoBar(self._login_email, self, session_id)
+            self.info_bar.show()
+            self.agent.start_monitoring(session_id, self.info_bar)
+        elif status == "connection_error":
+            self._show_error("ไม่สามารถเชื่อมต่อ Server ได้ กรุณาตรวจสอบอินเทอร์เน็ต")
+        elif status == "pending_approval":
+            self._show_error("บัญชีนี้รอการอนุมัติจาก Admin")
+        elif status == "session_error":
+            self._show_error("ไม่สามารถสร้าง Session ใหม่ได้")
+        else:
+            self._show_error("อีเมลหรือรหัสผ่านไม่ถูกต้อง")
+
+        self.login_btn.setText("ปลดล็อกเข้าใช้งาน")
+        self.login_btn.setEnabled(True)
+
+    def _on_login_error(self, error_msg):
+        self._show_error(f"เกิดข้อผิดพลาดในการเชื่อมต่อ: {error_msg}")
+        self.login_btn.setText("ปลดล็อกเข้าใช้งาน")
+        self.login_btn.setEnabled(True)
 
 
 # ── SmartLabAgent ─────────────────────────────────────────────────────────────
@@ -408,26 +554,37 @@ class SmartLabAgent:
         self.forbidden_words = []   # โหลดจาก /admin/blacklist ตอน start_monitoring
         self.monitor_timer  = QTimer()
         self.monitor_timer.timeout.connect(self.track_usage)
+        self._log_store     = PendingLogStore()
+        self._flush_pending_logs()  # ส่ง logs ค้างจาก session ก่อนหน้า (ถ้ามี)
 
     def set_ui_references(self, overlay):
         self.overlay = overlay
 
     def fetch_blacklist(self):
-        """โหลด blacklist จาก backend — ถ้าไม่ได้ใช้ fallback list"""
-        try:
-            # FIX 1: endpoint ที่ถูกต้องคือ /admin/blacklist ไม่ใช่ /blacklist
-            res = requests.get(f"{API_URL}/admin/blacklist", timeout=10)
-            if res.status_code == 200:
-                # FIX 2: backend ส่งกลับเป็น {"data": [...]} ต้อง .get("data") ก่อน
-                data = res.json().get("data", [])
-                self.forbidden_words = [item.get("app_name", "").lower().strip() for item in data]
-                print(f"ดึง Blacklist สำเร็จ: {self.forbidden_words}")
-            else:
-                print(f"ดึง Blacklist ล้มเหลว (Status: {res.status_code}) ใช้ fallback แทน")
-                self._use_fallback_blacklist()
-        except Exception as e:
-            print(f"ดึง Blacklist ไม่ได้: {e}")
-            self._use_fallback_blacklist()
+        """โหลด blacklist จาก backend แบบ async — ใช้ fallback ระหว่างรอ"""
+        self._use_fallback_blacklist()  # ใช้ fallback ก่อนเพื่อให้มี blacklist ทันที
+
+        self._blacklist_worker = NetworkWorker(self._do_fetch_blacklist)
+        self._blacklist_worker.finished.connect(self._on_blacklist_result)
+        self._blacklist_worker.error.connect(
+            lambda e: logger.error(f"ดึง Blacklist ไม่ได้: {e}")
+        )
+        self._blacklist_worker.start()
+
+    @staticmethod
+    def _do_fetch_blacklist():
+        """Runs on worker thread."""
+        return requests.get(f"{API_URL}/admin/blacklist", timeout=10)
+
+    def _on_blacklist_result(self, res):
+        """Runs on GUI thread — อัปเดต blacklist จาก server."""
+        if res and res.status_code == 200:
+            data = res.json().get("data", [])
+            self.forbidden_words = [item.get("app_name", "").lower().strip() for item in data]
+            logger.info(f"ดึง Blacklist สำเร็จ: {self.forbidden_words}")
+        else:
+            status = res.status_code if res else "No response"
+            logger.warning(f"ดึง Blacklist ล้มเหลว (Status: {status}) ใช้ fallback แทน")
 
     def _use_fallback_blacklist(self):
         # FIX 3: fallback ต้องมีครบ รวม "star rail" และ "starrail" (ชื่อ process)
@@ -485,30 +642,104 @@ class SmartLabAgent:
 
             if app_name and app_name not in IGNORE_SYSTEM_APPS:
                 self.usage_stats[app_name] = self.usage_stats.get(app_name, 0) + 5
-                print(f"บันทึก: [{app_name}] สะสม {self.usage_stats[app_name]} วินาที")
+                logger.debug(f"บันทึก: [{app_name}] สะสม {self.usage_stats[app_name]} วินาที")
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"track_usage error: {e}", exc_info=True)
 
     def stop_and_send_logs(self, session_id):
         self.monitor_timer.stop()
         summary = [{"name": n, "duration": d} for n, d in self.usage_stats.items()]
 
-        print(f"\n--- ส่งข้อมูลไป Backend ---")
-        print(f"Data: {summary}")
+        if not summary:
+            logger.info("ไม่มีสถิติการใช้งานที่บันทึกได้")
+            self._after_send_logs()
+            return
 
-        if summary:
-            try:
-                r = post_with_retry(
-                    f"{API_URL}/agent/log-usage",
-                    data={"session_id": session_id, "usage_data": json.dumps(summary)}
-                )
-                print(f"Server Response: {r.status_code if r else 'Timeout'}")
-            except Exception as e:
-                print(f"ส่งข้อมูลไม่ได้: {e}")
+        # เก็บลง local DB ก่อน — แม้ network ล้มเหลวข้อมูลไม่หาย
+        try:
+            row_id = self._log_store.save(session_id, summary)
+        except Exception as e:
+            logger.error(f"Save to local DB failed: {e}", exc_info=True)
+            row_id = None
+
+        logger.info(f"ส่งข้อมูลไป Backend — Data: {summary}")
+
+        self._send_worker = NetworkWorker(
+            self._do_send_logs, session_id, summary
+        )
+        self._send_worker.finished.connect(
+            lambda r, rid=row_id: self._on_send_logs_done(r, rid)
+        )
+        self._send_worker.error.connect(
+            lambda e: (logger.error(f"ส่งข้อมูลไม่ได้: {e} (เก็บไว้ใน local DB)"), self._after_send_logs())
+        )
+        self._send_worker.start()
+
+    @staticmethod
+    def _do_send_logs(session_id, summary):
+        """Runs on worker thread."""
+        return post_with_retry(
+            f"{API_URL}/agent/log-usage",
+            data={"session_id": session_id, "usage_data": json.dumps(summary)},
+        )
+
+    def _on_send_logs_done(self, r, row_id):
+        """Runs on GUI thread — ลบจาก local DB ถ้าส่งสำเร็จ."""
+        if r and r.status_code == 200:
+            logger.info(f"Server Response: {r.status_code} — ส่งสำเร็จ")
+            if row_id is not None:
+                try:
+                    self._log_store.delete(row_id)
+                except Exception as e:
+                    logger.error(f"Delete pending log failed: {e}")
         else:
-            print("ไม่มีสถิติการใช้งานที่บันทึกได้")
+            status = r.status_code if r else "Timeout"
+            logger.warning(f"Server Response: {status} — เก็บไว้ใน local DB (id={row_id})")
+        self._after_send_logs()
 
+    def _flush_pending_logs(self):
+        """ส่ง logs ที่ค้างส่งจาก session ก่อนหน้า (เช่น agent crash / ไฟดับ)."""
+        try:
+            pending = self._log_store.get_all_pending()
+        except Exception as e:
+            logger.error(f"Read pending logs failed: {e}")
+            return
+
+        if not pending:
+            return
+
+        logger.info(f"พบ {len(pending)} pending log(s) ค้างส่ง — กำลัง flush...")
+        for row_id, session_id, usage_json in pending:
+            worker = NetworkWorker(
+                self._do_send_logs, session_id, json.loads(usage_json)
+            )
+            worker.finished.connect(
+                lambda r, rid=row_id: self._on_flush_done(r, rid)
+            )
+            worker.error.connect(
+                lambda e, rid=row_id: logger.warning(f"Flush log id={rid} failed: {e}")
+            )
+            worker.start()
+            # เก็บ ref ไว้ไม่ให้ GC ลบ thread
+            if not hasattr(self, "_flush_workers"):
+                self._flush_workers = []
+            self._flush_workers.append(worker)
+
+    def _on_flush_done(self, r, row_id):
+        """ลบ pending log ที่ flush สำเร็จ."""
+        if r and r.status_code == 200:
+            logger.info(f"Flushed pending log id={row_id} successfully")
+            try:
+                self._log_store.delete(row_id)
+            except Exception as e:
+                logger.error(f"Delete flushed log id={row_id} failed: {e}")
+        else:
+            status = r.status_code if r else "Timeout"
+            logger.warning(f"Flush log id={row_id} failed: server={status}, will retry next startup")
+
+    def _after_send_logs(self):
+        """เรียก shutdown เฉพาะเมื่อไม่ใช่ debug mode."""
         if not DEBUG_MODE:
             os.system("shutdown /l /f")
 
