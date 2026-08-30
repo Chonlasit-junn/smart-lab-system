@@ -8,7 +8,9 @@ import json
 import sqlite3
 import socket
 import time
+import uuid
 import requests
+import ctypes
 import pygetwindow as gw
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QPushButton, QFrame,
@@ -115,19 +117,28 @@ class PendingLogStore:
                     id         INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id TEXT    NOT NULL,
                     usage_data TEXT    NOT NULL,
+                    hostname   TEXT    DEFAULT '',
+                    mac_address TEXT   DEFAULT '',
                     created_at TEXT    DEFAULT (datetime('now','localtime'))
                 )
             """)
+            # Migration: เพิ่ม column ใหม่ถ้า DB เก่ายังไม่มี
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(pending_logs)")}
+            if "hostname" not in existing:
+                conn.execute("ALTER TABLE pending_logs ADD COLUMN hostname TEXT DEFAULT ''")
+            if "mac_address" not in existing:
+                conn.execute("ALTER TABLE pending_logs ADD COLUMN mac_address TEXT DEFAULT ''")
 
-    def save(self, session_id: str, summary: list) -> int:
+    def save(self, session_id: str, summary: list,
+             hostname: str = "", mac_address: str = "") -> int:
         """บันทึก log ลง local DB ก่อนส่ง — return row id."""
         with self._connect() as conn:
             cur = conn.execute(
-                "INSERT INTO pending_logs (session_id, usage_data) VALUES (?, ?)",
-                (session_id, json.dumps(summary, ensure_ascii=False)),
+                "INSERT INTO pending_logs (session_id, usage_data, hostname, mac_address) VALUES (?, ?, ?, ?)",
+                (session_id, json.dumps(summary, ensure_ascii=False), hostname, mac_address),
             )
             row_id = cur.lastrowid
-            logger.info(f"Saved pending log id={row_id} for session={session_id}")
+            logger.info(f"Saved pending log id={row_id} for session={session_id} device={hostname}")
             return row_id
 
     def delete(self, row_id: int):
@@ -137,10 +148,10 @@ class PendingLogStore:
             logger.info(f"Deleted pending log id={row_id}")
 
     def get_all_pending(self) -> list:
-        """ดึง logs ที่ยังค้างส่งทั้งหมด — return list of (id, session_id, usage_data_json)."""
+        """ดึง logs ที่ยังค้างส่งทั้งหมด — return list of (id, session_id, usage_data_json, hostname, mac_address)."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, session_id, usage_data FROM pending_logs ORDER BY id"
+                "SELECT id, session_id, usage_data, hostname, mac_address FROM pending_logs ORDER BY id"
             ).fetchall()
             return rows
 
@@ -149,6 +160,11 @@ class PendingLogStore:
 API_URL    = "https://h0sh1na-smart-lab-backend.hf.space"
 LAB_CODE   = "LAB01"
 DEBUG_MODE = True   # ← เปลี่ยนเป็น False ก่อน deploy จริง
+
+# ── Device Identity (คำนวณครั้งเดียวตอนเปิด) ─────────────────────────────────
+DEVICE_HOSTNAME = socket.gethostname()
+DEVICE_MAC = ':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big'))
+logger.info(f"Device: {DEVICE_HOSTNAME} (MAC: {DEVICE_MAC})")
 
 IGNORE_SYSTEM_APPS = [
     "Taskbar", "Program Manager", "Settings",
@@ -460,6 +476,7 @@ class LoginOverlay(QWidget):
         self.error_label.hide()
         self.login_btn.setText("ปลดล็อกเข้าใช้งาน")
         self.login_btn.setEnabled(True)
+        self.focus_timer.start(1000)
         self.showFullScreen()
         self.raise_()
         self.activateWindow()
@@ -496,10 +513,10 @@ class LoginOverlay(QWidget):
             return {"status": "connection_error"}
 
         if res.status_code == 200:
-            device_name = socket.gethostname()
             session_res = post_with_retry(
                 f"{API_URL}/agent/start-session",
-                data={"email": email, "lab_code": LAB_CODE, "device": device_name},
+                data={"email": email, "lab_code": LAB_CODE,
+                      "device": DEVICE_HOSTNAME, "mac": DEVICE_MAC},
             )
             if session_res and session_res.status_code == 200:
                 return {"status": "ok", "session_id": session_res.json()["session_id"]}
@@ -520,6 +537,7 @@ class LoginOverlay(QWidget):
         if status == "ok":
             session_id = result["session_id"]
             self.is_authenticated = True
+            self.focus_timer.stop()
             self.pass_input.clear()
             self.email_input.clear()
             self.hide()
@@ -601,6 +619,20 @@ class SmartLabAgent:
         self.fetch_blacklist()
         self.monitor_timer.start(5000)
 
+    @staticmethod
+    def _get_process_name_from_window(window) -> str:
+        """ดึงชื่อ process (.exe) จาก active window ผ่าน Win32 API + psutil."""
+        try:
+            hwnd = window._hWnd
+            pid = ctypes.c_ulong()
+            ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            proc = psutil.Process(pid.value)
+            return proc.name()          # e.g. "brave.exe", "Code.exe"
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError, AttributeError):
+            # fallback: parse title เดิม
+            raw_title = (window.title or "").strip()
+            return raw_title.split('-')[-1].strip() if '-' in raw_title else raw_title
+
     def track_usage(self):
         try:
             # ── ด่านที่ 1: ตรวจจากชื่อ process (.exe) ──────────────────────
@@ -611,7 +643,6 @@ class SmartLabAgent:
                     for word in self.forbidden_words:
                         if not word:
                             continue
-                        # FIX 4: compare ตรงๆ ไม่ตัด space — ป้องกัน "starail" != "starrail"
                         if word.replace(" ", "") in p_name:
                             if self.info_bar:
                                 self.info_bar.trigger_logout(reason=f"ไม่อนุญาตให้เปิดแอป: {word.title()}")
@@ -637,8 +668,8 @@ class SmartLabAgent:
                     return
 
             # ── บันทึกสถิติการใช้งานปกติ ────────────────────────────────────
-            # ตัดส่วนขยายออก เช่น "Google - Brave" → "Brave"
-            app_name = raw_title.split('-')[-1].strip() if '-' in raw_title else raw_title
+            # ใช้ process name จาก psutil แทนการ parse window title
+            app_name = self._get_process_name_from_window(active_win)
 
             if app_name and app_name not in IGNORE_SYSTEM_APPS:
                 self.usage_stats[app_name] = self.usage_stats.get(app_name, 0) + 5
@@ -658,7 +689,10 @@ class SmartLabAgent:
 
         # เก็บลง local DB ก่อน — แม้ network ล้มเหลวข้อมูลไม่หาย
         try:
-            row_id = self._log_store.save(session_id, summary)
+            row_id = self._log_store.save(
+                session_id, summary,
+                hostname=DEVICE_HOSTNAME, mac_address=DEVICE_MAC,
+            )
         except Exception as e:
             logger.error(f"Save to local DB failed: {e}", exc_info=True)
             row_id = None
@@ -666,7 +700,7 @@ class SmartLabAgent:
         logger.info(f"ส่งข้อมูลไป Backend — Data: {summary}")
 
         self._send_worker = NetworkWorker(
-            self._do_send_logs, session_id, summary
+            self._do_send_logs, session_id, summary, DEVICE_HOSTNAME, DEVICE_MAC
         )
         self._send_worker.finished.connect(
             lambda r, rid=row_id: self._on_send_logs_done(r, rid)
@@ -677,11 +711,16 @@ class SmartLabAgent:
         self._send_worker.start()
 
     @staticmethod
-    def _do_send_logs(session_id, summary):
+    def _do_send_logs(session_id, summary, hostname="", mac=""):
         """Runs on worker thread."""
         return post_with_retry(
             f"{API_URL}/agent/log-usage",
-            data={"session_id": session_id, "usage_data": json.dumps(summary)},
+            data={
+                "session_id": session_id,
+                "usage_data": json.dumps(summary),
+                "device": hostname,
+                "mac": mac,
+            },
         )
 
     def _on_send_logs_done(self, r, row_id):
@@ -710,9 +749,10 @@ class SmartLabAgent:
             return
 
         logger.info(f"พบ {len(pending)} pending log(s) ค้างส่ง — กำลัง flush...")
-        for row_id, session_id, usage_json in pending:
+        for row_id, session_id, usage_json, hostname, mac in pending:
             worker = NetworkWorker(
-                self._do_send_logs, session_id, json.loads(usage_json)
+                self._do_send_logs, session_id, json.loads(usage_json),
+                hostname or DEVICE_HOSTNAME, mac or DEVICE_MAC
             )
             worker.finished.connect(
                 lambda r, rid=row_id: self._on_flush_done(r, rid)
