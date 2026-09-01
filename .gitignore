@@ -26,3 +26,12 @@ env/
 # --- OS Files ---
 .DS_Store
 Thumbs.db
+
+# --- Testing ---
+.pytest_cache/
+pytest_cache
+pytest.ini
+tests/
+
+# --- Other ---
+.vscode/
