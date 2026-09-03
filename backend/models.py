@@ -110,6 +110,7 @@ class LabAccessLog(Base):
     access_type = Column(String, nullable=False)  # entry | manual
     status = Column(String, nullable=False)        # success | denied
     device_used = Column(String, nullable=True)
+    device_mac = Column(String, nullable=True)
 
 
 class ProgramUsageLog(Base):

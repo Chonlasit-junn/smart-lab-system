@@ -32,6 +32,7 @@ def start_session(
     email: str = Form(...),
     lab_code: str = Form(...),
     device: str = Form(...),
+    device_mac: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     user = db.query(models.User).filter(models.User.email == email).first()
@@ -40,13 +41,17 @@ def start_session(
     if not user or not lab:
         raise HTTPException(status_code=404, detail="Invalid credentials.")
 
+    resolved_device_name = device.strip() or None
+    resolved_device_mac = (device_mac or "").strip() or None
+
     new_log = models.LabAccessLog(
         lab_id=lab.id,
         user_id=user.id,
         entry_time=datetime.now(),
         access_type="manual",
         status="success",
-        device_used=device,
+        device_used=resolved_device_name,
+        device_mac=resolved_device_mac,
     )
     db.add(new_log)
     db.commit()
@@ -74,8 +79,14 @@ def log_usage(
     try:
         logs = json.loads(usage_data)
         now = datetime.now()
-        resolved_device_name = (device_name or device or "").strip() or None
-        resolved_device_mac = (device_mac or mac or "").strip() or None
+        # Keep accepting legacy payload fields while using the Session as the
+        # canonical source for device identity.
+        resolved_device_name = (
+            device_name or device or access_log.device_used or ""
+        ).strip() or None
+        resolved_device_mac = (
+            device_mac or mac or access_log.device_mac or ""
+        ).strip() or None
 
         if not isinstance(logs, list):
             raise HTTPException(status_code=422, detail="usage_data must be a JSON list.")
