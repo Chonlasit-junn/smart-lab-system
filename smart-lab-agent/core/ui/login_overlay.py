@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFrame, QApplication
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
-from ..config import API_URL, LAB_CODE, DEVICE_HOSTNAME, DEVICE_MAC
+from ..config import API_URL, LAB_CODE, DEVICE_NAME, DEVICE_MAC
 from ..network import NetworkWorker, post_with_retry
 from .session_bar import SessionInfoBar
 from ..logger import logger
@@ -147,8 +147,12 @@ class LoginOverlay(QWidget):
         if res.status_code == 200:
             session_res = post_with_retry(
                 f"{API_URL}/agent/start-session",
-                data={"email": email, "lab_code": LAB_CODE,
-                      "device": DEVICE_HOSTNAME, "mac": DEVICE_MAC},
+                data={
+                        "email": email,
+                        "lab_code": LAB_CODE,
+                        "device": DEVICE_NAME,
+                        "device_mac": DEVICE_MAC,
+                    }
             )
             if session_res and session_res.status_code == 200:
                 return {"status": "ok", "session_id": session_res.json()["session_id"]}
