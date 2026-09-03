@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Date, Time, Text
+from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Boolean, ForeignKey, Date, Time, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -124,6 +124,28 @@ class ProgramUsageLog(Base):
     device_name = Column(String, nullable=True)
     device_mac = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UsageViolation(Base):
+    """Immutable audit record for a forbidden application detected in a session."""
+
+    __tablename__ = "usage_violations"
+
+    id = Column(BigInteger, primary_key=True, index=True)
+    lab_access_log_id = Column(
+        BigInteger,
+        ForeignKey("lab_access_logs.id"),
+        nullable=False,
+    )
+    program_usage_log_id = Column(
+        BigInteger,
+        ForeignKey("program_usage_logs.id"),
+        nullable=True,
+    )
+    program_name = Column(String, nullable=False)
+    detected_at = Column(DateTime, server_default=func.now(), nullable=False)
+    reason = Column(Text, nullable=True)
+    action_taken = Column(String, nullable=False, default="logout")
 
 
 class ClassSchedule(Base):
