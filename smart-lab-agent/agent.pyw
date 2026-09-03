@@ -3,6 +3,7 @@ import os
 import psutil
 import json
 import socket
+import uuid
 import time
 import requests
 import pygetwindow as gw
@@ -32,6 +33,8 @@ def post_with_retry(url, data=None, json_data=None, retries=3, timeout=15):
 API_URL    = "https://h0sh1na-smart-lab-backend.hf.space"
 LAB_CODE   = "LAB01"
 DEBUG_MODE = True   # ← เปลี่ยนเป็น False ก่อน deploy จริง
+DEVICE_NAME = socket.gethostname()
+DEVICE_MAC  = ':'.join(f'{byte:02x}' for byte in uuid.getnode().to_bytes(6, 'big'))
 
 IGNORE_SYSTEM_APPS = [
     "Taskbar", "Program Manager", "Settings",
@@ -371,10 +374,9 @@ class LoginOverlay(QWidget):
                 return
 
             if res.status_code == 200:
-                device_name  = socket.gethostname()
                 session_res  = post_with_retry(
                     f"{API_URL}/agent/start-session",
-                    data={"email": email, "lab_code": LAB_CODE, "device": device_name}
+                    data={"email": email, "lab_code": LAB_CODE, "device": DEVICE_NAME}
                 )
                 if session_res and session_res.status_code == 200:
                     session_id = session_res.json()["session_id"]
@@ -501,7 +503,12 @@ class SmartLabAgent:
             try:
                 r = post_with_retry(
                     f"{API_URL}/agent/log-usage",
-                    data={"session_id": session_id, "usage_data": json.dumps(summary)}
+                    data={
+                        "session_id": session_id,
+                        "usage_data": json.dumps(summary),
+                        "device_name": DEVICE_NAME,
+                        "device_mac": DEVICE_MAC,
+                    }
                 )
                 print(f"Server Response: {r.status_code if r else 'Timeout'}")
             except Exception as e:

@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
 
@@ -40,11 +41,18 @@ def start_session(
 def log_usage(
     session_id: int = Form(...),
     usage_data: str = Form(...),
+    device_name: Optional[str] = Form(None),
+    device_mac: Optional[str] = Form(None),
+    # Backward-compatible names used by the unmerged Agent refactor.
+    device: Optional[str] = Form(None),
+    mac: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     try:
         logs = json.loads(usage_data)
         now = datetime.now()
+        resolved_device_name = (device_name or device or "").strip() or None
+        resolved_device_mac = (device_mac or mac or "").strip() or None
 
         for item in logs:
             db.add(models.ProgramUsageLog(
@@ -53,6 +61,8 @@ def log_usage(
                 duration_seconds=item["duration"],
                 usage_start_time=now,
                 usage_end_time=now,
+                device_name=resolved_device_name,
+                device_mac=resolved_device_mac,
             ))
 
         # stamp exit time on the parent session

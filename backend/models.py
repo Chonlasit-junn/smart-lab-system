@@ -121,6 +121,8 @@ class ProgramUsageLog(Base):
     usage_start_time = Column(DateTime(timezone=True), nullable=False)
     usage_end_time = Column(DateTime(timezone=True), nullable=False)
     duration_seconds = Column(Integer, nullable=False, default=0)
+    device_name = Column(String, nullable=True)
+    device_mac = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
