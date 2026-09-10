@@ -12,6 +12,7 @@ from database import get_db
 router = APIRouter(tags=["Hardware Agent"])
 
 STALE_SESSION_AFTER = timedelta(minutes=2)
+MAX_IDEMPOTENCY_KEY_LENGTH = 128
 VALID_END_REASONS = {
     "logout",
     "violation",
@@ -25,6 +26,23 @@ VALID_END_REASONS = {
 def _clean_device_mac(value: Optional[str]) -> Optional[str]:
     cleaned = (value or "").strip().lower()
     return cleaned or None
+
+
+def _clean_idempotency_key(value: Optional[str], field_name: str) -> Optional[str]:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > MAX_IDEMPOTENCY_KEY_LENGTH:
+        raise HTTPException(status_code=422, detail=f"{field_name} is too long.")
+    return cleaned
+
+
+def _same_session_identity(access_log, user_id, lab_id, device_mac) -> bool:
+    return (
+        access_log.user_id == user_id
+        and access_log.lab_id == lab_id
+        and _clean_device_mac(access_log.device_mac) == device_mac
+    )
 
 
 def _cleanup_stale_sessions(db: Session) -> int:
@@ -86,6 +104,7 @@ def start_session(
     lab_code: str = Form(...),
     device: str = Form(...),
     device_mac: Optional[str] = Form(None),
+    client_session_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     user = db.query(models.User).filter(models.User.email == email).first()
@@ -94,7 +113,10 @@ def start_session(
     if not user or not lab:
         raise HTTPException(status_code=404, detail="Invalid credentials.")
 
-    _cleanup_stale_sessions(db)
+    if _cleanup_stale_sessions(db):
+        # Persist stale-session cleanup before any recovery response. Without
+        # this commit, an early return below could roll the cleanup back.
+        db.commit()
 
     resolved_device_name = (device or "").strip() or None
     resolved_device_mac = _clean_device_mac(device_mac)
@@ -103,12 +125,48 @@ def start_session(
     if not resolved_device_mac:
         raise HTTPException(status_code=422, detail="device_mac is required.")
 
+    resolved_client_session_id = _clean_idempotency_key(
+        client_session_id,
+        "client_session_id",
+    )
+
+    if resolved_client_session_id:
+        existing_request = db.query(models.LabAccessLog).filter(
+            models.LabAccessLog.client_session_id == resolved_client_session_id,
+        ).first()
+        if existing_request:
+            if existing_request.session_status == "active" and existing_request.exit_time is None:
+                if _same_session_identity(
+                    existing_request,
+                    user.id,
+                    lab.id,
+                    resolved_device_mac,
+                ):
+                    return {"session_id": existing_request.id, "recovered": True}
+                raise HTTPException(
+                    status_code=409,
+                    detail="Client session key belongs to another active session.",
+                )
+            raise HTTPException(
+                status_code=409,
+                detail="Session request is already closed.",
+            )
+
     active_user_session = db.query(models.LabAccessLog).filter(
         models.LabAccessLog.user_id == user.id,
         models.LabAccessLog.session_status == "active",
         models.LabAccessLog.exit_time.is_(None),
     ).first()
     if active_user_session:
+        # Recover an orphaned active row when the original response was lost.
+        # A different lab or device remains a real conflict.
+        if _same_session_identity(
+            active_user_session,
+            user.id,
+            lab.id,
+            resolved_device_mac,
+        ):
+            return {"session_id": active_user_session.id, "recovered": True}
         raise HTTPException(
             status_code=409,
             detail="This user already has an active lab session.",
@@ -133,6 +191,7 @@ def start_session(
         status="success",
         device_used=resolved_device_name,
         device_mac=resolved_device_mac,
+        client_session_id=resolved_client_session_id,
         session_status="active",
         last_heartbeat_at=datetime.now(timezone.utc),
     )
@@ -141,6 +200,19 @@ def start_session(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        if resolved_client_session_id:
+            recovered_session = db.query(models.LabAccessLog).filter(
+                models.LabAccessLog.client_session_id == resolved_client_session_id,
+                models.LabAccessLog.session_status == "active",
+                models.LabAccessLog.exit_time.is_(None),
+            ).first()
+            if recovered_session and _same_session_identity(
+                recovered_session,
+                user.id,
+                lab.id,
+                resolved_device_mac,
+            ):
+                return {"session_id": recovered_session.id, "recovered": True}
         raise HTTPException(
             status_code=409,
             detail="This user or device already has an active lab session.",
@@ -166,10 +238,11 @@ def log_usage(
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
 
-    _require_active_session(access_log)
-
     try:
         logs = json.loads(usage_data)
+        if not isinstance(logs, list):
+            raise HTTPException(status_code=422, detail="usage_data must be a JSON list.")
+
         now = datetime.now()
         # Keep accepting legacy payload fields while using the Session as the
         # canonical source for device identity.
@@ -180,12 +253,12 @@ def log_usage(
             access_log.device_mac or device_mac or mac or ""
         ).strip() or None
 
-        if not isinstance(logs, list):
-            raise HTTPException(status_code=422, detail="usage_data must be a JSON list.")
-
+        parsed_logs = []
         for item in logs:
             if not isinstance(item, dict) or not str(item.get("name", "")).strip():
                 raise HTTPException(status_code=422, detail="Each usage item needs a name.")
+
+            event_id = _clean_idempotency_key(item.get("event_id"), "event_id")
 
             usage_start = _parse_usage_time(item.get("started_at"), now)
             usage_end = _parse_usage_time(item.get("ended_at"), usage_start)
@@ -205,18 +278,60 @@ def log_usage(
             if duration == 0 and usage_end > usage_start:
                 duration = int((usage_end - usage_start).total_seconds())
 
+            parsed_logs.append({
+                "event_id": event_id,
+                "program_name": str(item["name"]).strip(),
+                "duration_seconds": duration,
+                "usage_start_time": usage_start,
+                "usage_end_time": usage_end,
+            })
+
+        # New Agents use event_id, so queued events can be delivered after a
+        # timeout or after stale cleanup. Legacy requests without event_id
+        # still require an active session for backward compatibility.
+        session_is_active = (
+            access_log.session_status == "active"
+            and access_log.exit_time is None
+        )
+        if not session_is_active and not all(item["event_id"] for item in parsed_logs):
+            _require_active_session(access_log)
+
+        created_count = 0
+        duplicate_count = 0
+        for item in parsed_logs:
+            event_id = item["event_id"]
+            if event_id:
+                existing = db.query(models.ProgramUsageLog).filter(
+                    models.ProgramUsageLog.event_id == event_id,
+                ).first()
+                if existing:
+                    if existing.lab_access_log_id != session_id:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Usage event belongs to another session.",
+                        )
+                    duplicate_count += 1
+                    continue
+
             db.add(models.ProgramUsageLog(
                 lab_access_log_id=session_id,
-                program_name=str(item["name"]).strip(),
-                duration_seconds=duration,
-                usage_start_time=usage_start,
-                usage_end_time=usage_end,
+                program_name=item["program_name"],
+                duration_seconds=item["duration_seconds"],
+                usage_start_time=item["usage_start_time"],
+                usage_end_time=item["usage_end_time"],
                 device_name=resolved_device_name,
                 device_mac=resolved_device_mac,
+                event_id=event_id,
             ))
+            created_count += 1
 
         db.commit()
-        return {"message": "Data logged successfully.", "count": len(logs)}
+        return {
+            "message": "Data logged successfully.",
+            "count": len(logs),
+            "created_count": created_count,
+            "duplicate_count": duplicate_count,
+        }
     except HTTPException:
         db.rollback()
         raise
@@ -231,6 +346,7 @@ def log_violation(
     program_name: str = Form(...),
     reason: Optional[str] = Form(None),
     action_taken: str = Form("logout"),
+    event_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     access_log = db.query(models.LabAccessLog).filter(
@@ -239,11 +355,32 @@ def log_violation(
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
 
-    _require_active_session(access_log)
-
     cleaned_program_name = program_name.strip()
     if not cleaned_program_name:
         raise HTTPException(status_code=422, detail="program_name is required.")
+
+    resolved_event_id = _clean_idempotency_key(event_id, "event_id")
+    if resolved_event_id:
+        existing = db.query(models.UsageViolation).filter(
+            models.UsageViolation.event_id == resolved_event_id,
+        ).first()
+        if existing:
+            if existing.lab_access_log_id != session_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Violation event belongs to another session.",
+                )
+            return {
+                "message": "Violation already logged.",
+                "violation_id": existing.id,
+            }
+
+    session_is_active = (
+        access_log.session_status == "active"
+        and access_log.exit_time is None
+    )
+    if not session_is_active and not resolved_event_id:
+        _require_active_session(access_log)
 
     violation = models.UsageViolation(
         lab_access_log_id=session_id,
@@ -251,9 +388,23 @@ def log_violation(
         reason=reason.strip() if reason else None,
         action_taken=action_taken.strip() or "logout",
         detected_at=datetime.now(),
+        event_id=resolved_event_id,
     )
-    db.add(violation)
-    db.commit()
+    try:
+        db.add(violation)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if resolved_event_id:
+            existing = db.query(models.UsageViolation).filter(
+                models.UsageViolation.event_id == resolved_event_id,
+            ).first()
+            if existing and existing.lab_access_log_id == session_id:
+                return {
+                    "message": "Violation already logged.",
+                    "violation_id": existing.id,
+                }
+        raise HTTPException(status_code=409, detail="Duplicate violation event.") from exc
     db.refresh(violation)
     return {"message": "Violation logged successfully.", "violation_id": violation.id}
 

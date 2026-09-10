@@ -111,6 +111,7 @@ class LabAccessLog(Base):
     status = Column(String, nullable=False)        # success | denied
     device_used = Column(String, nullable=True)
     device_mac = Column(String, nullable=True)
+    client_session_id = Column(String, nullable=True, index=True)
     session_status = Column(
         Text,
         nullable=False,
@@ -134,6 +135,7 @@ class ProgramUsageLog(Base):
     duration_seconds = Column(Integer, nullable=False, default=0)
     device_name = Column(String, nullable=True)
     device_mac = Column(String, nullable=True)
+    event_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -157,6 +159,7 @@ class UsageViolation(Base):
     detected_at = Column(DateTime, server_default=func.now(), nullable=False)
     reason = Column(Text, nullable=True)
     action_taken = Column(String, nullable=False, default="logout")
+    event_id = Column(String, nullable=True, index=True)
 
 
 class ClassSchedule(Base):

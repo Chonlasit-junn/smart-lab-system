@@ -9,6 +9,7 @@ import time
 import requests
 import pygetwindow as gw
 from datetime import datetime
+from agent_outbox import AgentOutbox
 
 
 # Force Windows to load the Qt DLLs bundled with this executable. This avoids
@@ -75,6 +76,19 @@ def post_with_retry(url, data=None, json_data=None, retries=3, timeout=15):
             if attempt < retries - 1:
                 time.sleep(2)
     return None
+
+
+def response_detail(response):
+    """Return a safe API detail without exposing a raw response body."""
+    if response is None:
+        return ""
+    try:
+        payload = response.json()
+    except (ValueError, AttributeError):
+        return ""
+    if isinstance(payload, dict):
+        return str(payload.get("detail", ""))
+    return ""
 
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -425,17 +439,39 @@ class LoginOverlay(QWidget):
                 return
 
             if res.status_code == 200:
-                session_res  = post_with_retry(
+                # Flush a previous session's durable requests before trying to
+                # claim this machine for another user.
+                self.agent.flush_outbox(limit=5)
+                client_session_id = self.agent.get_or_create_session_attempt(email)
+                session_data = {
+                    "email": email,
+                    "lab_code": LAB_CODE,
+                    "device": DEVICE_NAME,
+                    "device_mac": DEVICE_MAC,
+                    "client_session_id": client_session_id,
+                }
+                session_res = post_with_retry(
                     f"{API_URL}/agent/start-session",
-                    data={
-                        "email": email,
-                        "lab_code": LAB_CODE,
-                        "device": DEVICE_NAME,
-                        "device_mac": DEVICE_MAC,
-                    }
+                    data=session_data,
                 )
+
+                # A very old local attempt can refer to a session that the
+                # Backend already closed during stale cleanup. Start a fresh
+                # idempotency key once in that specific case.
+                if session_res and session_res.status_code == 409:
+                    detail = response_detail(session_res).lower()
+                    if "session request is already closed" in detail:
+                        self.agent.discard_session_attempt(client_session_id)
+                        client_session_id = self.agent.get_or_create_session_attempt(email)
+                        session_data["client_session_id"] = client_session_id
+                        session_res = post_with_retry(
+                            f"{API_URL}/agent/start-session",
+                            data=session_data,
+                        )
+
                 if session_res and session_res.status_code == 200:
                     session_id = session_res.json()["session_id"]
+                    self.agent.confirm_session_attempt(client_session_id)
                     self.is_authenticated = True
                     self.hide()
                     self.info_bar = SessionInfoBar(email, self, session_id)
@@ -462,6 +498,15 @@ class LoginOverlay(QWidget):
 # ── SmartLabAgent ─────────────────────────────────────────────────────────────
 class SmartLabAgent:
     def __init__(self):
+        try:
+            self.outbox = AgentOutbox()
+            print(f"Agent outbox: {self.outbox.path}")
+        except Exception as e:
+            # Keep the UI available, but make the degraded delivery mode
+            # visible in the log instead of silently losing telemetry.
+            self.outbox = None
+            print(f"Agent outbox unavailable: {e}")
+
         self.usage_segments = []
         self.current_activity_name = None
         self.current_activity_started_at = None
@@ -474,6 +519,83 @@ class SmartLabAgent:
         self.monitor_timer.timeout.connect(self.track_usage)
         self.heartbeat_timer = QTimer()
         self.heartbeat_timer.timeout.connect(self.send_heartbeat)
+
+    def get_or_create_session_attempt(self, email):
+        if self.outbox is None:
+            return uuid.uuid4().hex
+        return self.outbox.get_or_create_session_attempt(
+            email=email,
+            lab_code=LAB_CODE,
+            device=DEVICE_NAME,
+            device_mac=DEVICE_MAC,
+        )
+
+    def confirm_session_attempt(self, client_session_id):
+        if self.outbox is not None:
+            self.outbox.clear_session_attempt(client_session_id)
+
+    def discard_session_attempt(self, client_session_id):
+        if self.outbox is not None:
+            self.outbox.clear_session_attempt(client_session_id)
+
+    def _queue_outbox(self, kind, payload, session_id=None, event_id=None):
+        if self.outbox is None:
+            return False
+        try:
+            self.outbox.enqueue(
+                kind=kind,
+                payload=payload,
+                session_id=session_id,
+                event_id=event_id,
+            )
+            return True
+        except Exception as e:
+            print(f"บันทึกข้อมูลลง local outbox ไม่ได้: {e}")
+            return False
+
+    def flush_outbox(self, limit=3):
+        """Deliver queued telemetry and keep failed items for a later retry."""
+        if self.outbox is None:
+            return 0
+
+        endpoints = {
+            "usage": "/agent/log-usage",
+            "violation": "/agent/log-violation",
+            "end_session": "/agent/end-session",
+        }
+        sent = 0
+        for item in self.outbox.pending(limit=limit):
+            endpoint = endpoints.get(item["kind"])
+            if not endpoint:
+                self.outbox.mark_failed(item["event_id"], "Unknown outbox request type.", 300)
+                continue
+
+            try:
+                payload = json.loads(item["payload"])
+                response = post_with_retry(
+                    f"{API_URL}{endpoint}",
+                    data=payload,
+                    retries=1,
+                    timeout=10,
+                )
+                if response is not None and 200 <= response.status_code < 300:
+                    self.outbox.mark_sent(item["event_id"])
+                    sent += 1
+                    continue
+
+                status = response.status_code if response is not None else "offline"
+                detail = response_detail(response)
+                self.outbox.mark_failed(
+                    item["event_id"],
+                    f"{status}: {detail}".strip(),
+                    60 if response is not None else None,
+                )
+            except Exception as e:
+                self.outbox.mark_failed(item["event_id"], str(e))
+
+        if sent:
+            print(f"ส่งข้อมูลจาก local outbox สำเร็จ {sent} รายการ")
+        return sent
 
     def set_ui_references(self, overlay):
         self.overlay = overlay
@@ -533,6 +655,10 @@ class SmartLabAgent:
                 self.heartbeat_timer.stop()
                 if self.info_bar:
                     self.info_bar.trigger_logout()
+            elif response and 200 <= response.status_code < 300:
+                # Heartbeat is also the reconnect signal for the local
+                # outbox. Do not spend time flushing while the server is down.
+                self.flush_outbox(limit=3)
         except Exception as e:
             print(f"ส่ง heartbeat ไม่ได้: {e}")
 
@@ -546,12 +672,25 @@ class SmartLabAgent:
             int((ended_at - self.current_activity_started_at).total_seconds()),
         )
         if duration > 0:
-            self.usage_segments.append({
+            segment = {
+                "event_id": uuid.uuid4().hex,
                 "name": self.current_activity_name,
                 "started_at": self.current_activity_started_at.isoformat(timespec="seconds"),
                 "ended_at": ended_at.isoformat(timespec="seconds"),
                 "duration": duration,
-            })
+            }
+            self.usage_segments.append(segment)
+            self._queue_outbox(
+                kind="usage",
+                payload={
+                    "session_id": self.current_session_id,
+                    "usage_data": json.dumps([segment], ensure_ascii=False),
+                    "device_name": DEVICE_NAME,
+                    "device_mac": DEVICE_MAC,
+                },
+                session_id=self.current_session_id,
+                event_id=segment["event_id"],
+            )
             print(f"บันทึก: [{self.current_activity_name}] {duration} วินาที")
 
         self.current_activity_name = None
@@ -573,18 +712,37 @@ class SmartLabAgent:
         if self.violation_reported or not self.current_session_id:
             return
 
-        self.violation_reported = True
+        event_id = uuid.uuid4().hex
+        payload = {
+            "session_id": self.current_session_id,
+            "program_name": program_name,
+            "reason": reason,
+            "action_taken": "logout",
+            "event_id": event_id,
+        }
+
+        if self._queue_outbox(
+            kind="violation",
+            payload=payload,
+            session_id=self.current_session_id,
+            event_id=event_id,
+        ):
+            # The item is durable even when this immediate delivery fails.
+            self.violation_reported = True
+            self.flush_outbox(limit=1)
+            return
+
+        # Degraded fallback for an Agent that cannot initialize its local
+        # storage. Keep the old direct request path, but only mark the
+        # violation as reported after the server acknowledges it.
         try:
             response = post_with_retry(
                 f"{API_URL}/agent/log-violation",
-                data={
-                    "session_id": self.current_session_id,
-                    "program_name": program_name,
-                    "reason": reason,
-                    "action_taken": "logout",
-                },
+                data=payload,
             )
             print(f"Violation response: {response.status_code if response else 'Timeout'}")
+            if response is not None and 200 <= response.status_code < 300:
+                self.violation_reported = True
         except Exception as e:
             print(f"บันทึก violation ไม่ได้: {e}")
 
@@ -641,39 +799,72 @@ class SmartLabAgent:
         self.monitor_timer.stop()
         self.heartbeat_timer.stop()
         self._close_current_activity(datetime.now())
-        summary = self.usage_segments
+        summary = list(self.usage_segments)
 
-        print(f"\n--- ส่งข้อมูลไป Backend ---")
+        print("\n--- บันทึกข้อมูลลง local outbox ---")
         print(f"Data: {summary}")
 
-        if summary:
-            try:
-                r = post_with_retry(
-                    f"{API_URL}/agent/log-usage",
-                    data={
+        if self.outbox is not None:
+            # Segments are normally queued as soon as an activity ends. This
+            # second enqueue is idempotent and protects segments collected by
+            # an older code path before logout.
+            for segment in summary:
+                self._queue_outbox(
+                    kind="usage",
+                    payload={
                         "session_id": session_id,
-                        "usage_data": json.dumps(summary),
+                        "usage_data": json.dumps([segment], ensure_ascii=False),
                         "device_name": DEVICE_NAME,
                         "device_mac": DEVICE_MAC,
-                    }
+                    },
+                    session_id=session_id,
+                    event_id=segment.get("event_id"),
                 )
-                print(f"Server Response: {r.status_code if r else 'Timeout'}")
-            except Exception as e:
-                print(f"ส่งข้อมูลไม่ได้: {e}")
-        else:
-            print("ไม่มีสถิติการใช้งานที่บันทึกได้")
 
-        try:
-            end_response = post_with_retry(
-                f"{API_URL}/agent/end-session",
-                data={
+            self._queue_outbox(
+                kind="end_session",
+                payload={
                     "session_id": session_id,
                     "end_reason": end_reason,
                 },
+                session_id=session_id,
+                event_id=f"end-session-{session_id}",
             )
-            print(f"End session response: {end_response.status_code if end_response else 'Timeout'}")
-        except Exception as e:
-            print(f"ปิด Session ไม่ได้: {e}")
+            self.flush_outbox(limit=10)
+            pending = self.outbox.has_pending_for_session(session_id)
+            if pending:
+                print("ยังมีข้อมูลรอส่ง จะ retry อัตโนมัติเมื่อ Internet กลับมา")
+        else:
+            # Degraded fallback for a machine where local storage could not be
+            # initialized. This path is intentionally retained for diagnosis.
+            if summary:
+                try:
+                    r = post_with_retry(
+                        f"{API_URL}/agent/log-usage",
+                        data={
+                            "session_id": session_id,
+                            "usage_data": json.dumps(summary, ensure_ascii=False),
+                            "device_name": DEVICE_NAME,
+                            "device_mac": DEVICE_MAC,
+                        },
+                    )
+                    print(f"Server Response: {r.status_code if r else 'Timeout'}")
+                except Exception as e:
+                    print(f"ส่งข้อมูลไม่ได้: {e}")
+            else:
+                print("ไม่มีสถิติการใช้งานที่บันทึกได้")
+
+            try:
+                end_response = post_with_retry(
+                    f"{API_URL}/agent/end-session",
+                    data={
+                        "session_id": session_id,
+                        "end_reason": end_reason,
+                    },
+                )
+                print(f"End session response: {end_response.status_code if end_response else 'Timeout'}")
+            except Exception as e:
+                print(f"ปิด Session ไม่ได้: {e}")
 
         self.current_session_id = None
 

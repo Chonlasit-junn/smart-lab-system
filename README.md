@@ -66,8 +66,9 @@ Invoke-RestMethod http://127.0.0.1:8000/
 1. `backend/migrations/001_usage_violations.sql`
 2. `backend/migrations/002_session_device_identity.sql`
 3. `backend/migrations/003_agent_session_hardening.sql`
+4. `backend/migrations/004_agent_delivery_reliability.sql`
 
-Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat และ index/constraint ที่จำเป็น การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่ม column ให้ตารางเดิมได้ จึงต้องรัน SQL migration แยก
+Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session และป้องกัน log ซ้ำจาก retry ด้วย idempotency key การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่ม column ให้ตารางเดิมได้ จึงต้องรัน SQL migration แยก
 
 ### 3. รัน Frontend
 
@@ -175,6 +176,7 @@ python agent.pyw
 - `SMART_LAB_API_URL`: override URL ของ Backend โดยไม่ต้องแก้ source
 - `SMART_LAB_CODE`: override รหัสห้อง
 - `SMART_LAB_AGENT_DEBUG=1`: ป้องกันการ logout Windows ระหว่างทดสอบ; ตั้งเป็น `0` ตอนใช้งานจริง
+- `SMART_LAB_AGENT_DATA_DIR`: โฟลเดอร์สำหรับ local SQLite outbox; ค่าเริ่มต้นคือ `%LOCALAPPDATA%\SmartLabAgent`
 - `DEVICE_NAME` และ `DEVICE_MAC`: อ่านจากเครื่องและส่งตอนสร้าง session
 
 ถ้าต้อง build executable ให้ติดตั้ง requirements-build.txt แล้วรัน pyinstaller --clean --noconfirm agent.spec
@@ -193,10 +195,11 @@ python agent.pyw
 ข้อมูลที่ Agent ส่งตามปกติ:
 
 - ตอน login: `POST /login`
-- ตอนเริ่ม session: `POST /agent/start-session`
+- ตอนเริ่ม session: `POST /agent/start-session` พร้อม `client_session_id` ที่เก็บไว้จนกว่า Backend จะตอบสำเร็จ
 - ระหว่างใช้งาน: `POST /agent/heartbeat` ทุก 30 วินาที
 - ตอนจบ session: `POST /agent/log-usage` และ `POST /agent/end-session`
-- Agent ส่ง usage เป็น JSON list ที่มี `name`, `started_at`, `ended_at`, `duration`
+- Agent เก็บ usage และ violation ลง local SQLite outbox ก่อนส่ง โดยแต่ละ usage/violation มี `event_id`; ถ้าเน็ตหลุดจะ retry อัตโนมัติเมื่อ Heartbeat กลับมาสำเร็จ
+- Agent ส่ง usage เป็น JSON list ที่มี `event_id`, `name`, `started_at`, `ended_at`, `duration`
 
 ถ้าไม่มี Heartbeat เกิน 2 นาที Backend จะปิด Session เป็น `abandoned` ด้วย `end_reason = stale_cleanup` เมื่อมีการเริ่ม Session ใหม่
 
@@ -279,6 +282,7 @@ limit 50;
 - Session ปกติจบด้วย `session_status = completed` และมี `end_reason`
 - Session ที่ Agent หยุดส่ง Heartbeat ถูกปิดเป็น `abandoned`
 - Agent บันทึกโปรแกรมอย่างน้อย 1 รายการและเชื่อมด้วย `lab_access_log_id`
+- Agent ไม่ทำ usage/violation หายเมื่อ Backend หยุดตอบชั่วคราว และ retry เดิมได้โดยไม่สร้างแถวซ้ำ
 - การเปิดโปรแกรมใน blacklist สร้าง violation และจบ session
 - Gatekeeper โหลด model และแยก real face/spoof ได้ในสภาพแสงที่เหมาะสม
 - การทดสอบ local ใช้ `DEBUG_MODE = True` เท่านั้น และห้ามนำ password, API key หรือ Database URL จริงใส่ใน README/Git
