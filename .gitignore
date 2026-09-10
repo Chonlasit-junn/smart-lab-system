@@ -1,0 +1,30 @@
+# ==============================
+# 🚫 Global Git Ignore File
+# ==============================
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+smart-lab-agent/build_*/
+smart-lab-agent/dist_*/
+build/
+.npm/
+
+# --- Python / Backend / Gatekeeper / Agent ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+*.pkl       # ละเว้นไฟล์ความจำใบหน้า
+*.dat
+*.pth       # ละเว้นไฟล์โมเดล AI (ขนาดใหญ่)
+
+# --- Secrets & Configs ---
+.env
+*.db        # ละเว้นไฟล์ Database
+
+# --- OS Files ---
+.DS_Store
+Thumbs.db
