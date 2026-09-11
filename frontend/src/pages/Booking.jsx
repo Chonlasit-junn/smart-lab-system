@@ -657,11 +657,18 @@ export default function Booking() {
                 <Grid container spacing={3}>
                   {filteredLabs.length > 0 ? (
                     filteredLabs.map((room) => (
-                      <Grid item xs={12} sm={6} lg={4} key={room.id}>
+                      <Grid
+                        item
+                        xs={12}
+                        sm={6}
+                        lg={4}
+                        key={room.id}
+                        sx={{ minWidth: 0 }}
+                      >
                         <Paper
                           elevation={0}
                           onClick={() => handleSelectRoom(room)}
-                          className="room-card"
+                          className="room-card lab-card"
                           sx={{
                             opacity: room.status === "active" ? 1 : 0.6,
                             pointerEvents:
@@ -685,6 +692,7 @@ export default function Booking() {
                                 display: "flex",
                                 justifyContent: "space-between",
                                 alignItems: "center",
+                                minWidth: 0,
                               }}
                             >
                               <Typography
@@ -720,6 +728,8 @@ export default function Booking() {
                             <Typography
                               variant="body2"
                               color="#64748b"
+                              className="lab-card-name"
+                              title={room.name}
                               sx={{ mt: 1 }}
                             >
                               {room.name}
@@ -730,6 +740,7 @@ export default function Booking() {
                                 display: "flex",
                                 justifyContent: "space-between",
                                 color: "#64748b",
+                                minWidth: 0,
                               }}
                             >
                               <Box
@@ -737,6 +748,9 @@ export default function Booking() {
                                   display: "flex",
                                   alignItems: "center",
                                   gap: 1,
+                                  minWidth: 0,
+                                  overflowWrap: "anywhere",
+                                  textAlign: "right",
                                 }}
                               >
                                 <PeopleAlt fontSize="small" />

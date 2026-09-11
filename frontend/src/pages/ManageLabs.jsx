@@ -735,10 +735,18 @@ export default function ManageLabs() {
 
                 <Grid container spacing={4}>
                   {labs.map((lab) => (
-                    <Grid item xs={12} sm={6} lg={4} key={lab.id}>
+                    <Grid
+                      item
+                      xs={12}
+                      sm={6}
+                      lg={4}
+                      key={lab.id}
+                      sx={{ minWidth: 0 }}
+                    >
                       <Paper
                         elevation={0}
                         onClick={() => handleSelectLab(lab)}
+                        className="lab-card"
                         sx={{
                           display: "flex",
                           flexDirection: "column",
@@ -775,18 +783,25 @@ export default function ManageLabs() {
                             }}
                           />
                         </Box>
-                        <Box sx={{ p: 4, flexGrow: 1 }}>
+                        <Box sx={{ p: 4, flexGrow: 1, minWidth: 0 }}>
                           <Box
                             sx={{
                               display: "flex",
                               justifyContent: "space-between",
                               alignItems: "center",
+                              minWidth: 0,
                             }}
                           >
                             <Typography
                               variant="h5"
                               fontWeight="800"
                               color="#1e293b"
+                              sx={{
+                                minWidth: 0,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
                             >
                               {lab.code}
                             </Typography>
@@ -805,6 +820,7 @@ export default function ManageLabs() {
                                     : "#ef4444",
                                 fontWeight: "800",
                                 fontSize: "12px",
+                                flexShrink: 0,
                               }}
                               size="small"
                             />
@@ -813,6 +829,8 @@ export default function ManageLabs() {
                             variant="body2"
                             color="#64748b"
                             fontWeight="500"
+                            className="lab-card-name"
+                            title={lab.name}
                             sx={{ mt: 1 }}
                           >
                             {lab.name}
@@ -825,6 +843,7 @@ export default function ManageLabs() {
                               color: "#94a3b8",
                               fontWeight: "600",
                               fontSize: "14px",
+                              minWidth: 0,
                             }}
                           >
                             <Box
@@ -832,6 +851,7 @@ export default function ManageLabs() {
                                 display: "flex",
                                 alignItems: "center",
                                 gap: 1,
+                                minWidth: 0,
                               }}
                             >
                               <PeopleAlt
@@ -845,6 +865,9 @@ export default function ManageLabs() {
                                 display: "flex",
                                 alignItems: "center",
                                 gap: 1,
+                                minWidth: 0,
+                                overflowWrap: "anywhere",
+                                textAlign: "right",
                               }}
                             >
                               📍 {lab.location || "-"}
