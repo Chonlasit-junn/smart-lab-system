@@ -87,6 +87,7 @@ export default function Booking() {
   const [pointStatus, setPointStatus] = useState(null);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
+  const [pointRequestLoading, setPointRequestLoading] = useState(false);
 
   // Selection States
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -326,6 +327,43 @@ export default function Booking() {
         (typeof detail === "string" ? detail : detail?.message) ||
         "Failed to confirm booking";
       alert(`Booking Failed: ${errMsg}`);
+    }
+  };
+
+  const handlePointRequest = async () => {
+    const token = localStorage.getItem("access_token");
+    if (
+      !token ||
+      Number(pointStatus?.points) !== 0 ||
+      pointStatus?.point_request?.status === "pending"
+    ) {
+      return;
+    }
+
+    try {
+      setPointRequestLoading(true);
+      const response = await axios.post(
+        `${API_URL}/users/me/points/request`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const request = response.data?.point_request;
+      if (request) {
+        setPointStatus((currentStatus) => ({
+          ...currentStatus,
+          point_request: request,
+          can_request_points: false,
+        }));
+      }
+    } catch (requestError) {
+      const detail = requestError.response?.data?.detail;
+      const message =
+        typeof detail === "string"
+          ? detail
+          : "ไม่สามารถส่งคำขอเพิ่มคะแนนได้ กรุณาลองใหม่อีกครั้ง";
+      alert(message);
+    } finally {
+      setPointRequestLoading(false);
     }
   };
 
@@ -1280,8 +1318,30 @@ export default function Booking() {
                         </Alert>
                       ) : null}
                       {currentUser && pointStatus?.booking_allowed === false ? (
-                        <Alert severity="warning">
-                          จองห้องไม่ได้: {pointStatus.booking_block_reason}
+                        <Alert severity={Number(pointStatus.points) === 0 ? "error" : "warning"}>
+                          <Box>
+                            <Typography>
+                              จองห้องไม่ได้: {pointStatus.booking_block_reason}
+                            </Typography>
+                            {Number(pointStatus.points) === 0 && (
+                              pointStatus.point_request?.status === "pending" ? (
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                  ส่งคำขอเพิ่ม {pointStatus.point_request.requested_points || pointStatus.point_request_amount || 10} คะแนนแล้ว กรุณารอ Admin พิจารณา
+                                </Typography>
+                              ) : (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  startIcon={<SupportAgent />}
+                                  onClick={handlePointRequest}
+                                  disabled={pointRequestLoading || pointStatus.can_request_points === false}
+                                  sx={{ mt: 1.25, borderColor: "currentColor", color: "inherit", textTransform: "none", fontWeight: "700" }}
+                                >
+                                  {pointRequestLoading ? "กำลังส่งคำขอ..." : `ติดต่อ Admin เพื่อขอเพิ่ม ${pointStatus.point_request_amount || 10} คะแนน`}
+                                </Button>
+                              )
+                            )}
+                          </Box>
                         </Alert>
                       ) : null}
 

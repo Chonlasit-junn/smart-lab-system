@@ -7,6 +7,7 @@ import Register from './pages/Register';
 import Booking from './pages/Booking';
 import Admin from './pages/Admin';
 import AdminPoints from './pages/AdminPoints';
+import AdminPointPolicy from './pages/AdminPointPolicy';
 import ManageLabs from './pages/ManageLabs';
 import Reserved from './pages/Reserved';
 import History from './pages/History';
@@ -28,6 +29,7 @@ function App() {
             <Route path="/history" element={<History />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/admin/points" element={<AdminPoints />} />
+            <Route path="/admin/points/policy" element={<AdminPointPolicy />} />
             <Route path="/manage-labs" element={<ManageLabs />} />
             <Route path="/verify-users" element={<VerifyUsers />} />
             <Route path="/blacklist" element={<BlacklistManager />} />

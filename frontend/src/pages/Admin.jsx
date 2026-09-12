@@ -65,6 +65,11 @@ const SIDE_MENU_ITEMS = [
     path: "/admin/points",
   },
   {
+    text: "Point Criteria",
+    icon: <Settings sx={{ fontSize: 20 }} />,
+    path: "/admin/points/policy",
+  },
+  {
     text: "Blacklist",
     icon: <Block sx={{ fontSize: 20 }} />,
     path: "/blacklist",

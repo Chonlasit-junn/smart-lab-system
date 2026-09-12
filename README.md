@@ -69,6 +69,8 @@ Invoke-RestMethod http://127.0.0.1:8000/
 4. `backend/migrations/004_agent_delivery_reliability.sql`
 5. `backend/migrations/005_point_system.sql`
 6. `backend/migrations/006_agent_policy_hardening.sql`
+7. `backend/migrations/007_point_requests.sql`
+8. `backend/migrations/008_point_policy.sql`
 
 Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม และ policy/evidence ของ Agent การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่ม column ให้ตารางเดิมได้ จึงต้องรัน SQL migration แยก
 
@@ -228,6 +230,28 @@ process_name, exe_path, window_title, detection_source
 ## หน้า Admin คะแนนผู้ใช้
 
 เปิดหน้า `/admin/points` จากเมนู `User Points` เพื่อดูคะแนนสะสม คะแนนรายวัน สถานะการจอง และสถานะ Ban ของผู้ใช้ทั้งหมด หน้าเว็บเรียก `GET /admin/points` ซึ่งอนุญาตเฉพาะบัญชีที่มี role `admin` และรองรับการค้นหา กรอง และเรียงลำดับข้อมูล
+
+เมื่อคะแนนเหลือไม่เกินค่า `warning_threshold` (ค่าเริ่มต้น 20) ระบบจะแสดงคำเตือนให้ผู้ใช้ทราบ หากคะแนนเป็น 0 ผู้ใช้จะกด `ติดต่อ Admin เพื่อขอเพิ่มคะแนน` ได้หนึ่งคำขอที่ยังรอผลต่อครั้ง โดยจำนวนแต้มอิงจาก `point_request_amount` คำขอจะแสดงในหน้า `/admin/points` เพื่อให้ Admin อนุมัติหรือไม่อนุมัติ หากอนุมัติ ระบบจะบันทึกประวัติใน `point_logs` ด้วยเหตุผล `admin_grant` บัญชีที่คะแนนเป็น 0 จะไม่รับ Daily +1 อัตโนมัติ เพื่อไม่ให้ข้ามขั้นตอนคำขอกู้คะแนน
+
+ในหน้า `/admin/points` มีปุ่ม `ลด 10 แต้ม (ทดสอบ)` และ `Reset เป็น 100 (ทดสอบ)` ต่อผู้ใช้สำหรับจำลอง flow คะแนนต่ำ/เป็นศูนย์ ปุ่มใช้ได้เฉพาะ Admin การ Reset จะทำได้ต่อเมื่อผู้ใช้มี point event จากการทดสอบล่าสุด, เพิ่มคะแนนกลับเป็น 100 เป็น log ใหม่ด้วยเหตุผล `admin_test_reset` และล้างเฉพาะ Ban ที่ถูกสร้างจากการหักคะแนนทดสอบ โดยไม่ลบประวัติเดิม หากมีคำขอเพิ่มคะแนนที่ยัง pending ต้องจัดการคำขอนั้นก่อน
+
+ฟังก์ชัน Test point และ endpoint ที่เกี่ยวข้องควรนำออกหรือปิดก่อนใช้งาน Production เพราะเปลี่ยนข้อมูลคะแนนจริงในฐานข้อมูล
+
+เปิดหน้า `/admin/points/policy` จากเมนู `Point Criteria` เพื่อปรับคะแนน Daily bonus, จบ Session, No-show, โปรแกรมต้องห้าม, ยกเลิกช้า, จำนวนแต้มที่คืนเมื่ออนุมัติคำขอ, เกณฑ์แจ้งเตือน, เกณฑ์จอง และจำนวนวัน Ban แต่ละระดับ ค่าใหม่ถูกใช้กับเหตุการณ์และการตรวจสอบสิทธิ์ครั้งถัดไป โดยไม่แก้ไขประวัติคะแนนเดิม ระบบจะบันทึกผู้แก้ไขและเวลาไว้ใน `point_policies`
+
+### Automated tests
+
+รันจากโฟลเดอร์โปรเจค:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
+
+cd ..\frontend
+npm test
+```
+
+ชุดทดสอบ Backend ใช้ SQLite ชั่วคราวและไม่เชื่อมต่อหรือแก้ไข Supabase ส่วน Frontend ใช้ Node built-in test runner จึงไม่เพิ่ม dependency ใหม่
 
 ## Query ตรวจผลใน Supabase
 

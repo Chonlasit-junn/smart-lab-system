@@ -40,13 +40,21 @@ import {
   Notifications,
   Person,
   Refresh,
+  RemoveCircleOutline,
+  Restore,
   Search,
   Settings,
+  Visibility,
   WarningAmber,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import AdminUserDetailsDialog from "../components/AdminUserDetailsDialog";
+import {
+  buildTestPointEndpoint,
+  canRunTestPointAction,
+} from "./adminPointsTestUtils";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const DEFAULT_BOOKING_MIN_POINTS = 80;
@@ -73,6 +81,11 @@ const SIDE_MENU_ITEMS = [
     path: "/admin/points",
   },
   {
+    text: "Point Criteria",
+    icon: <Settings sx={{ fontSize: 20 }} />,
+    path: "/admin/points/policy",
+  },
+  {
     text: "Blacklist",
     icon: <Block sx={{ fontSize: 20 }} />,
     path: "/blacklist",
@@ -90,6 +103,8 @@ const EMPTY_SUMMARY = {
   below_booking_threshold: 0,
   banned_users: 0,
   booking_allowed: 0,
+  zero_point_users: 0,
+  pending_point_requests: 0,
 };
 
 const stringToColor = (value) => {
@@ -110,9 +125,9 @@ const getInitials = (user) => {
   return initials.toUpperCase() || "U";
 };
 
-const getScoreColor = (score) => {
+const getScoreColor = (score, bookingMinPoints = DEFAULT_BOOKING_MIN_POINTS) => {
   if (score < 40) return "#ef4444";
-  if (score < DEFAULT_BOOKING_MIN_POINTS) return "#f59e0b";
+  if (score < bookingMinPoints) return "#f59e0b";
   return "#10b981";
 };
 
@@ -152,6 +167,19 @@ const getRoleColor = (role) => ({
   guest: { bgcolor: "#f1f5f9", color: "#64748b" },
 }[role] || { bgcolor: "#f1f5f9", color: "#64748b" });
 
+const buildSummary = (userRows, bookingMinPoints, pendingPointRequests = 0) => {
+  const scores = userRows.map((user) => Math.max(0, Math.min(100, Number(user.points) || 0)));
+  return {
+    total_users: userRows.length,
+    average_points: scores.length ? Math.round((scores.reduce((total, score) => total + score, 0) / scores.length) * 10) / 10 : 0,
+    below_booking_threshold: userRows.filter((user) => Number(user.points) < bookingMinPoints).length,
+    banned_users: userRows.filter((user) => user.is_banned).length,
+    booking_allowed: userRows.filter((user) => user.booking_allowed).length,
+    zero_point_users: userRows.filter((user) => Number(user.points) === 0).length,
+    pending_point_requests: pendingPointRequests,
+  };
+};
+
 export default function AdminPoints() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -167,6 +195,16 @@ export default function AdminPoints() {
   const [sortBy, setSortBy] = useState("pointsAsc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userDetail, setUserDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [detailTab, setDetailTab] = useState(0);
+  const [pointRequests, setPointRequests] = useState([]);
+  const [requestActionId, setRequestActionId] = useState(null);
+  const [testDeductionId, setTestDeductionId] = useState(null);
+  const [testResetId, setTestResetId] = useState(null);
 
   const fetchPoints = useCallback(async () => {
     const token = localStorage.getItem("access_token");
@@ -183,10 +221,14 @@ export default function AdminPoints() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const payload = response.data || {};
-      setRows(Array.isArray(payload.data) ? payload.data : []);
-      setSummary({ ...EMPTY_SUMMARY, ...(payload.summary || {}) });
-      setBookingMinPoints(Number(payload.booking_min_points) || DEFAULT_BOOKING_MIN_POINTS);
+      const nextBookingMinPoints = Number(payload.booking_min_points) || DEFAULT_BOOKING_MIN_POINTS;
+      const userRows = (Array.isArray(payload.data) ? payload.data : []).filter((user) => user.role !== "admin");
+      const pendingPointRequests = Array.isArray(payload.point_requests) ? payload.point_requests : [];
+      setRows(userRows);
+      setSummary(buildSummary(userRows, nextBookingMinPoints, pendingPointRequests.length));
+      setBookingMinPoints(nextBookingMinPoints);
       setScoreDate(payload.score_date || null);
+      setPointRequests(pendingPointRequests);
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
       setError(typeof detail === "string" ? detail : "ไม่สามารถโหลดคะแนนของผู้ใช้ได้");
@@ -206,9 +248,116 @@ export default function AdminPoints() {
     navigate("/");
   };
 
+  const handleOpenUserDetail = async (user) => {
+    const token = localStorage.getItem("access_token");
+    setSelectedUser(user);
+    setUserDetail(null);
+    setDetailTab(0);
+    setDetailError("");
+    setDetailOpen(true);
+
+    if (!token) {
+      setDetailError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อนดูข้อมูลผู้ใช้");
+      return;
+    }
+
+    try {
+      setDetailLoading(true);
+      const response = await axios.get(`${API_URL}/admin/users/${user.user_id}/details`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUserDetail(response.data || null);
+    } catch (requestError) {
+      const detail = requestError.response?.data?.detail;
+      setDetailError(typeof detail === "string" ? detail : "ไม่สามารถโหลดข้อมูลและประวัติของผู้ใช้ได้");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleCloseUserDetail = () => {
+    setDetailOpen(false);
+    setDetailError("");
+  };
+
+  const handlePointRequestAction = async (requestId, action) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อนจัดการคำขอเพิ่มคะแนน");
+      return;
+    }
+
+    try {
+      setRequestActionId(requestId);
+      setError("");
+      await axios.post(`${API_URL}/admin/points/requests/${requestId}/${action}`, null, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await fetchPoints();
+    } catch (requestError) {
+      const detail = requestError.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : "ไม่สามารถจัดการคำขอเพิ่มคะแนนได้");
+    } finally {
+      setRequestActionId(null);
+    }
+  };
+
+  const handleTestDeduction = async (user) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อนทดสอบการลดคะแนน");
+      return;
+    }
+    if (!canRunTestPointAction(user.points, "deduct", testDeductionId === user.user_id || testResetId === user.user_id)) return;
+    if (!window.confirm(`ต้องการลดคะแนนของ ${user.name || `User #${user.user_id}`} จำนวน 10 คะแนนเพื่อทดสอบหรือไม่?`)) {
+      return;
+    }
+
+    try {
+      setTestDeductionId(user.user_id);
+      setError("");
+      await axios.post(buildTestPointEndpoint(API_URL, user.user_id, "deduct"), null, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await fetchPoints();
+    } catch (requestError) {
+      const detail = requestError.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : "ไม่สามารถทดสอบการลดคะแนนได้");
+    } finally {
+      setTestDeductionId(null);
+    }
+  };
+
+  const handleTestReset = async (user) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อน Reset คะแนนทดสอบ");
+      return;
+    }
+    if (!canRunTestPointAction(user.points, "reset", testDeductionId === user.user_id || testResetId === user.user_id)) return;
+    if (!window.confirm(`ต้องการคืนคะแนนของ ${user.name || `User #${user.user_id}`} กลับเป็น 100 เพื่อเริ่มการทดสอบใหม่หรือไม่?`)) {
+      return;
+    }
+
+    try {
+      setTestResetId(user.user_id);
+      setError("");
+      await axios.post(buildTestPointEndpoint(API_URL, user.user_id, "reset"), null, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await fetchPoints();
+    } catch (requestError) {
+      const detail = requestError.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : "ไม่สามารถ Reset คะแนนทดสอบได้");
+    } finally {
+      setTestResetId(null);
+    }
+  };
+
   const filteredRows = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const visibleRows = rows.filter((user) => {
+      if (user.role === "admin") return false;
       const searchableText = `${user.name || ""} ${user.email || ""} ${user.user_id || ""}`.toLowerCase();
       if (query && !searchableText.includes(query)) return false;
       if (filter === "low" && user.points >= bookingMinPoints) return false;
@@ -252,6 +401,13 @@ export default function AdminPoints() {
       helper: "มี Ban ที่ยังใช้งาน",
       color: "#ef4444",
       icon: <Lock />,
+    },
+    {
+      label: "คำขอเพิ่มแต้ม",
+      value: summary.pending_point_requests,
+      helper: "รอ Admin พิจารณา",
+      color: "#8b5cf6",
+      icon: <Notifications />,
     },
   ];
 
@@ -444,6 +600,66 @@ export default function AdminPoints() {
             </Alert>
           )}
 
+          {pointRequests.length > 0 && (
+            <Alert severity="warning" icon={<Notifications />} sx={{ mb: 3, borderRadius: 3, alignItems: "flex-start" }}>
+              <Box sx={{ width: "100%" }}>
+                <Typography fontWeight="800" color="#92400e" sx={{ mb: 1 }}>
+                  มีคำขอเพิ่มคะแนนรอพิจารณา {pointRequests.length} รายการ
+                </Typography>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+                  {pointRequests.map((request) => (
+                    <Box
+                      key={request.id}
+                      sx={{
+                        display: "flex",
+                        alignItems: { xs: "flex-start", sm: "center" },
+                        justifyContent: "space-between",
+                        gap: 2,
+                        flexWrap: "wrap",
+                        p: 1.5,
+                        bgcolor: "rgba(255,255,255,0.72)",
+                        borderRadius: 2.5,
+                      }}
+                    >
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" fontWeight="800" color="#334155">
+                          {request.name || `User #${request.user_id}`} · ขอเพิ่ม {request.requested_points || 10} คะแนน
+                        </Typography>
+                        <Typography variant="caption" color="#64748b" sx={{ overflowWrap: "anywhere" }}>
+                          {request.email || `User ID #${request.user_id}`} · ส่งคำขอเมื่อ {formatDateTime(request.created_at)}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="success"
+                          startIcon={<CheckCircle />}
+                          disabled={requestActionId === request.id}
+                          onClick={() => handlePointRequestAction(request.id, "approve")}
+                          sx={{ borderRadius: 2, textTransform: "none", fontWeight: "800", boxShadow: "none" }}
+                        >
+                          อนุมัติ +{request.requested_points || 10}
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          startIcon={<Close />}
+                          disabled={requestActionId === request.id}
+                          onClick={() => handlePointRequestAction(request.id, "reject")}
+                          sx={{ borderRadius: 2, textTransform: "none", fontWeight: "800" }}
+                        >
+                          ไม่อนุมัติ
+                        </Button>
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            </Alert>
+          )}
+
           <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 2.5, mb: 4 }}>
             {statCards.map((card) => (
               <Paper key={card.label} elevation={0} sx={{ p: 3, borderRadius: 4, border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 2 }}>
@@ -512,12 +728,13 @@ export default function AdminPoints() {
                       <TableCell sx={{ color: "#64748b", fontWeight: "800", py: 2, minWidth: 140 }}>คะแนนวันนี้</TableCell>
                       <TableCell sx={{ color: "#64748b", fontWeight: "800", py: 2 }}>สิทธิ์การจอง</TableCell>
                       <TableCell sx={{ color: "#64748b", fontWeight: "800", py: 2 }}>อัปเดตล่าสุด</TableCell>
+                      <TableCell sx={{ color: "#64748b", fontWeight: "800", py: 2, whiteSpace: "nowrap" }}>การจัดการ</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {filteredRows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} align="center" sx={{ py: 8, color: "#94a3b8" }}>
+                        <TableCell colSpan={7} align="center" sx={{ py: 8, color: "#94a3b8" }}>
                           ไม่พบข้อมูลผู้ใช้ตามเงื่อนไขที่เลือก
                         </TableCell>
                       </TableRow>
@@ -525,10 +742,15 @@ export default function AdminPoints() {
                       filteredRows.map((user) => {
                         const points = Math.max(0, Math.min(100, Number(user.points) || 0));
                         const dailyScore = Math.max(0, Math.min(100, Number(user.daily_score) || 0));
-                        const scoreColor = getScoreColor(points);
+                        const scoreColor = getScoreColor(points, bookingMinPoints);
                         const roleColor = getRoleColor(user.role);
+                        const testActionBusy = testDeductionId === user.user_id || testResetId === user.user_id;
                         return (
-                          <TableRow key={user.user_id} sx={{ "& td": { borderBottom: "1px solid #f1f5f9" }, "&:hover": { bgcolor: "#fafafa" } }}>
+                          <TableRow
+                            key={user.user_id}
+                            hover
+                            sx={{ "& td": { borderBottom: "1px solid #f1f5f9" }, "&:hover": { bgcolor: "#fafafa" } }}
+                          >
                             <TableCell>
                               <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 230 }}>
                                 <Avatar sx={{ bgcolor: stringToColor(user.name), width: 40, height: 40, fontSize: "14px", fontWeight: "800" }}>
@@ -599,6 +821,50 @@ export default function AdminPoints() {
                             <TableCell sx={{ color: "#64748b", fontSize: "13px", whiteSpace: "nowrap" }}>
                               {formatDateTime(user.updated_at)}
                             </TableCell>
+                            <TableCell>
+                              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 0.75 }}>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  startIcon={<RemoveCircleOutline />}
+                                  disabled={!canRunTestPointAction(points, "deduct", testActionBusy)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleTestDeduction(user);
+                                  }}
+                                  sx={{ borderRadius: 2.5, textTransform: "none", fontWeight: "700", whiteSpace: "nowrap" }}
+                                >
+                                  {testDeductionId === user.user_id ? "กำลังลด..." : "ลด 10 แต้ม (ทดสอบ)"}
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="success"
+                                  startIcon={<Restore />}
+                                  disabled={!canRunTestPointAction(points, "reset", testActionBusy)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleTestReset(user);
+                                  }}
+                                  sx={{ borderRadius: 2.5, textTransform: "none", fontWeight: "700", whiteSpace: "nowrap" }}
+                                >
+                                  {testResetId === user.user_id ? "กำลัง Reset..." : "Reset เป็น 100 (ทดสอบ)"}
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<Visibility />}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleOpenUserDetail(user);
+                                  }}
+                                  sx={{ borderRadius: 2.5, textTransform: "none", fontWeight: "700", whiteSpace: "nowrap" }}
+                                >
+                                  ดูข้อมูล
+                                </Button>
+                              </Box>
+                            </TableCell>
                           </TableRow>
                         );
                       })
@@ -620,6 +886,16 @@ export default function AdminPoints() {
           </Paper>
         </Box>
       </Box>
+      <AdminUserDetailsDialog
+        open={detailOpen}
+        onClose={handleCloseUserDetail}
+        selectedUser={selectedUser}
+        detail={userDetail}
+        loading={detailLoading}
+        error={detailError}
+        tab={detailTab}
+        onTabChange={(_, nextTab) => setDetailTab(nextTab)}
+      />
     </Box>
   );
 }

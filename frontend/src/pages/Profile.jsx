@@ -53,10 +53,12 @@ const FACULTY_NAMES = {
 };
 
 const POINT_REASON_LABELS = {
+  daily_bonus: "Daily bonus",
   no_show: "ไม่มาตามการจอง",
   forbidden_app: "ใช้โปรแกรมต้องห้าม",
   late_cancel: "ยกเลิกการจองกระชั้นชิด",
   complete_session: "จบการใช้งานปกติ",
+  admin_grant: "Admin อนุมัติเพิ่มคะแนน",
 };
 
 export default function Profile() {
@@ -69,6 +71,7 @@ export default function Profile() {
   const [error, setError] = useState("");
   const [pointLogs, setPointLogs] = useState([]);
   const [pointsError, setPointsError] = useState("");
+  const [pointRequestLoading, setPointRequestLoading] = useState(false);
 
   useEffect(() => {
     if (!currentUser) {
@@ -130,6 +133,34 @@ export default function Profile() {
     navigate("/");
   };
 
+  const handlePointRequest = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token || numericPoints !== 0 || profile?.point_request?.status === "pending") return;
+
+    try {
+      setPointRequestLoading(true);
+      const response = await axios.post(
+        `${API_URL}/users/me/points/request`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const request = response.data?.point_request;
+      if (request) {
+        setProfile((currentProfile) => ({
+          ...currentProfile,
+          point_request: request,
+          can_request_points: false,
+        }));
+      }
+    } catch (requestError) {
+      const detail = requestError.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : "ไม่สามารถส่งคำขอเพิ่มคะแนนได้ กรุณาลองใหม่อีกครั้ง";
+      window.alert(message);
+    } finally {
+      setPointRequestLoading(false);
+    }
+  };
+
   const formatDate = (d) =>
     d
       ? new Date(d).toLocaleDateString("en-GB", {
@@ -155,6 +186,9 @@ export default function Profile() {
 
   const numericPoints =
     profile?.points == null ? null : Number(profile.points);
+  const pointWarningThreshold = Number(profile?.points_warning_threshold) || 20;
+  const pointRequestAmount = Number(profile?.point_request_amount) || 10;
+  const pointRequest = profile?.point_request;
   const pointColor =
     numericPoints == null || !Number.isFinite(numericPoints)
       ? "#94a3b8"
@@ -477,10 +511,39 @@ export default function Profile() {
                   </Alert>
                 ) : numericPoints !== null &&
                   (profile.is_banned || numericPoints < 80) ? (
-                  <Alert severity={profile.is_banned ? "error" : "warning"} sx={{ mb: 3 }}>
-                    {profile.is_banned
-                      ? `บัญชีถูกระงับการจองถึง ${new Date(profile.ban_until).toLocaleString("th-TH")}`
-                      : `คะแนนเหลือ ${numericPoints} คะแนน ต่ำกว่าเกณฑ์ 80 คะแนน จึงไม่สามารถจองห้องได้`}
+                  <Alert
+                    severity={numericPoints === 0 || profile.is_banned ? "error" : "warning"}
+                    sx={{ mb: 3 }}
+                  >
+                    {numericPoints === 0 ? (
+                      <Box>
+                        <Typography fontWeight="700">
+                          คะแนนของคุณเหลือ 0 คะแนน จึงไม่สามารถจองห้องได้
+                        </Typography>
+                        {pointRequest?.status === "pending" ? (
+                          <Typography variant="body2" sx={{ mt: 0.5 }}>
+                            ส่งคำขอเพิ่ม {pointRequest.requested_points || pointRequestAmount} คะแนนแล้ว กรุณารอ Admin พิจารณา
+                          </Typography>
+                        ) : (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<SupportAgent />}
+                            onClick={handlePointRequest}
+                            disabled={pointRequestLoading || profile.can_request_points === false}
+                            sx={{ mt: 1.25, borderColor: "currentColor", color: "inherit", textTransform: "none", fontWeight: "700" }}
+                          >
+                            {pointRequestLoading ? "กำลังส่งคำขอ..." : `ติดต่อ Admin เพื่อขอเพิ่ม ${pointRequestAmount} คะแนน`}
+                          </Button>
+                        )}
+                      </Box>
+                    ) : profile.is_banned ? (
+                      `บัญชีถูกระงับการจองถึง ${new Date(profile.ban_until).toLocaleString("th-TH")}`
+                    ) : numericPoints <= pointWarningThreshold ? (
+                      `คำเตือน: คะแนนเหลือ ${numericPoints} คะแนน ใกล้ถึง 0 และขณะนี้ไม่สามารถจองห้องได้`
+                    ) : (
+                      `คะแนนเหลือ ${numericPoints} คะแนน ต่ำกว่าเกณฑ์ 80 คะแนน จึงไม่สามารถจองห้องได้`
+                    )}
                   </Alert>
                 ) : null}
                 <Grid container spacing={3}>
@@ -810,6 +873,16 @@ export default function Profile() {
                           sx={{
                             bgcolor: "#f1f5f9",
                             color: "#64748b",
+                            fontWeight: "bold",
+                          }}
+                        />
+                      ) : pointRequest?.status === "pending" ? (
+                        <Chip
+                          label="ส่งคำขอเพิ่มคะแนนแล้ว — รอ Admin พิจารณา"
+                          size="small"
+                          sx={{
+                            bgcolor: "#fff7ed",
+                            color: "#c2410c",
                             fontWeight: "bold",
                           }}
                         />

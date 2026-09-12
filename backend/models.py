@@ -260,13 +260,44 @@ class UserPoints(Base):
     user = relationship("User", backref="points_record")
 
 
+class PointPolicy(Base):
+    """The single Admin-managed configuration for the point system."""
+
+    __tablename__ = "point_policies"
+
+    id = Column(Integer, primary_key=True, default=1)
+    daily_bonus = Column(Integer, nullable=False, default=1)
+    complete_session = Column(Integer, nullable=False, default=2)
+    no_show = Column(Integer, nullable=False, default=-5)
+    forbidden_app = Column(Integer, nullable=False, default=-10)
+    late_cancel = Column(Integer, nullable=False, default=-3)
+    point_request_amount = Column(Integer, nullable=False, default=10)
+    booking_min_points = Column(Integer, nullable=False, default=80)
+    warning_threshold = Column(Integer, nullable=False, default=20)
+    ban_level_1_below = Column(Integer, nullable=False, default=20)
+    ban_level_1_days = Column(Integer, nullable=False, default=30)
+    ban_level_2_below = Column(Integer, nullable=False, default=40)
+    ban_level_2_days = Column(Integer, nullable=False, default=7)
+    ban_level_3_below = Column(Integer, nullable=False, default=60)
+    ban_level_3_days = Column(Integer, nullable=False, default=5)
+    ban_level_4_below = Column(Integer, nullable=False, default=80)
+    ban_level_4_days = Column(Integer, nullable=False, default=2)
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class PointLog(Base):
     __tablename__ = "point_logs"
 
     id         = Column(Integer, primary_key=True, index=True)
     user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
     change     = Column(Integer, nullable=False)   # -5, +1 etc.
-    reason     = Column(String, nullable=False)    # "no_show" | "forbidden_app" | "late_cancel" | "complete_session"
+    reason     = Column(String, nullable=False)    # point event reason
     note       = Column(String, nullable=True)     # รายละเอียดเพิ่ม เช่น ชื่อโปรแกรมที่โดน detect
     event_id   = Column(String, nullable=True, index=True)
     source_type = Column(String, nullable=True)
@@ -277,6 +308,31 @@ class PointLog(Base):
     daily_score_after = Column(Integer, nullable=True)
     score_date = Column(Date, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PointRequest(Base):
+    __tablename__ = "point_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    requested_points = Column(Integer, nullable=False, default=10, server_default="10")
+    status = Column(
+        String,
+        nullable=False,
+        default="pending",
+        server_default="pending",
+        index=True,
+    )  # pending | approved | rejected
+    user_message = Column(Text, nullable=True)
+    admin_note = Column(Text, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class BanRecord(Base):

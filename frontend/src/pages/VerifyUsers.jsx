@@ -34,6 +34,7 @@ import {
   PersonOutline,
   Phone,
   Search,
+  Settings,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -61,6 +62,11 @@ const SIDE_MENU_ITEMS = [
     text: "User Points",
     icon: <Assessment sx={{ fontSize: 20 }} />,
     path: "/admin/points",
+  },
+  {
+    text: "Point Criteria",
+    icon: <Settings sx={{ fontSize: 20 }} />,
+    path: "/admin/points/policy",
   },
   {
     text: "Blacklist",
