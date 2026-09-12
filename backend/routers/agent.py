@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 import models
 from database import get_db
+from policy import build_policy, find_matching_rule, get_policy_rules
+from routers.points import apply_point_event, mark_due_no_shows
 
 router = APIRouter(tags=["Hardware Agent"])
 
@@ -21,6 +23,13 @@ VALID_END_REASONS = {
     "error",
     "admin",
 }
+
+
+@router.get("/agent/policy")
+def get_agent_policy(db: Session = Depends(get_db)):
+    """Return the active, versioned policy used by Windows Agents."""
+
+    return build_policy(get_policy_rules(db))
 
 
 def _clean_device_mac(value: Optional[str]) -> Optional[str]:
@@ -118,6 +127,8 @@ def start_session(
         # this commit, an early return below could roll the cleanup back.
         db.commit()
 
+    mark_due_no_shows(db)
+
     resolved_device_name = (device or "").strip() or None
     resolved_device_mac = _clean_device_mac(device_mac)
     if not resolved_device_name:
@@ -183,9 +194,23 @@ def start_session(
             detail="This device already has an active lab session.",
         )
 
+    now = datetime.now()
+    matching_booking = db.query(models.Booking).filter(
+        models.Booking.user_id == user.id,
+        models.Booking.lab_id == lab.id,
+        models.Booking.booking_date == now.date(),
+        models.Booking.start_time <= now.time(),
+        models.Booking.end_time >= now.time(),
+        models.Booking.status == "reserved",
+    ).order_by(models.Booking.start_time.asc()).first()
+    if matching_booking:
+        matching_booking.status = "attended"
+        matching_booking.checked_in_at = now
+
     new_log = models.LabAccessLog(
         lab_id=lab.id,
         user_id=user.id,
+        booking_id=matching_booking.id if matching_booking else None,
         entry_time=datetime.now(),
         access_type="manual",
         status="success",
@@ -347,6 +372,10 @@ def log_violation(
     reason: Optional[str] = Form(None),
     action_taken: str = Form("logout"),
     event_id: Optional[str] = Form(None),
+    process_name: Optional[str] = Form(None),
+    exe_path: Optional[str] = Form(None),
+    window_title: Optional[str] = Form(None),
+    detection_source: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     access_log = db.query(models.LabAccessLog).filter(
@@ -375,6 +404,21 @@ def log_violation(
                 "violation_id": existing.id,
             }
 
+    active_policy = build_policy(get_policy_rules(db))
+    matched_rule = find_matching_rule(
+        active_policy["data"],
+        # These fallbacks keep the endpoint compatible with older Agents that
+        # only sent program_name and did not include evidence fields.
+        process_name=(process_name or cleaned_program_name).strip(),
+        exe_path=exe_path,
+        window_title=(window_title or cleaned_program_name).strip(),
+    )
+    if matched_rule is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Violation does not match an active blacklist rule.",
+        )
+
     session_is_active = (
         access_log.session_status == "active"
         and access_log.exit_time is None
@@ -389,9 +433,29 @@ def log_violation(
         action_taken=action_taken.strip() or "logout",
         detected_at=datetime.now(),
         event_id=resolved_event_id,
+        process_name=process_name.strip() if process_name else None,
+        exe_path=exe_path.strip() if exe_path else None,
+        window_title=window_title.strip() if window_title else None,
+        detection_source=detection_source.strip() if detection_source else None,
+        policy_version=active_policy["version"],
+        matched_rule_id=matched_rule.get("id"),
     )
+    point_result = None
     try:
         db.add(violation)
+        db.flush()
+        point_event_id = f"violation:{resolved_event_id or violation.id}"
+        point_result = apply_point_event(
+            access_log.user_id,
+            "forbidden_app",
+            db,
+            note=f"ตรวจพบโปรแกรมต้องห้าม: {cleaned_program_name}",
+            event_id=point_event_id,
+            source_type="usage_violation",
+            source_id=violation.id,
+            effective_at=violation.detected_at,
+            commit=False,
+        )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -405,8 +469,15 @@ def log_violation(
                     "violation_id": existing.id,
                 }
         raise HTTPException(status_code=409, detail="Duplicate violation event.") from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to record violation and points.") from exc
     db.refresh(violation)
-    return {"message": "Violation logged successfully.", "violation_id": violation.id}
+    return {
+        "message": "Violation logged successfully.",
+        "violation_id": violation.id,
+        "points": point_result,
+    }
 
 
 @router.post("/agent/heartbeat")
@@ -446,7 +517,7 @@ def end_session(
 ):
     access_log = db.query(models.LabAccessLog).filter(
         models.LabAccessLog.id == session_id
-    ).first()
+    ).with_for_update().first()
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
 
@@ -454,7 +525,9 @@ def end_session(
     if cleaned_reason not in VALID_END_REASONS:
         raise HTTPException(status_code=422, detail="Invalid session end reason.")
 
+    was_active = access_log.session_status == "active" and access_log.exit_time is None
     changed = False
+    point_result = None
     if access_log.exit_time is None:
         access_log.exit_time = datetime.now()
         changed = True
@@ -466,6 +539,28 @@ def end_session(
         access_log.end_reason = cleaned_reason
         changed = True
 
+    if was_active and changed:
+        booking = access_log.booking
+        if booking:
+            booking.checked_out_at = access_log.exit_time
+            if booking.status in {"reserved", "attended"}:
+                booking.status = "completed"
+                if not booking.checked_in_at:
+                    booking.checked_in_at = access_log.entry_time
+
+        if cleaned_reason in {"logout", "shutdown"}:
+            point_result = apply_point_event(
+                access_log.user_id,
+                "complete_session",
+                db,
+                note=f"จบการใช้งานห้องจาก session #{access_log.id}",
+                event_id=f"session:{access_log.id}:complete",
+                source_type="lab_access_log",
+                source_id=access_log.id,
+                effective_at=access_log.exit_time,
+                commit=False,
+            )
+
     if changed:
         db.commit()
 
@@ -474,4 +569,5 @@ def end_session(
         "session_id": session_id,
         "session_status": access_log.session_status,
         "end_reason": access_log.end_reason,
+        "points": point_result,
     }

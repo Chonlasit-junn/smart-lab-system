@@ -10,6 +10,12 @@ import requests
 import pygetwindow as gw
 from datetime import datetime
 from agent_outbox import AgentOutbox
+from agent_policy import (
+    DEFAULT_FALLBACK_RULES,
+    find_process_match,
+    find_window_match,
+    normalize_rules,
+)
 
 
 # Force Windows to load the Qt DLLs bundled with this executable. This avoids
@@ -97,6 +103,14 @@ LAB_CODE   = os.getenv("SMART_LAB_CODE", "LAB01")
 DEBUG_MODE = os.getenv("SMART_LAB_AGENT_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
 DEVICE_NAME = socket.gethostname()
 DEVICE_MAC  = ':'.join(f'{byte:02x}' for byte in uuid.getnode().to_bytes(6, 'big'))
+
+try:
+    POLICY_REFRESH_SECONDS = max(
+        30,
+        int(os.getenv("SMART_LAB_POLICY_REFRESH_SECONDS", "60")),
+    )
+except ValueError:
+    POLICY_REFRESH_SECONDS = 60
 
 IGNORE_SYSTEM_APPS = [
     "Taskbar", "Program Manager", "Settings",
@@ -513,12 +527,17 @@ class SmartLabAgent:
         self.current_session_id = None
         self.info_bar       = None
         self.overlay        = None
-        self.forbidden_words = []   # โหลดจาก /admin/blacklist ตอน start_monitoring
+        self.policy_rules = []
+        self.policy_version = None
+        self.policy_source = None
+        self.seen_process_ids = set()
         self.violation_reported = False
         self.monitor_timer  = QTimer()
         self.monitor_timer.timeout.connect(self.track_usage)
         self.heartbeat_timer = QTimer()
         self.heartbeat_timer.timeout.connect(self.send_heartbeat)
+        self.policy_timer = QTimer()
+        self.policy_timer.timeout.connect(self.refresh_policy)
 
     def get_or_create_session_attempt(self, email):
         if self.outbox is None:
@@ -600,30 +619,78 @@ class SmartLabAgent:
     def set_ui_references(self, overlay):
         self.overlay = overlay
 
-    def fetch_blacklist(self):
-        """โหลด blacklist จาก backend — ถ้าไม่ได้ใช้ fallback list"""
+    def _set_policy(self, raw_rules, version, source):
+        rules = normalize_rules(raw_rules)
+        if not rules:
+            return False
+
+        changed = rules != self.policy_rules or version != self.policy_version
+        self.policy_rules = rules
+        self.policy_version = version or "unknown"
+        self.policy_source = source
+        if changed:
+            # Re-check already-running processes when an administrator changes
+            # the policy during an active session.
+            self.seen_process_ids.clear()
+        return True
+
+    def _load_cached_policy(self):
+        if self.outbox is None:
+            return False
+
         try:
-            # FIX 1: endpoint ที่ถูกต้องคือ /admin/blacklist ไม่ใช่ /blacklist
-            res = requests.get(f"{API_URL}/admin/blacklist", timeout=10)
-            if res.status_code == 200:
-                # FIX 2: backend ส่งกลับเป็น {"data": [...]} ต้อง .get("data") ก่อน
-                data = res.json().get("data", [])
-                self.forbidden_words = [item.get("app_name", "").lower().strip() for item in data]
-                print(f"ดึง Blacklist สำเร็จ: {self.forbidden_words}")
-            else:
-                print(f"ดึง Blacklist ล้มเหลว (Status: {res.status_code}) ใช้ fallback แทน")
-                self._use_fallback_blacklist()
+            cached = self.outbox.load_policy_cache("blacklist")
+        except Exception as e:
+            print(f"อ่าน Blacklist cache ไม่ได้: {e}")
+            return False
+
+        if not cached:
+            return False
+
+        if self._set_policy(cached.get("data"), cached.get("version"), "cache"):
+            print(f"ใช้ Blacklist จาก cache เวอร์ชัน {self.policy_version}")
+            return True
+        return False
+
+    def _use_fallback_policy(self):
+        self._set_policy(DEFAULT_FALLBACK_RULES, "fallback", "fallback")
+        print("ใช้ Blacklist fallback ในตัว Agent")
+
+    def fetch_policy(self):
+        """Load a non-empty policy and retain the last known-good copy on error."""
+
+        try:
+            response = requests.get(f"{API_URL}/agent/policy", timeout=10)
+            if response.status_code != 200:
+                raise RuntimeError(f"HTTP {response.status_code}")
+
+            payload = response.json()
+            rules = payload.get("data") if isinstance(payload, dict) else None
+            version = payload.get("version") if isinstance(payload, dict) else None
+            if not self._set_policy(rules, version, "backend"):
+                raise ValueError("Backend returned an empty or invalid policy")
+
+            if self.outbox is not None:
+                self.outbox.save_policy_cache(
+                    "blacklist",
+                    {"version": self.policy_version, "data": self.policy_rules},
+                    version=self.policy_version,
+                )
+            print(
+                f"ดึง Blacklist สำเร็จ {len(self.policy_rules)} รายการ "
+                f"(เวอร์ชัน {self.policy_version})"
+            )
+            return True
         except Exception as e:
             print(f"ดึง Blacklist ไม่ได้: {e}")
-            self._use_fallback_blacklist()
+            if self.policy_rules:
+                print(f"ใช้ Blacklist เดิมจาก {self.policy_source}")
+            else:
+                self._use_fallback_policy()
+            return False
 
-    def _use_fallback_blacklist(self):
-        # FIX 3: fallback ต้องมีครบ รวม "star rail" และ "starrail" (ชื่อ process)
-        self.forbidden_words = [
-            "bittorrent", "cheatengine",
-            "genshin", "genshinimpact",
-            "star rail", "starrail",       # window title และ process name
-        ]
+    def refresh_policy(self):
+        self.fetch_policy()
 
     def start_monitoring(self, session_id, info_bar):
         self.current_session_id = session_id
@@ -631,10 +698,16 @@ class SmartLabAgent:
         self.usage_segments = []
         self.current_activity_name = None
         self.current_activity_started_at = None
+        self.policy_rules = []
+        self.policy_version = None
+        self.policy_source = None
+        self.seen_process_ids.clear()
         self.violation_reported = False
-        self.fetch_blacklist()
+        self._load_cached_policy()
+        self.fetch_policy()
         self.monitor_timer.start(5000)
         self.heartbeat_timer.start(30000)
+        self.policy_timer.start(POLICY_REFRESH_SECONDS * 1000)
 
     def send_heartbeat(self):
         if not self.current_session_id:
@@ -708,7 +781,16 @@ class SmartLabAgent:
         self.current_activity_name = app_name
         self.current_activity_started_at = observed_at
 
-    def report_violation(self, program_name, reason):
+    def report_violation(
+        self,
+        program_name,
+        reason,
+        *,
+        process_name=None,
+        exe_path=None,
+        window_title=None,
+        detection_source=None,
+    ):
         if self.violation_reported or not self.current_session_id:
             return
 
@@ -719,6 +801,10 @@ class SmartLabAgent:
             "reason": reason,
             "action_taken": "logout",
             "event_id": event_id,
+            "process_name": process_name,
+            "exe_path": exe_path,
+            "window_title": window_title,
+            "detection_source": detection_source,
         }
 
         if self._queue_outbox(
@@ -746,25 +832,68 @@ class SmartLabAgent:
         except Exception as e:
             print(f"บันทึก violation ไม่ได้: {e}")
 
+    def _find_new_process_match(self):
+        """Inspect each process fully only when its PID first appears."""
+
+        current_process_ids = set()
+        has_path_rules = any(
+            rule["match_type"] == "exe_path" for rule in self.policy_rules
+        )
+
+        for proc in psutil.process_iter(["pid", "name"]):
+            try:
+                process_id = proc.info.get("pid")
+                if process_id is None:
+                    continue
+                current_process_ids.add(process_id)
+                if process_id in self.seen_process_ids:
+                    continue
+
+                process_name = (proc.info.get("name") or "").strip()
+                matched_rule = find_process_match(self.policy_rules, process_name)
+                exe_path = None
+                if matched_rule is None and has_path_rules:
+                    try:
+                        exe_path = proc.exe()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        exe_path = None
+                    matched_rule = find_process_match(
+                        self.policy_rules,
+                        process_name,
+                        exe_path,
+                    )
+
+                if matched_rule is not None:
+                    detection_source = (
+                        "exe_path"
+                        if matched_rule["match_type"] == "exe_path"
+                        else "process_name"
+                    )
+                    return process_name, exe_path, matched_rule, detection_source
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+
+        self.seen_process_ids = current_process_ids
+        return None
+
     def track_usage(self):
         try:
-            # ── ด่านที่ 1: ตรวจจากชื่อ process (.exe) ──────────────────────
-            # จับเกมที่มี anti-cheat ซึ่งซ่อน window title ได้
-            for proc in psutil.process_iter(['name']):
-                try:
-                    p_name = (proc.info['name'] or "").lower()
-                    for word in self.forbidden_words:
-                        if not word:
-                            continue
-                        # FIX 4: compare ตรงๆ ไม่ตัด space — ป้องกัน "starail" != "starrail"
-                        if word.replace(" ", "") in p_name:
-                            reason = f"ไม่อนุญาตให้เปิดแอป: {word.title()}"
-                            self.report_violation(p_name, reason)
-                            if self.info_bar:
-                                self.info_bar.trigger_logout(reason=reason)
-                            return
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                    pass
+            # ── ด่านที่ 1: ตรวจ Process ใหม่จากชื่อและ Path ────────────────
+            process_match = self._find_new_process_match()
+            if process_match is not None:
+                process_name, exe_path, matched_rule, detection_source = process_match
+                rule_name = matched_rule.get("app_name") or matched_rule.get("match_value")
+                reason = f"ไม่อนุญาตให้เปิดแอป: {rule_name}"
+                self.report_violation(
+                    process_name,
+                    reason,
+                    process_name=process_name,
+                    exe_path=exe_path,
+                    detection_source=detection_source,
+                )
+                if self.info_bar:
+                    self.info_bar.trigger_logout(reason=reason)
+                return
 
             # ── ด่านที่ 2: ตรวจจาก Active Window title ──────────────────────
             active_win = gw.getActiveWindow()
@@ -773,18 +902,19 @@ class SmartLabAgent:
                 return
 
             raw_title  = active_win.title.strip()
-            title_lower = raw_title.lower()
-
-            for word in self.forbidden_words:
-                if not word:
-                    continue
-                # FIX 4: compare ตรงๆ เช่น "star rail" in "star rail - loading" → True
-                if word in title_lower:
-                    reason = f"ไม่อนุญาตให้เปิดใช้งาน: {word.title()}"
-                    self.report_violation(raw_title, reason)
-                    if self.info_bar:
-                        self.info_bar.trigger_logout(reason=reason)
-                    return
+            window_match = find_window_match(self.policy_rules, raw_title)
+            if window_match is not None:
+                rule_name = window_match.get("app_name") or window_match.get("match_value")
+                reason = f"ไม่อนุญาตให้เปิดใช้งาน: {rule_name}"
+                self.report_violation(
+                    raw_title,
+                    reason,
+                    window_title=raw_title,
+                    detection_source="window_title",
+                )
+                if self.info_bar:
+                    self.info_bar.trigger_logout(reason=reason)
+                return
 
             # ── บันทึกสถิติการใช้งานปกติ ────────────────────────────────────
             # ตัดส่วนขยายออก เช่น "Google - Brave" → "Brave"
@@ -798,6 +928,7 @@ class SmartLabAgent:
     def stop_and_send_logs(self, session_id, end_reason="logout"):
         self.monitor_timer.stop()
         self.heartbeat_timer.stop()
+        self.policy_timer.stop()
         self._close_current_activity(datetime.now())
         summary = list(self.usage_segments)
 

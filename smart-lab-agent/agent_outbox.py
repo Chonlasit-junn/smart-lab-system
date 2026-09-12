@@ -87,6 +87,13 @@ class AgentOutbox:
 
                 CREATE INDEX IF NOT EXISTS idx_session_attempts_lookup
                     ON session_attempts (email, lab_code, device_mac, created_at);
+
+                CREATE TABLE IF NOT EXISTS policy_cache (
+                    policy_name TEXT PRIMARY KEY,
+                    version TEXT,
+                    payload TEXT NOT NULL,
+                    saved_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -238,3 +245,53 @@ class AgentOutbox:
                 "DELETE FROM session_attempts WHERE client_session_id = ?",
                 (client_session_id,),
             )
+
+    def save_policy_cache(
+        self,
+        policy_name: str,
+        payload: dict[str, Any],
+        version: Optional[str] = None,
+    ) -> None:
+        """Persist the last known-good Agent policy for offline recovery."""
+
+        now = self._now().isoformat()
+        payload_json = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO policy_cache (policy_name, version, payload, saved_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(policy_name) DO UPDATE SET
+                    version = excluded.version,
+                    payload = excluded.payload,
+                    saved_at = excluded.saved_at
+                """,
+                (policy_name, version, payload_json, now),
+            )
+
+    def load_policy_cache(self, policy_name: str) -> Optional[dict[str, Any]]:
+        """Load a cached policy, returning None when it is missing or invalid."""
+
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT version, payload, saved_at FROM policy_cache WHERE policy_name = ?",
+                (policy_name,),
+            ).fetchone()
+        if row is None:
+            return None
+
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+
+        payload.setdefault("version", row["version"])
+        payload["cached_at"] = row["saved_at"]
+        return payload

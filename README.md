@@ -67,8 +67,10 @@ Invoke-RestMethod http://127.0.0.1:8000/
 2. `backend/migrations/002_session_device_identity.sql`
 3. `backend/migrations/003_agent_session_hardening.sql`
 4. `backend/migrations/004_agent_delivery_reliability.sql`
+5. `backend/migrations/005_point_system.sql`
+6. `backend/migrations/006_agent_policy_hardening.sql`
 
-Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session และป้องกัน log ซ้ำจาก retry ด้วย idempotency key การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่ม column ให้ตารางเดิมได้ จึงต้องรัน SQL migration แยก
+Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม และ policy/evidence ของ Agent การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่ม column ให้ตารางเดิมได้ จึงต้องรัน SQL migration แยก
 
 ### 3. รัน Frontend
 
@@ -177,6 +179,7 @@ python agent.pyw
 - `SMART_LAB_CODE`: override รหัสห้อง
 - `SMART_LAB_AGENT_DEBUG=1`: ป้องกันการ logout Windows ระหว่างทดสอบ; ตั้งเป็น `0` ตอนใช้งานจริง
 - `SMART_LAB_AGENT_DATA_DIR`: โฟลเดอร์สำหรับ local SQLite outbox; ค่าเริ่มต้นคือ `%LOCALAPPDATA%\SmartLabAgent`
+- `SMART_LAB_POLICY_REFRESH_SECONDS`: ความถี่ refresh policy; ค่าเริ่มต้น 60 วินาที
 - `DEVICE_NAME` และ `DEVICE_MAC`: อ่านจากเครื่องและส่งตอนสร้าง session
 
 ถ้าต้อง build executable ให้ติดตั้ง requirements-build.txt แล้วรัน pyinstaller --clean --noconfirm agent.spec
@@ -196,6 +199,7 @@ python agent.pyw
 
 - ตอน login: `POST /login`
 - ตอนเริ่ม session: `POST /agent/start-session` พร้อม `client_session_id` ที่เก็บไว้จนกว่า Backend จะตอบสำเร็จ
+- ตอนเริ่มและระหว่าง session: `GET /agent/policy` เพื่อโหลดกฎ Blacklist และ refresh ทุก 60 วินาที
 - ระหว่างใช้งาน: `POST /agent/heartbeat` ทุก 30 วินาที
 - ตอนจบ session: `POST /agent/log-usage` และ `POST /agent/end-session`
 - Agent เก็บ usage และ violation ลง local SQLite outbox ก่อนส่ง โดยแต่ละ usage/violation มี `event_id`; ถ้าเน็ตหลุดจะ retry อัตโนมัติเมื่อ Heartbeat กลับมาสำเร็จ
@@ -208,15 +212,18 @@ python agent.pyw
 1. เพิ่ม `notepad` ในหน้า Admin > Blacklist หรือในตาราง `blacklisted_apps`
 2. เปิด Agent และเริ่ม session ใหม่
 3. เปิด Notepad
-4. Agent จะตรวจทุกประมาณ 5 วินาทีและควรแสดง violation dialog พร้อมจบ session
+4. Agent จะตรวจ Process ใหม่และ Active Window ทุกประมาณ 5 วินาที ควรแสดง violation dialog พร้อมจบ session
 5. ตรวจว่ามีแถวใน `usage_violations`
 
 ข้อมูล violation ที่ Agent ส่ง:
 
 ```text
 POST /agent/log-violation
-session_id, program_name, reason, action_taken
+session_id, program_name, reason, action_taken,
+process_name, exe_path, window_title, detection_source
 ```
+
+กฎ Blacklist รองรับ `process_name`, `process_name_or_title`, `exe_path` และ `window_title` ผ่าน `match_type`/`match_value` ในตาราง `blacklisted_apps` ส่วน Backend จะตรวจซ้ำก่อนบันทึก violation เพื่อไม่รับรายการที่ไม่ตรงกับกฎที่เปิดใช้งานอยู่
 
 ## Query ตรวจผลใน Supabase
 

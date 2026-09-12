@@ -51,8 +51,10 @@ export default function History() {
     if (!currentUser) return;
     try {
       setLoading(true);
+      const token = localStorage.getItem("access_token");
       const response = await axios.get(
         `${API_URL}/bookings/user/${currentUser.email}`,
+        { headers: { Authorization: `Bearer ${token}` } },
       );
       const allBookings = response.data.data;
 

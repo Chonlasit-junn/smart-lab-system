@@ -96,7 +96,16 @@ class BlacklistedApp(Base):
     id = Column(Integer, primary_key=True, index=True)
     app_name = Column(String, unique=True, nullable=False)
     description = Column(String, nullable=True)
+    match_type = Column(
+        String,
+        nullable=False,
+        default="process_name_or_title",
+        server_default="process_name_or_title",
+    )
+    match_value = Column(String, nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True, server_default="true")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class LabAccessLog(Base):
@@ -105,6 +114,7 @@ class LabAccessLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     lab_id = Column(Integer, ForeignKey("labs.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    booking_id = Column(BigInteger, ForeignKey("bookings.id"), nullable=True, index=True)
     entry_time = Column(DateTime(timezone=True), server_default=func.now())
     exit_time = Column(DateTime(timezone=True), nullable=True)
     access_type = Column(String, nullable=False)  # entry | manual
@@ -122,6 +132,8 @@ class LabAccessLog(Base):
     last_heartbeat_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    booking = relationship("Booking", back_populates="access_logs")
 
 
 class ProgramUsageLog(Base):
@@ -160,6 +172,12 @@ class UsageViolation(Base):
     reason = Column(Text, nullable=True)
     action_taken = Column(String, nullable=False, default="logout")
     event_id = Column(String, nullable=True, index=True)
+    process_name = Column(String, nullable=True)
+    exe_path = Column(Text, nullable=True)
+    window_title = Column(Text, nullable=True)
+    detection_source = Column(String, nullable=True)
+    policy_version = Column(String, nullable=True)
+    matched_rule_id = Column(BigInteger, nullable=True)
 
 
 class ClassSchedule(Base):
@@ -193,17 +211,51 @@ class Booking(Base):
     end_time = Column(Time, nullable=False)
     purpose = Column(Text, nullable=True)
     total_participants = Column(Integer, nullable=False, default=1)
+    status = Column(
+        String,
+        nullable=False,
+        default="reserved",
+        server_default="reserved",
+        index=True,
+    )  # reserved | attended | completed | cancelled | no_show
+    checked_in_at = Column(DateTime(timezone=True), nullable=True)
+    checked_out_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancellation_reason = Column(String, nullable=True)
+    no_show_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="bookings")
     lab = relationship("Lab", back_populates="bookings")
+    access_logs = relationship("LabAccessLog", back_populates="booking")
+
+
+class UserDailyScore(Base):
+    __tablename__ = "user_daily_scores"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    score_date = Column(Date, primary_key=True)
+    score = Column(Integer, nullable=False, default=100)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user = relationship("User", backref="daily_scores")
+
 
 class UserPoints(Base):
     __tablename__ = "user_points"
 
     user_id    = Column(Integer, ForeignKey("users.id"), primary_key=True)
     points     = Column(Integer, default=100, nullable=False)  # เริ่มที่ 100
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     user = relationship("User", backref="points_record")
 
@@ -216,6 +268,14 @@ class PointLog(Base):
     change     = Column(Integer, nullable=False)   # -5, +1 etc.
     reason     = Column(String, nullable=False)    # "no_show" | "forbidden_app" | "late_cancel" | "complete_session"
     note       = Column(String, nullable=True)     # รายละเอียดเพิ่ม เช่น ชื่อโปรแกรมที่โดน detect
+    event_id   = Column(String, nullable=True, index=True)
+    source_type = Column(String, nullable=True)
+    source_id = Column(BigInteger, nullable=True)
+    points_before = Column(Integer, nullable=True)
+    points_after = Column(Integer, nullable=True)
+    daily_score_before = Column(Integer, nullable=True)
+    daily_score_after = Column(Integer, nullable=True)
+    score_date = Column(Date, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

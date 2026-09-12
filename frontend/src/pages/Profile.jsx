@@ -12,6 +12,7 @@ import {
   LinearProgress,
   Popover,
   Button,
+  Alert,
 } from "@mui/material";
 import {
   Notifications,
@@ -51,6 +52,13 @@ const FACULTY_NAMES = {
   economics: "School of Economics",
 };
 
+const POINT_REASON_LABELS = {
+  no_show: "ไม่มาตามการจอง",
+  forbidden_app: "ใช้โปรแกรมต้องห้าม",
+  late_cancel: "ยกเลิกการจองกระชั้นชิด",
+  complete_session: "จบการใช้งานปกติ",
+};
+
 export default function Profile() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
@@ -59,6 +67,8 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pointLogs, setPointLogs] = useState([]);
+  const [pointsError, setPointsError] = useState("");
 
   useEffect(() => {
     if (!currentUser) {
@@ -71,22 +81,34 @@ export default function Profile() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
+      setError("");
+      setPointsError("");
       const token = localStorage.getItem("access_token");
       const headers = { Authorization: `Bearer ${token}` };
 
-      const profileRes = await axios.get(`${API_URL}/users/me`, { headers });
-      const profileData = profileRes.data;
+      const [profileResult, pointsResult, logsResult] = await Promise.allSettled([
+        axios.get(`${API_URL}/users/me`, { headers }),
+        axios.get(`${API_URL}/users/me/points`, { headers }),
+        axios.get(`${API_URL}/users/me/points/logs?limit=20`, { headers }),
+      ]);
 
-      try {
-        const pointsRes = await axios.get(
-          `${API_URL}/users/${profileData.id}/points`,
-          { headers },
-        );
-        setProfile({ ...profileData, ...pointsRes.data });
-      } catch {
-        // ถ้า points ยังไม่มีใน DB ก็ใช้ profile อย่างเดียวก่อน
-        setProfile({ ...profileData, points: 100, is_banned: false });
+      if (profileResult.status !== "fulfilled") {
+        throw profileResult.reason;
       }
+
+      const profileData = profileResult.value.data;
+      const pointData =
+        pointsResult.status === "fulfilled"
+          ? pointsResult.value.data
+          : { points: null, daily_score: null, points_loaded: false };
+
+      if (pointsResult.status !== "fulfilled") {
+        setPointsError("ไม่สามารถโหลดข้อมูลคะแนนได้ กรุณาลองใหม่อีกครั้ง");
+      }
+      setProfile({ ...profileData, ...pointData });
+      setPointLogs(
+        logsResult.status === "fulfilled" ? logsResult.value.data.data || [] : [],
+      );
     } catch (err) {
       setError("ไม่สามารถโหลดข้อมูลโปรไฟล์ได้");
       console.error("[Profile] fetch failed:", err);
@@ -131,12 +153,16 @@ export default function Profile() {
         ? "ผู้ดูแลระบบ"
         : "บุคคลทั่วไป";
 
+  const numericPoints =
+    profile?.points == null ? null : Number(profile.points);
   const pointColor =
-    (profile?.points ?? 100) >= 80
-      ? "#10b981"
-      : (profile?.points ?? 100) >= 60
-        ? "#f59e0b"
-        : "#ef4444";
+    numericPoints == null || !Number.isFinite(numericPoints)
+      ? "#94a3b8"
+      : numericPoints >= 80
+        ? "#10b981"
+        : numericPoints >= 60
+          ? "#f59e0b"
+          : "#ef4444";
 
   return (
     <div className="app-layout">
@@ -445,6 +471,18 @@ export default function Profile() {
           ) : (
             profile && (
               <Box sx={{ maxWidth: "900px", mx: "auto", px: { xs: 0, sm: 2 } }}>
+                {pointsError ? (
+                  <Alert severity="error" sx={{ mb: 3 }}>
+                    {pointsError}
+                  </Alert>
+                ) : numericPoints !== null &&
+                  (profile.is_banned || numericPoints < 80) ? (
+                  <Alert severity={profile.is_banned ? "error" : "warning"} sx={{ mb: 3 }}>
+                    {profile.is_banned
+                      ? `บัญชีถูกระงับการจองถึง ${new Date(profile.ban_until).toLocaleString("th-TH")}`
+                      : `คะแนนเหลือ ${numericPoints} คะแนน ต่ำกว่าเกณฑ์ 80 คะแนน จึงไม่สามารถจองห้องได้`}
+                  </Alert>
+                ) : null}
                 <Grid container spacing={3}>
                   {/* ── LEFT COLUMN ── */}
                   <Grid item xs={12} md={4}>
@@ -580,7 +618,7 @@ export default function Profile() {
                             lineHeight={1}
                             color={pointColor}
                           >
-                            {profile.points ?? 100}
+                            {numericPoints ?? "—"}
                           </Typography>
                           <Typography
                             variant="caption"
@@ -723,7 +761,7 @@ export default function Profile() {
                           fontWeight="bold"
                           color={pointColor}
                         >
-                          {profile.points ?? 100}{" "}
+                          {numericPoints ?? "—"}{" "}
                           <Typography
                             component="span"
                             variant="body2"
@@ -736,12 +774,12 @@ export default function Profile() {
 
                       <LinearProgress
                         variant="determinate"
-                        value={profile.points ?? 100}
+                        value={numericPoints == null ? 0 : Math.max(0, Math.min(100, numericPoints))}
                         sx={{
                           height: 10,
                           borderRadius: 5,
                           mb: 2,
-                          bgcolor: "#f1f5f9",
+                          bgcolor: numericPoints == null ? "#e2e8f0" : "#f1f5f9",
                           "& .MuiLinearProgress-bar": {
                             borderRadius: 5,
                             bgcolor: pointColor,
@@ -749,13 +787,49 @@ export default function Profile() {
                         }}
                       />
 
-                      {profile.is_banned ? (
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          mb: 2,
+                        }}
+                      >
+                        <Typography variant="body2" color="#64748b">
+                          คะแนนวันนี้
+                        </Typography>
+                        <Typography variant="body2" fontWeight="bold" color="#334155">
+                          {profile.daily_score ?? "—"} / 100
+                        </Typography>
+                      </Box>
+
+                      {pointsError ? (
+                        <Chip
+                          label="ยังตรวจสอบสถานะไม่ได้"
+                          size="small"
+                          sx={{
+                            bgcolor: "#f1f5f9",
+                            color: "#64748b",
+                            fontWeight: "bold",
+                          }}
+                        />
+                      ) : profile.is_banned ? (
                         <Chip
                           label={`ถูกระงับถึง ${new Date(profile.ban_until).toLocaleDateString("th-TH")}`}
                           size="small"
                           sx={{
                             bgcolor: "#fef2f2",
                             color: "#ef4444",
+                            fontWeight: "bold",
+                          }}
+                        />
+                      ) : numericPoints !== null && numericPoints < 80 ? (
+                        <Chip
+                          label="คะแนนต่ำกว่าเกณฑ์ — จองไม่ได้"
+                          size="small"
+                          sx={{
+                            bgcolor: "#fff7ed",
+                            color: "#c2410c",
                             fontWeight: "bold",
                           }}
                         />
@@ -769,6 +843,53 @@ export default function Profile() {
                             fontWeight: "bold",
                           }}
                         />
+                      )}
+
+                      <Divider sx={{ my: 3 }} />
+                      <Typography variant="subtitle2" fontWeight="bold" color="#334155" sx={{ mb: 1.5 }}>
+                        ประวัติการเปลี่ยนคะแนน
+                      </Typography>
+                      {pointLogs.length === 0 ? (
+                        <Typography variant="body2" color="#94a3b8">
+                          ยังไม่มีประวัติการเปลี่ยนคะแนน
+                        </Typography>
+                      ) : (
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+                          {pointLogs.map((log) => {
+                            const isPositive = log.change > 0;
+                            return (
+                              <Box
+                                key={log.id}
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: 2,
+                                  p: 1.25,
+                                  borderRadius: 2,
+                                  bgcolor: "#f8fafc",
+                                }}
+                              >
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant="body2" fontWeight="600" color="#334155" noWrap>
+                                    {POINT_REASON_LABELS[log.reason] || log.reason}
+                                  </Typography>
+                                  <Typography variant="caption" color="#94a3b8" noWrap>
+                                    {log.note || "—"} · {log.created_at ? new Date(log.created_at).toLocaleString("th-TH") : "—"}
+                                  </Typography>
+                                </Box>
+                                <Typography
+                                  variant="body2"
+                                  fontWeight="bold"
+                                  color={isPositive ? "#16a34a" : "#dc2626"}
+                                  sx={{ flexShrink: 0 }}
+                                >
+                                  {isPositive ? "+" : ""}{log.change}
+                                </Typography>
+                              </Box>
+                            );
+                          })}
+                        </Box>
                       )}
                     </Paper>
                   </Grid>

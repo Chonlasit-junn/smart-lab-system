@@ -14,6 +14,7 @@ import {
   Slide,
   Fade,
   Chip,
+  Alert,
   Dialog,
   DialogContent,
   Popover,
@@ -83,6 +84,9 @@ export default function Booking() {
   // Data States
   const [labs, setLabs] = useState([]);
   const [availability, setAvailability] = useState(null);
+  const [pointStatus, setPointStatus] = useState(null);
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointsError, setPointsError] = useState("");
 
   // Selection States
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -115,6 +119,41 @@ export default function Booking() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLabs();
   }, [fetchLabs]);
+
+  useEffect(() => {
+    if (!currentUser?.email) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPointStatus(null);
+      setPointsError("");
+      return undefined;
+    }
+
+    let cancelled = false;
+    const token = localStorage.getItem("access_token");
+    setPointsLoading(true);
+    setPointsError("");
+
+    axios
+      .get(`${API_URL}/users/me/points`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((response) => {
+        if (!cancelled) setPointStatus(response.data);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("[API Error] Failed to fetch point status:", error);
+        setPointStatus(null);
+        setPointsError("ไม่สามารถตรวจสอบคะแนนได้ จึงยังไม่อนุญาตให้จอง");
+      })
+      .finally(() => {
+        if (!cancelled) setPointsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.email]);
 
   /**
    * Fetches availability for a specific lab room on a given date.
@@ -276,11 +315,16 @@ export default function Booking() {
         total_participants: 1,
       };
 
-      await axios.post(`${API_URL}/bookings`, payload);
+      const token = localStorage.getItem("access_token");
+      await axios.post(`${API_URL}/bookings`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setSuccessDialogOpen(true);
     } catch (error) {
+      const detail = error.response?.data?.detail;
       const errMsg =
-        error.response?.data?.detail || "Failed to confirm booking";
+        (typeof detail === "string" ? detail : detail?.message) ||
+        "Failed to confirm booking";
       alert(`Booking Failed: ${errMsg}`);
     }
   };
@@ -1230,6 +1274,17 @@ export default function Booking() {
                         </Typography>
                       </Box>
 
+                      {currentUser && pointsError ? (
+                        <Alert severity="error">
+                          {pointsError}
+                        </Alert>
+                      ) : null}
+                      {currentUser && pointStatus?.booking_allowed === false ? (
+                        <Alert severity="warning">
+                          จองห้องไม่ได้: {pointStatus.booking_block_reason}
+                        </Alert>
+                      ) : null}
+
                       <Paper
                         elevation={0}
                         sx={{
@@ -1269,6 +1324,14 @@ export default function Booking() {
                             currentUser
                               ? handleConfirmBooking
                               : () => navigate("/")
+                          }
+                          disabled={
+                            Boolean(
+                              currentUser &&
+                                (pointsLoading ||
+                                  pointsError ||
+                                  !pointStatus?.booking_allowed),
+                            )
                           }
                           sx={{
                             bgcolor: "#0284c7",
