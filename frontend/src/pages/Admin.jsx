@@ -31,6 +31,7 @@ import {
   PendingActions,
   SupportAgent,
   HowToReg,
+  Assessment,
   Block,
   Settings,
   Close,
@@ -57,6 +58,11 @@ const SIDE_MENU_ITEMS = [
     text: "Verify Users",
     icon: <HowToReg sx={{ fontSize: 20 }} />,
     path: "/verify-users",
+  },
+  {
+    text: "User Points",
+    icon: <Assessment sx={{ fontSize: 20 }} />,
+    path: "/admin/points",
   },
   {
     text: "Blacklist",

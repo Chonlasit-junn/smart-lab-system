@@ -471,6 +471,99 @@ def reconcile_no_shows(
     return {"processed": mark_due_no_shows(db)}
 
 
+@router.get("/admin/points")
+def get_all_user_points(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the current point status for every user for the Admin dashboard."""
+    if not is_admin_user(current_user.id, db):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    mark_due_no_shows(db)
+
+    today = _now_utc().date()
+    now = _now_utc()
+    rows = db.query(models.User, models.UserPoints).outerjoin(
+        models.UserPoints,
+        models.UserPoints.user_id == models.User.id,
+    ).order_by(models.User.id.asc()).all()
+
+    user_ids = [user.id for user, _ in rows]
+    daily_scores = {}
+    active_bans = {}
+    role_names = {}
+
+    if user_ids:
+        daily_rows = db.query(models.UserDailyScore).filter(
+            models.UserDailyScore.user_id.in_(user_ids),
+            models.UserDailyScore.score_date == today,
+        ).all()
+        daily_scores = {
+            row.user_id: _clamp_score(row.score)
+            for row in daily_rows
+        }
+
+        ban_rows = db.query(models.BanRecord).filter(
+            models.BanRecord.user_id.in_(user_ids),
+            models.BanRecord.ban_until > now,
+        ).order_by(models.BanRecord.ban_until.desc()).all()
+        for row in ban_rows:
+            active_bans.setdefault(row.user_id, row.ban_until)
+
+        role_rows = db.query(models.UserRole.user_id, models.Role.name).join(
+            models.Role,
+            models.Role.id == models.UserRole.role_id,
+        ).filter(models.UserRole.user_id.in_(user_ids)).all()
+        role_priority = {"admin": 0, "student": 1, "guest": 2}
+        for user_id, role_name in role_rows:
+            current_role = role_names.get(user_id)
+            if current_role is None or role_priority.get(role_name, 99) < role_priority.get(current_role, 99):
+                role_names[user_id] = role_name
+
+    result = []
+    for user, point_record in rows:
+        points = _clamp_score(point_record.points if point_record else MAX_POINTS)
+        ban_until = active_bans.get(user.id)
+        daily_score = daily_scores.get(user.id, MAX_POINTS)
+        result.append({
+            "user_id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "name": f"{user.first_name} {user.last_name}".strip(),
+            "email": user.email,
+            "role": role_names.get(user.id, "guest"),
+            "points": points,
+            "daily_score": daily_score,
+            "daily_score_date": today,
+            "booking_allowed": points >= BOOKING_MIN_POINTS and ban_until is None,
+            "is_banned": ban_until is not None,
+            "ban_until": ban_until,
+            "warning_level": (
+                "critical" if points < 40
+                else "warning" if points < BOOKING_MIN_POINTS
+                else "normal"
+            ),
+            "updated_at": point_record.updated_at if point_record else None,
+        })
+
+    scores = [item["points"] for item in result]
+    return {
+        "data": result,
+        "score_date": today,
+        "booking_min_points": BOOKING_MIN_POINTS,
+        "summary": {
+            "total_users": len(result),
+            "average_points": round(sum(scores) / len(scores), 1) if scores else 0,
+            "below_booking_threshold": sum(
+                item["points"] < BOOKING_MIN_POINTS for item in result
+            ),
+            "banned_users": sum(item["is_banned"] for item in result),
+            "booking_allowed": sum(item["booking_allowed"] for item in result),
+        },
+    }
+
+
 @router.get("/admin/points/low")
 def get_low_point_users(
     current_user: models.User = Depends(get_current_user),

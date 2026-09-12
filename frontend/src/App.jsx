@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Booking from './pages/Booking';
 import Admin from './pages/Admin';
+import AdminPoints from './pages/AdminPoints';
 import ManageLabs from './pages/ManageLabs';
 import Reserved from './pages/Reserved';
 import History from './pages/History';
@@ -26,6 +27,7 @@ function App() {
             <Route path="/reserved" element={<Reserved />} />
             <Route path="/history" element={<History />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/admin/points" element={<AdminPoints />} />
             <Route path="/manage-labs" element={<ManageLabs />} />
             <Route path="/verify-users" element={<VerifyUsers />} />
             <Route path="/blacklist" element={<BlacklistManager />} />

@@ -225,6 +225,10 @@ process_name, exe_path, window_title, detection_source
 
 กฎ Blacklist รองรับ `process_name`, `process_name_or_title`, `exe_path` และ `window_title` ผ่าน `match_type`/`match_value` ในตาราง `blacklisted_apps` ส่วน Backend จะตรวจซ้ำก่อนบันทึก violation เพื่อไม่รับรายการที่ไม่ตรงกับกฎที่เปิดใช้งานอยู่
 
+## หน้า Admin คะแนนผู้ใช้
+
+เปิดหน้า `/admin/points` จากเมนู `User Points` เพื่อดูคะแนนสะสม คะแนนรายวัน สถานะการจอง และสถานะ Ban ของผู้ใช้ทั้งหมด หน้าเว็บเรียก `GET /admin/points` ซึ่งอนุญาตเฉพาะบัญชีที่มี role `admin` และรองรับการค้นหา กรอง และเรียงลำดับข้อมูล
+
 ## Query ตรวจผลใน Supabase
 
 ### ตรวจ session และ device identity
