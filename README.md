@@ -180,9 +180,19 @@ python agent.pyw
 - `SMART_LAB_API_URL`: override URL ของ Backend โดยไม่ต้องแก้ source
 - `SMART_LAB_CODE`: override รหัสห้อง
 - `SMART_LAB_AGENT_DEBUG=1`: ป้องกันการ logout Windows ระหว่างทดสอบ; ตั้งเป็น `0` ตอนใช้งานจริง
+- `SMART_LAB_SESSION_CLEANUP=1`: เปิดการ cleanup เมื่อรันจาก source; executable ที่ build แล้วเปิดเป็นค่าเริ่มต้น และตั้งเป็น `0` เพื่อปิดชั่วคราว
 - `SMART_LAB_AGENT_DATA_DIR`: โฟลเดอร์สำหรับ local SQLite outbox; ค่าเริ่มต้นคือ `%LOCALAPPDATA%\SmartLabAgent`
 - `SMART_LAB_POLICY_REFRESH_SECONDS`: ความถี่ refresh policy; ค่าเริ่มต้น 60 วินาที
 - `DEVICE_NAME` และ `DEVICE_MAC`: อ่านจากเครื่องและส่งตอนสร้าง session
+
+เมื่อจบ Session และเปิดใช้ Session Cleanup ระบบจะขอปิดโปรแกรมของ Windows user เดิมก่อน
+แล้วบังคับปิดเฉพาะโปรแกรมที่ยังค้างหลังรอ 10 วินาที โดยคง Agent และ Windows shell ไว้
+จากนั้นล้าง cookies, history, saved login และ cache ของ Chrome/Edge/Brave/Vivaldi/Opera/Firefox
+แต่เก็บ Bookmark และ Extension ไว้ และลบเฉพาะไฟล์ใหม่ที่ถูกสร้างใน Downloads ระหว่าง Session
+ข้อมูลใน Backend และรายการใน local outbox ที่ยังรอส่งจะไม่ถูกลบ
+
+ฟีเจอร์นี้อาจทำให้ข้อมูลที่ยังไม่ได้บันทึกในโปรแกรมอื่นหายได้ และ Browser Sync หรือ Windows
+Credential Manager อาจทำให้ข้อมูลบางอย่างกลับมาได้ จึงควรทดสอบบนเครื่อง Lab ก่อนเปิดใช้จริง
 
 ถ้าต้อง build executable ให้ติดตั้ง requirements-build.txt แล้วรัน pyinstaller --clean --noconfirm agent.spec
 

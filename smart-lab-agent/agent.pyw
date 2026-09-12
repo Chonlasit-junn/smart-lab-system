@@ -16,6 +16,12 @@ from agent_policy import (
     find_window_match,
     normalize_rules,
 )
+from agent_violation import (
+    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_WARNING_SECONDS,
+    ViolationState,
+)
+from agent_cleanup import SessionCleanupManager
 
 
 # Force Windows to load the Qt DLLs bundled with this executable. This avoids
@@ -101,6 +107,11 @@ def response_detail(response):
 API_URL    = os.getenv("SMART_LAB_API_URL", "https://h0sh1na-smart-lab-backend.hf.space").rstrip("/")
 LAB_CODE   = os.getenv("SMART_LAB_CODE", "LAB01")
 DEBUG_MODE = os.getenv("SMART_LAB_AGENT_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
+_cleanup_default = "1" if getattr(sys, "frozen", False) else "0"
+SESSION_CLEANUP_ENABLED = os.getenv(
+    "SMART_LAB_SESSION_CLEANUP",
+    _cleanup_default,
+).strip().lower() in {"1", "true", "yes", "on"}
 DEVICE_NAME = socket.gethostname()
 DEVICE_MAC  = ':'.join(f'{byte:02x}' for byte in uuid.getnode().to_bytes(6, 'big'))
 
@@ -120,8 +131,19 @@ IGNORE_SYSTEM_APPS = [
 
 # ── Violation Dialog ──────────────────────────────────────────────────────────
 class ViolationDialog(QDialog):
-    def __init__(self, reason, parent=None):
+    def __init__(
+        self,
+        reason,
+        *,
+        attempt=DEFAULT_MAX_ATTEMPTS,
+        max_attempts=DEFAULT_MAX_ATTEMPTS,
+        allow_grace=False,
+        warning_seconds=DEFAULT_WARNING_SECONDS,
+        parent=None,
+    ):
         super().__init__(parent)
+        self.allow_grace = bool(allow_grace)
+        self.left = max(1, int(warning_seconds))
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -131,12 +153,17 @@ class ViolationDialog(QDialog):
             QDialog { background-color: #fef2f2; border: 3px solid #ef4444; border-radius: 15px; }
             QLabel  { border: none; }
         """)
-        self.setFixedSize(550, 250)
+        self.setFixedSize(600, 330 if self.allow_grace else 260)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(10)
 
-        title = QLabel("⚠️ ตรวจพบการละเมิดข้อตกลง")
+        title = QLabel(
+            "⚠️ ตรวจพบโปรแกรมที่ไม่อนุญาต"
+            if self.allow_grace
+            else "🚫 หมดสิทธิ์ขอโอกาส"
+        )
         title.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
         title.setStyleSheet("color: #dc2626;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -147,16 +174,47 @@ class ViolationDialog(QDialog):
         reason_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         reason_lbl.setWordWrap(True)
 
-        self.countdown_lbl = QLabel("ระบบจะบังคับปิดเซสชันใน 5 วินาที...")
+        attempt_lbl = QLabel(
+            f"การเตือนครั้งที่ {attempt} จาก {max_attempts}"
+            if self.allow_grace
+            else f"ตรวจพบซ้ำครบครั้งที่ {attempt} จาก {max_attempts}"
+        )
+        attempt_lbl.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        attempt_lbl.setStyleSheet("color: #7f1d1d;")
+        attempt_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.countdown_lbl = QLabel()
         self.countdown_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         self.countdown_lbl.setStyleSheet("color: #ef4444; margin-top: 20px;")
         self.countdown_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(title)
         layout.addWidget(reason_lbl)
+        layout.addWidget(attempt_lbl)
         layout.addWidget(self.countdown_lbl)
 
-        self.left  = 5
+        if self.allow_grace:
+            self.countdown_lbl.setText(
+                f"กรุณาปิดโปรแกรม หรือกดขอโอกาสภายใน {self.left} วินาที"
+            )
+            chance_btn = QPushButton("ขอโอกาส")
+            chance_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            chance_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f59e0b; color: white; border-radius: 8px;
+                    font-family: 'Segoe UI'; font-size: 14px; font-weight: bold;
+                    padding: 11px; border: none;
+                }
+                QPushButton:hover { background-color: #fbbf24; }
+                QPushButton:pressed { background-color: #d97706; }
+            """)
+            chance_btn.clicked.connect(self.accept)
+            layout.addWidget(chance_btn)
+        else:
+            self.countdown_lbl.setText(
+                f"ระบบจะปิด Session ใน {self.left} วินาที..."
+            )
+
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(1000)
@@ -167,10 +225,18 @@ class ViolationDialog(QDialog):
 
     def _tick(self):
         self.left -= 1
-        self.countdown_lbl.setText(f"ระบบจะบังคับปิดเซสชันใน {self.left} วินาที...")
+        if self.allow_grace:
+            self.countdown_lbl.setText(
+                f"กรุณาปิดโปรแกรม หรือกดขอโอกาสภายใน {self.left} วินาที"
+            )
+        else:
+            self.countdown_lbl.setText(f"ระบบจะปิด Session ใน {self.left} วินาที...")
         if self.left <= 0:
             self.timer.stop()
-            self.accept()
+            if self.allow_grace:
+                self.reject()
+            else:
+                self.accept()
 
 
 # ── SessionInfoBar ────────────────────────────────────────────────────────────
@@ -310,9 +376,21 @@ class SessionInfoBar(QWidget):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self.trigger_logout()
 
-    def trigger_logout(self, reason: str = None):
-        if reason:
-            dlg = ViolationDialog(reason)
+    def trigger_logout(self, reason: str = None, show_dialog: bool = True):
+        if reason and show_dialog:
+            violation_state = getattr(self.overlay.agent, "violation_state", None)
+            attempt = getattr(violation_state, "attempts", DEFAULT_MAX_ATTEMPTS)
+            max_attempts = getattr(
+                violation_state,
+                "max_attempts",
+                DEFAULT_MAX_ATTEMPTS,
+            )
+            dlg = ViolationDialog(
+                reason,
+                attempt=max(attempt, DEFAULT_MAX_ATTEMPTS),
+                max_attempts=max_attempts,
+                allow_grace=False,
+            )
             dlg.exec()
         self.overlay.agent.stop_and_send_logs(
             self.session_id,
@@ -532,6 +610,9 @@ class SmartLabAgent:
         self.policy_source = None
         self.seen_process_ids = set()
         self.violation_reported = False
+        self.violation_state = ViolationState()
+        self.violation_dialog_active = False
+        self.session_cleanup = None
         self.monitor_timer  = QTimer()
         self.monitor_timer.timeout.connect(self.track_usage)
         self.heartbeat_timer = QTimer()
@@ -703,6 +784,19 @@ class SmartLabAgent:
         self.policy_source = None
         self.seen_process_ids.clear()
         self.violation_reported = False
+        self.violation_state.reset()
+        self.violation_dialog_active = False
+        self.session_cleanup = None
+        if SESSION_CLEANUP_ENABLED:
+            try:
+                self.session_cleanup = SessionCleanupManager(
+                    protected_pid=os.getpid(),
+                )
+                print("เปิดใช้งาน Session Cleanup สำหรับ Session นี้")
+            except Exception as e:
+                # Cleanup must never prevent a user from starting a Session.
+                self.session_cleanup = None
+                print(f"เตรียม Session Cleanup ไม่สำเร็จ: {e}")
         self._load_cached_policy()
         self.fetch_policy()
         self.monitor_timer.start(5000)
@@ -780,6 +874,95 @@ class SmartLabAgent:
         self._close_current_activity(observed_at)
         self.current_activity_name = app_name
         self.current_activity_started_at = observed_at
+
+    def _finalize_violation(self, context, show_dialog=True):
+        """Record the final violation and close the current lab session."""
+        self.report_violation(
+            context["program_name"],
+            context["reason"],
+            process_name=context.get("process_name"),
+            exe_path=context.get("exe_path"),
+            window_title=context.get("window_title"),
+            detection_source=context.get("detection_source"),
+        )
+        if self.info_bar:
+            self.info_bar.trigger_logout(
+                reason=context["reason"],
+                show_dialog=show_dialog,
+            )
+
+    def _handle_violation_detection(self, context):
+        """Give two five-minute chances before enforcing the third detection."""
+        if (
+            not self.current_session_id
+            or self.violation_reported
+            or self.violation_dialog_active
+        ):
+            return
+
+        now = datetime.now()
+        if self.violation_state.clear_expired_grace(now):
+            # The original process may already be in seen_process_ids. Clear it
+            # so the five-minute recheck inspects the process again.
+            self.seen_process_ids.clear()
+
+        if self.violation_state.is_grace_active(now):
+            return
+
+        attempt = self.violation_state.register_detection(now)
+        if attempt is None:
+            return
+
+        if attempt.must_terminate:
+            final_context = dict(context)
+            final_context["reason"] = (
+                f"{context['reason']} (ตรวจพบซ้ำครั้งที่ {attempt.number})"
+            )
+            self.monitor_timer.stop()
+            self.violation_dialog_active = True
+            try:
+                self._finalize_violation(final_context, show_dialog=True)
+            finally:
+                self.violation_dialog_active = False
+            return
+
+        self.violation_dialog_active = True
+        self.monitor_timer.stop()
+        chance_requested = False
+        try:
+            dialog = ViolationDialog(
+                context["reason"],
+                attempt=attempt.number,
+                max_attempts=self.violation_state.max_attempts,
+                allow_grace=True,
+                warning_seconds=DEFAULT_WARNING_SECONDS,
+            )
+            chance_requested = dialog.exec() == QDialog.DialogCode.Accepted
+        except Exception as exc:
+            # If the warning cannot be shown, fail closed instead of leaving
+            # the session running with its monitor stopped.
+            print(f"แสดงหน้าต่างแจ้งเตือนไม่ได้: {exc}")
+        finally:
+            self.violation_dialog_active = False
+
+        if chance_requested:
+            grace_until = self.violation_state.grant_grace(datetime.now())
+            self.seen_process_ids.clear()
+            print(
+                f"ให้โอกาสครั้งที่ {attempt.number} ถึง "
+                f"{grace_until.isoformat(timespec='seconds')}"
+            )
+            if self.current_session_id and not self.violation_reported:
+                self.monitor_timer.start(5000)
+            return
+
+        # The five-second warning expired without a request for more time.
+        # Treat that as a refusal and enforce the policy immediately.
+        timeout_context = dict(context)
+        timeout_context["reason"] = (
+            f"{context['reason']} (ไม่ขอโอกาสภายในเวลาที่กำหนด)"
+        )
+        self._finalize_violation(timeout_context, show_dialog=False)
 
     def report_violation(
         self,
@@ -878,21 +1061,34 @@ class SmartLabAgent:
 
     def track_usage(self):
         try:
+            if not self.current_session_id or self.violation_dialog_active:
+                return
+
+            now = datetime.now()
+            if self.violation_state.clear_expired_grace(now):
+                # A running forbidden process was intentionally skipped during
+                # the grace period, so it must be checked again now.
+                self.seen_process_ids.clear()
+
+            if self.violation_state.is_grace_active(now):
+                return
+
             # ── ด่านที่ 1: ตรวจ Process ใหม่จากชื่อและ Path ────────────────
             process_match = self._find_new_process_match()
             if process_match is not None:
                 process_name, exe_path, matched_rule, detection_source = process_match
                 rule_name = matched_rule.get("app_name") or matched_rule.get("match_value")
                 reason = f"ไม่อนุญาตให้เปิดแอป: {rule_name}"
-                self.report_violation(
-                    process_name,
-                    reason,
-                    process_name=process_name,
-                    exe_path=exe_path,
-                    detection_source=detection_source,
+                self._handle_violation_detection(
+                    {
+                        "program_name": process_name,
+                        "reason": reason,
+                        "process_name": process_name,
+                        "exe_path": exe_path,
+                        "window_title": None,
+                        "detection_source": detection_source,
+                    }
                 )
-                if self.info_bar:
-                    self.info_bar.trigger_logout(reason=reason)
                 return
 
             # ── ด่านที่ 2: ตรวจจาก Active Window title ──────────────────────
@@ -906,14 +1102,16 @@ class SmartLabAgent:
             if window_match is not None:
                 rule_name = window_match.get("app_name") or window_match.get("match_value")
                 reason = f"ไม่อนุญาตให้เปิดใช้งาน: {rule_name}"
-                self.report_violation(
-                    raw_title,
-                    reason,
-                    window_title=raw_title,
-                    detection_source="window_title",
+                self._handle_violation_detection(
+                    {
+                        "program_name": raw_title,
+                        "reason": reason,
+                        "process_name": None,
+                        "exe_path": None,
+                        "window_title": raw_title,
+                        "detection_source": "window_title",
+                    }
                 )
-                if self.info_bar:
-                    self.info_bar.trigger_logout(reason=reason)
                 return
 
             # ── บันทึกสถิติการใช้งานปกติ ────────────────────────────────────
@@ -924,6 +1122,28 @@ class SmartLabAgent:
 
         except Exception:
             pass
+
+    def _cleanup_session(self):
+        cleanup = self.session_cleanup
+        self.session_cleanup = None
+        if cleanup is None:
+            return
+
+        try:
+            report = cleanup.cleanup()
+            print(
+                "Session Cleanup: "
+                f"ปิดโปรแกรม {report.closed_processes} รายการ, "
+                f"บังคับปิด {report.force_closed_processes} รายการ, "
+                f"ล้างข้อมูล Browser {report.removed_browser_items} รายการ, "
+                f"ลบไฟล์ใหม่ใน Downloads {report.removed_downloads} รายการ"
+            )
+            if report.errors:
+                print(f"Session Cleanup มีบางส่วนทำไม่สำเร็จ: {', '.join(report.errors)}")
+        except Exception as e:
+            # Session delivery has already been queued before cleanup starts;
+            # an unexpected cleanup error must not interrupt logout.
+            print(f"Session Cleanup ล้มเหลว: {e}")
 
     def stop_and_send_logs(self, session_id, end_reason="logout"):
         self.monitor_timer.stop()
@@ -997,6 +1217,16 @@ class SmartLabAgent:
             except Exception as e:
                 print(f"ปิด Session ไม่ได้: {e}")
 
+        self._cleanup_session()
+        self.usage_segments = []
+        self.current_activity_name = None
+        self.current_activity_started_at = None
+        self.policy_rules = []
+        self.policy_version = None
+        self.policy_source = None
+        self.seen_process_ids.clear()
+        self.violation_state.reset()
+        self.violation_dialog_active = False
         self.current_session_id = None
 
         if not DEBUG_MODE:
