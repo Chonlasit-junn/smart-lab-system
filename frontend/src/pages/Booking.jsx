@@ -65,6 +65,19 @@ const SLOT_TIMES = {
   4: { hours: 17, minutes: 0 },
 };
 
+// Mapping for point log reasons -> Thai display labels (kept in sync with Profile.jsx)
+const POINT_REASON_LABELS = {
+  daily_bonus: "Daily bonus",
+  no_show: "ไม่มาตามการจอง",
+  forbidden_app: "ใช้โปรแกรมต้องห้าม",
+  late_cancel: "ยกเลิกการจองกระชั้นชิด",
+  complete_session: "จบการใช้งานปกติ",
+  admin_grant: "Admin อนุมัติเพิ่มคะแนน",
+};
+
+// localStorage key prefix used to remember which point-log notification the user last saw
+const LAST_SEEN_POINT_LOG_KEY = "last_seen_point_log_id";
+
 // ============================================================================
 // 2. MAIN COMPONENT
 // ============================================================================
@@ -88,6 +101,10 @@ export default function Booking() {
   const [availability, setAvailability] = useState(null);
   const [pointStatus, setPointStatus] = useState(null);
   const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointLogs, setPointLogs] = useState([]);
+  const [lastSeenLogId, setLastSeenLogId] = useState(
+    () => Number(localStorage.getItem(LAST_SEEN_POINT_LOG_KEY)) || 0,
+  );
   const [pointsError, setPointsError] = useState("");
   const [pointRequestLoading, setPointRequestLoading] = useState(false);
 
@@ -155,6 +172,42 @@ export default function Booking() {
 
     return () => {
       cancelled = true;
+    };
+  }, [currentUser?.email]);
+
+  // Fetch recent point-change history to populate the notification bell.
+  useEffect(() => {
+    if (!currentUser?.email) {
+      setPointLogs([]);
+      return undefined;
+    }
+
+    const token = localStorage.getItem("access_token");
+
+    // สร้างฟังก์ชันสำหรับดึงประวัติแจ้งเตือน
+    const fetchPointLogs = async () => {
+      try {
+        const response = await axios.get(
+          `${API_URL}/users/me/points/logs?limit=10`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        setPointLogs(response.data?.data || []);
+      } catch (error) {
+        console.error("[API Error] Failed to fetch point logs:", error);
+      }
+    };
+
+    // 1. เรียกทำงานทันที 1 ครั้งเมื่อเข้าหน้าเว็บ
+    fetchPointLogs();
+
+    // 2. ตั้งเวลาให้ดึงข้อมูลใหม่ทุกๆ 15,000 มิลลิวินาที (15 วินาที)
+    const intervalId = setInterval(fetchPointLogs, 15000);
+
+    // 3. ล้าง Interval เมื่อออกจากหน้าเพื่อป้องกัน Memory Leak
+    return () => {
+      clearInterval(intervalId);
     };
   }, [currentUser?.email]);
 
@@ -391,11 +444,39 @@ export default function Booking() {
   const [notifAnchorEl, setNotifAnchorEl] = useState(null);
   const openNotifMenu = Boolean(notifAnchorEl);
 
-  const handleNotifClick = (e) => setNotifAnchorEl(e.currentTarget);
+  const handleNotifClick = (e) => {
+    setNotifAnchorEl(e.currentTarget);
+    // Mark all currently loaded point-change notifications as seen.
+    if (pointLogs.length > 0) {
+      const latestId = Math.max(...pointLogs.map((log) => log.id));
+      if (latestId > lastSeenLogId) {
+        setLastSeenLogId(latestId);
+        localStorage.setItem(LAST_SEEN_POINT_LOG_KEY, String(latestId));
+      }
+    }
+  };
   const handleCloseNotifMenu = () => setNotifAnchorEl(null);
 
-  // ยังไม่ต่อกับ backend จริง - รอเชื่อมข้อมูลแจ้งเตือนทีหลัง
-  const notifications = [];
+  // Notifications are derived from the user's point-change history.
+  const notifications = useMemo(
+    () =>
+      pointLogs.map((log) => {
+        const isPositive = log.change > 0;
+        const reasonLabel = POINT_REASON_LABELS[log.reason] || log.reason;
+        return {
+          id: log.id,
+          title: `${reasonLabel} ${isPositive ? "+" : ""}${log.change} คะแนน`,
+          subtitle: log.note || "—",
+          time: log.created_at
+            ? new Date(log.created_at).toLocaleString("th-TH")
+            : "—",
+          color: isPositive ? "#16a34a" : "#dc2626",
+          iconText: isPositive ? "+" : "-",
+          unread: log.id > lastSeenLogId,
+        };
+      }),
+    [pointLogs, lastSeenLogId],
+  );
 
   // ============================================================================
   // 7. RENDER HELPERS
@@ -526,7 +607,7 @@ export default function Booking() {
                   maxWidth: "92vw",
                   maxHeight: 520,
                   borderRadius: 3,
-                  bgcolor: "#eff6ff",
+                  bgcolor: "#FFFFFF",
                   color: "#0f172a",
                   boxShadow: "0 20px 45px rgba(15,23,42,0.35)",
                   overflow: "hidden",
@@ -598,7 +679,7 @@ export default function Booking() {
                           fontSize: 14,
                         }}
                       >
-                        {n.title.charAt(0)}
+                        {n.iconText}
                       </Avatar>
 
                       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -628,13 +709,6 @@ export default function Booking() {
                           {n.time}
                         </Typography>
                       </Box>
-
-                      <IconButton
-                        size="small"
-                        sx={{ color: "#94a3b8", mt: 0.5 }}
-                      >
-                        <MoreVertIcon sx={{ fontSize: 18 }} />
-                      </IconButton>
                     </Box>
                   ))
                 )}
