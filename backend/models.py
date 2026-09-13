@@ -85,6 +85,7 @@ class Lab(Base):
     location = Column(String, nullable=True)
     status = Column(String, default="active")  # active | inactive | maintenance
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     bookings = relationship("Booking", back_populates="lab", cascade="all, delete-orphan")
     schedules = relationship("ClassSchedule", back_populates="lab", cascade="all, delete-orphan")
@@ -145,8 +146,6 @@ class ProgramUsageLog(Base):
     usage_start_time = Column(DateTime(timezone=True), nullable=False)
     usage_end_time = Column(DateTime(timezone=True), nullable=False)
     duration_seconds = Column(Integer, nullable=False, default=0)
-    device_name = Column(String, nullable=True)
-    device_mac = Column(String, nullable=True)
     event_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -196,6 +195,7 @@ class ClassSchedule(Base):
     valid_from = Column(Date, nullable=False)
     valid_until = Column(Date, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     lab = relationship("Lab", back_populates="schedules")
 
@@ -224,6 +224,7 @@ class Booking(Base):
     cancellation_reason = Column(String, nullable=True)
     no_show_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="bookings")
     lab = relationship("Lab", back_populates="bookings")
@@ -272,7 +273,6 @@ class PointPolicy(Base):
     forbidden_app = Column(Integer, nullable=False, default=-10)
     late_cancel = Column(Integer, nullable=False, default=-3)
     point_request_amount = Column(Integer, nullable=False, default=10)
-    booking_min_points = Column(Integer, nullable=False, default=80)
     warning_threshold = Column(Integer, nullable=False, default=20)
     ban_level_1_below = Column(Integer, nullable=False, default=20)
     ban_level_1_days = Column(Integer, nullable=False, default=30)
@@ -349,7 +349,7 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True) # หรือ ForeignKey("users.id") ถ้ามีการเชื่อม Relation
+    user_id = Column(BigInteger, ForeignKey("users.id"), index=True)
     subject = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
     status = Column(String(50), default="open") # สถานะเริ่มต้นคือ open

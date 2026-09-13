@@ -71,8 +71,10 @@ Invoke-RestMethod http://127.0.0.1:8000/
 6. `backend/migrations/006_agent_policy_hardening.sql`
 7. `backend/migrations/007_point_requests.sql`
 8. `backend/migrations/008_point_policy.sql`
+9. `backend/migrations/009_remove_booking_point_requirement.sql`
+10. `backend/migrations/010_database_cleanup.sql`
 
-Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม และ policy/evidence ของ Agent การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่ม column ให้ตารางเดิมได้ จึงต้องรัน SQL migration แยก
+Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม, policy/evidence ของ Agent และจัดโครงสร้าง legacy ให้ตรงกับแอป การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่มหรือลบ column ของตารางเดิมได้ จึงต้องรัน SQL migration แยก
 
 ### 3. รัน Frontend
 
@@ -247,7 +249,9 @@ process_name, exe_path, window_title, detection_source
 
 ฟังก์ชัน Test point และ endpoint ที่เกี่ยวข้องควรนำออกหรือปิดก่อนใช้งาน Production เพราะเปลี่ยนข้อมูลคะแนนจริงในฐานข้อมูล
 
-เปิดหน้า `/admin/points/policy` จากเมนู `Point Criteria` เพื่อปรับคะแนน Daily bonus, จบ Session, No-show, โปรแกรมต้องห้าม, ยกเลิกช้า, จำนวนแต้มที่คืนเมื่ออนุมัติคำขอ, เกณฑ์แจ้งเตือน, เกณฑ์จอง และจำนวนวัน Ban แต่ละระดับ ค่าใหม่ถูกใช้กับเหตุการณ์และการตรวจสอบสิทธิ์ครั้งถัดไป โดยไม่แก้ไขประวัติคะแนนเดิม ระบบจะบันทึกผู้แก้ไขและเวลาไว้ใน `point_policies`
+เปิดหน้า `/admin/points/policy` จากเมนู `Point Criteria` เพื่อปรับคะแนน Daily bonus, จบ Session, No-show, โปรแกรมต้องห้าม, ยกเลิกช้า, จำนวนแต้มที่คืนเมื่ออนุมัติคำขอ, เกณฑ์แจ้งเตือน และจำนวนวัน Ban แต่ละระดับ ค่าใหม่ถูกใช้กับเหตุการณ์และการตรวจสอบ Ban ครั้งถัดไป โดยไม่แก้ไขประวัติคะแนนเดิม ระบบจะบันทึกผู้แก้ไขและเวลาไว้ใน `point_policies` การจองห้องไม่มีเกณฑ์คะแนนขั้นต่ำแล้ว ผู้ใช้จะจองไม่ได้เฉพาะกรณีมี Ban ที่ยังไม่หมดอายุ
+
+ถ้าคะแนนเข้าเงื่อนไข Ban หลายระดับ ระบบจะเลือกจำนวนวันของโทษที่สูงสุดเพียงรายการเดียว เช่น จากเดิม Ban 2 วันแล้วคะแนนลดลงเข้าเงื่อนไข Ban 5 วัน ระบบจะขยายวันสิ้นสุดเป็นโทษ 5 วันจากเวลาที่ตรวจพบ ไม่บวกเป็น 7 วัน และยังเก็บรายการเดิมไว้เป็นประวัติ
 
 ### Automated tests
 
@@ -300,7 +304,7 @@ order by p.id desc
 limit 50;
 ```
 
-> `lab_access_logs` เป็นแหล่งข้อมูลหลักของเครื่องในระดับ session ส่วน `program_usage_logs.device_name/device_mac` ยังเก็บไว้เพื่อรองรับข้อมูลเก่าและ compatibility ของ Agent รุ่นเดิม
+> `lab_access_logs` เป็นแหล่งข้อมูลหลักเพียงจุดเดียวของเครื่องในระดับ session ส่วน `program_usage_logs` อ้างอิง session ผ่าน `lab_access_log_id` และรายงานต้อง JOIN ไปยัง session เมื่อต้องการชื่อหรือ MAC ของเครื่อง
 
 ### ตรวจ violation
 

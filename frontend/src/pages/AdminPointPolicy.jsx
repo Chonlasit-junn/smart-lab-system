@@ -103,8 +103,8 @@ const POINT_SECTIONS = [
     ],
   },
   {
-    title: "การกู้คะแนนและการจอง",
-    description: "กำหนดจำนวนแต้มที่ขอคืนได้ รวมถึงเกณฑ์แจ้งเตือนและเกณฑ์อนุญาตให้จอง",
+    title: "การกู้คะแนนและการแจ้งเตือน",
+    description: "กำหนดจำนวนแต้มที่ขอคืนได้และระดับคะแนนที่ใช้แจ้งเตือนผู้ใช้",
     icon: <Assessment sx={{ color: "#3b82f6" }} />,
     fields: [
       {
@@ -121,13 +121,6 @@ const POINT_SECTIONS = [
         min: 0,
         max: 100,
       },
-      {
-        name: "booking_min_points",
-        label: "เกณฑ์ขั้นต่ำสำหรับจองห้อง",
-        helperText: "ผู้ใช้ต้องมีคะแนนอย่างน้อยค่านี้และไม่ติด Ban (1–100)",
-        min: 1,
-        max: 100,
-      },
     ],
   },
 ];
@@ -136,7 +129,7 @@ const BAN_LEVELS = [
   { label: "ระดับ 1 · ต่ำกว่าเกณฑ์วิกฤต", threshold: "ban_level_1_below", days: "ban_level_1_days" },
   { label: "ระดับ 2 · คะแนนต่ำ", threshold: "ban_level_2_below", days: "ban_level_2_days" },
   { label: "ระดับ 3 · คะแนนเริ่มเตือน", threshold: "ban_level_3_below", days: "ban_level_3_days" },
-  { label: "ระดับ 4 · ต่ำกว่าเกณฑ์จอง", threshold: "ban_level_4_below", days: "ban_level_4_days" },
+  { label: "ระดับ 4 · ระดับเตือนสูงสุด", threshold: "ban_level_4_below", days: "ban_level_4_days" },
 ];
 
 const getErrorMessage = (requestError, fallback) => {
@@ -414,7 +407,7 @@ export default function AdminPointPolicy() {
                 ปรับเกณฑ์คะแนน
               </Typography>
               <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
-                ตั้งค่าคะแนนที่ใช้กับการตรวจจับ การจบ Session การแจ้งเตือน และสิทธิ์การจองของผู้ใช้
+                ตั้งค่าคะแนนที่ใช้กับการตรวจจับ การจบ Session การแจ้งเตือน และบทลงโทษของผู้ใช้
               </Typography>
               <Typography variant="caption" color="#94a3b8" sx={{ display: "block", mt: 0.5 }}>
                 แก้ไขล่าสุด {formatDateTime(lastUpdated)} · คะแนนสูงสุดยังคงที่ 100 คะแนน
@@ -432,7 +425,7 @@ export default function AdminPointPolicy() {
           </Box>
 
           <Alert severity="info" sx={{ mb: 3, borderRadius: 3 }}>
-            ค่าใหม่จะมีผลกับเหตุการณ์คะแนนและการตรวจสอบสิทธิ์การจองในครั้งถัดไป ประวัติคะแนนเดิมจะไม่ถูกแก้ไข
+            ค่าใหม่จะมีผลกับเหตุการณ์คะแนนและการตรวจสอบ Ban ในครั้งถัดไป ประวัติคะแนนเดิมจะไม่ถูกแก้ไข
           </Alert>
 
           {error && <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>{error}</Alert>}
@@ -465,12 +458,12 @@ export default function AdminPointPolicy() {
                 <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, mb: 1 }}>
                   <Avatar sx={{ bgcolor: "#fff7ed", width: 42, height: 42 }}><Block sx={{ color: "#f97316" }} /></Avatar>
                   <Box>
-                    <Typography variant="h6" fontWeight="800" color="#1e293b">เกณฑ์การระงับการจอง</Typography>
+                    <Typography variant="h6" fontWeight="800" color="#1e293b">เกณฑ์การลงโทษ Ban</Typography>
                     <Typography variant="body2" color="#64748b">คะแนนต่ำกว่าแต่ละระดับจะถูกระงับตามจำนวนวันที่กำหนด หากใส่ 0 วันจะไม่สร้าง Ban ในระดับนั้น</Typography>
                   </Box>
                 </Box>
                 <Alert severity="warning" sx={{ my: 2.5, borderRadius: 2.5 }}>
-                  Threshold ต้องเรียงจากน้อยไปมาก และ threshold สูงสุดต้องไม่เกินเกณฑ์ขั้นต่ำสำหรับจองห้อง
+                  Threshold ต้องเรียงจากน้อยไปมาก หากคะแนนเข้าได้หลายระดับ ระบบจะใช้จำนวนวัน Ban ที่สูงสุดเพียงรายการเดียว และไม่บวกวันซ้อนกัน
                 </Alert>
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 2.5 }}>
                   {BAN_LEVELS.map((level) => (

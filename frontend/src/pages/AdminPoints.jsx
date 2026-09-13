@@ -57,7 +57,7 @@ import {
 } from "./adminPointsTestUtils";
 
 const API_URL = import.meta.env.VITE_API_URL;
-const DEFAULT_BOOKING_MIN_POINTS = 80;
+const DEFAULT_WARNING_THRESHOLD = 20;
 
 const SIDE_MENU_ITEMS = [
   {
@@ -100,7 +100,7 @@ const SIDE_MENU_ITEMS = [
 const EMPTY_SUMMARY = {
   total_users: 0,
   average_points: 0,
-  below_booking_threshold: 0,
+  low_point_users: 0,
   banned_users: 0,
   booking_allowed: 0,
   zero_point_users: 0,
@@ -125,9 +125,9 @@ const getInitials = (user) => {
   return initials.toUpperCase() || "U";
 };
 
-const getScoreColor = (score, bookingMinPoints = DEFAULT_BOOKING_MIN_POINTS) => {
-  if (score < 40) return "#ef4444";
-  if (score < bookingMinPoints) return "#f59e0b";
+const getScoreColor = (score, warningThreshold = DEFAULT_WARNING_THRESHOLD) => {
+  if (score <= warningThreshold) return "#ef4444";
+  if (score < 60) return "#f59e0b";
   return "#10b981";
 };
 
@@ -167,12 +167,12 @@ const getRoleColor = (role) => ({
   guest: { bgcolor: "#f1f5f9", color: "#64748b" },
 }[role] || { bgcolor: "#f1f5f9", color: "#64748b" });
 
-const buildSummary = (userRows, bookingMinPoints, pendingPointRequests = 0) => {
+const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
   const scores = userRows.map((user) => Math.max(0, Math.min(100, Number(user.points) || 0)));
   return {
     total_users: userRows.length,
     average_points: scores.length ? Math.round((scores.reduce((total, score) => total + score, 0) / scores.length) * 10) / 10 : 0,
-    below_booking_threshold: userRows.filter((user) => Number(user.points) < bookingMinPoints).length,
+    low_point_users: userRows.filter((user) => Number(user.points) <= warningThreshold).length,
     banned_users: userRows.filter((user) => user.is_banned).length,
     booking_allowed: userRows.filter((user) => user.booking_allowed).length,
     zero_point_users: userRows.filter((user) => Number(user.points) === 0).length,
@@ -188,7 +188,7 @@ export default function AdminPoints() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
-  const [bookingMinPoints, setBookingMinPoints] = useState(DEFAULT_BOOKING_MIN_POINTS);
+  const [warningThreshold, setWarningThreshold] = useState(DEFAULT_WARNING_THRESHOLD);
   const [scoreDate, setScoreDate] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -221,12 +221,14 @@ export default function AdminPoints() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const payload = response.data || {};
-      const nextBookingMinPoints = Number(payload.booking_min_points) || DEFAULT_BOOKING_MIN_POINTS;
+      const nextWarningThreshold = Number.isFinite(Number(payload.points_warning_threshold))
+        ? Number(payload.points_warning_threshold)
+        : DEFAULT_WARNING_THRESHOLD;
       const userRows = (Array.isArray(payload.data) ? payload.data : []).filter((user) => user.role !== "admin");
       const pendingPointRequests = Array.isArray(payload.point_requests) ? payload.point_requests : [];
       setRows(userRows);
-      setSummary(buildSummary(userRows, nextBookingMinPoints, pendingPointRequests.length));
-      setBookingMinPoints(nextBookingMinPoints);
+      setSummary(buildSummary(userRows, nextWarningThreshold, pendingPointRequests.length));
+      setWarningThreshold(nextWarningThreshold);
       setScoreDate(payload.score_date || null);
       setPointRequests(pendingPointRequests);
     } catch (requestError) {
@@ -360,7 +362,7 @@ export default function AdminPoints() {
       if (user.role === "admin") return false;
       const searchableText = `${user.name || ""} ${user.email || ""} ${user.user_id || ""}`.toLowerCase();
       if (query && !searchableText.includes(query)) return false;
-      if (filter === "low" && user.points >= bookingMinPoints) return false;
+      if (filter === "low" && Number(user.points) > warningThreshold) return false;
       if (filter === "banned" && !user.is_banned) return false;
       if (filter === "allowed" && !user.booking_allowed) return false;
       return true;
@@ -371,7 +373,7 @@ export default function AdminPoints() {
       if (sortBy === "name") return (first.name || "").localeCompare(second.name || "");
       return first.points - second.points;
     });
-  }, [bookingMinPoints, filter, rows, searchQuery, sortBy]);
+  }, [filter, rows, searchQuery, sortBy, warningThreshold]);
 
   const statCards = [
     {
@@ -389,9 +391,9 @@ export default function AdminPoints() {
       icon: <Assessment />,
     },
     {
-      label: "ต่ำกว่าเกณฑ์",
-      value: summary.below_booking_threshold,
-      helper: `ต่ำกว่า ${bookingMinPoints} คะแนน`,
+      label: "คะแนนต่ำ",
+      value: summary.low_point_users,
+      helper: `ไม่เกิน ${warningThreshold} คะแนน`,
       color: "#f59e0b",
       icon: <WarningAmber />,
     },
@@ -580,7 +582,7 @@ export default function AdminPoints() {
                 ตรวจสอบคะแนนสะสม คะแนนรายวัน และสิทธิ์การจองของทุกบัญชี
               </Typography>
               <Typography variant="caption" color="#94a3b8" sx={{ display: "block", mt: 0.5 }}>
-                คะแนนรายวัน ณ {formatDate(scoreDate)} · เกณฑ์การจอง {bookingMinPoints} คะแนน
+                คะแนนรายวัน ณ {formatDate(scoreDate)} · การจองขึ้นกับสถานะ Ban เท่านั้น
               </Typography>
             </Box>
             <Button
@@ -698,7 +700,7 @@ export default function AdminPoints() {
                 <InputLabel id="points-filter-label">ตัวกรอง</InputLabel>
                 <Select labelId="points-filter-label" value={filter} label="ตัวกรอง" onChange={(event) => setFilter(event.target.value)}>
                   <MenuItem value="all">ผู้ใช้ทั้งหมด</MenuItem>
-                  <MenuItem value="low">ต่ำกว่าเกณฑ์</MenuItem>
+                  <MenuItem value="low">คะแนนต่ำ</MenuItem>
                   <MenuItem value="banned">ถูกระงับการจอง</MenuItem>
                   <MenuItem value="allowed">จองได้</MenuItem>
                 </Select>
@@ -742,7 +744,7 @@ export default function AdminPoints() {
                       filteredRows.map((user) => {
                         const points = Math.max(0, Math.min(100, Number(user.points) || 0));
                         const dailyScore = Math.max(0, Math.min(100, Number(user.daily_score) || 0));
-                        const scoreColor = getScoreColor(points, bookingMinPoints);
+                        const scoreColor = getScoreColor(points, warningThreshold);
                         const roleColor = getRoleColor(user.role);
                         const testActionBusy = testDeductionId === user.user_id || testResetId === user.user_id;
                         return (
@@ -779,7 +781,7 @@ export default function AdminPoints() {
                                     {points}/100
                                   </Typography>
                                   <Typography variant="caption" color="#94a3b8">
-                                    เกณฑ์ {bookingMinPoints}
+                                    เตือนเมื่อ ≤ {warningThreshold}
                                   </Typography>
                                 </Box>
                                 <LinearProgress

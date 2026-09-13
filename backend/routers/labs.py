@@ -216,7 +216,7 @@ def create_booking(
         raise HTTPException(
             status_code=403,
             detail={
-                "message": "Booking is unavailable because the account does not meet the point requirement.",
+                "message": "Booking is unavailable while the account has an active penalty.",
                 **restriction,
             },
         )

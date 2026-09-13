@@ -5,7 +5,6 @@ export const DEFAULT_POINT_POLICY = Object.freeze({
   forbidden_app: -10,
   late_cancel: -3,
   point_request_amount: 10,
-  booking_min_points: 80,
   warning_threshold: 20,
   ban_level_1_below: 20,
   ban_level_1_days: 30,
@@ -26,7 +25,6 @@ const FIELD_RANGES = {
   forbidden_app: [-100, 0],
   late_cancel: [-100, 0],
   point_request_amount: [1, 100],
-  booking_min_points: [1, 100],
   warning_threshold: [0, 100],
   ban_level_1_below: [1, 100],
   ban_level_1_days: [0, 365],
@@ -75,12 +73,6 @@ export function validatePointPolicy(values) {
   ];
   if (thresholds.some((threshold, index) => index > 0 && threshold <= thresholds[index - 1])) {
     return "เกณฑ์คะแนนสำหรับ Ban ต้องเรียงจากน้อยไปมากและไม่ซ้ำกัน";
-  }
-  if (Number(values.warning_threshold) >= Number(values.booking_min_points)) {
-    return "เกณฑ์แจ้งเตือนต้องน้อยกว่าเกณฑ์การจอง";
-  }
-  if (Number(values.ban_level_4_below) > Number(values.booking_min_points)) {
-    return "เกณฑ์ Ban ระดับสูงสุดต้องไม่มากกว่าเกณฑ์การจอง";
   }
   return "";
 }
