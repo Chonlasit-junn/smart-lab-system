@@ -89,7 +89,6 @@ class PointSystemTests(unittest.TestCase):
     def test_policy_defaults_are_created_and_can_change_future_events(self):
         policy = points.get_or_create_point_policy(self.session)
         self.assertEqual(policy.daily_bonus, 1)
-        self.assertEqual(policy.booking_min_points, 80)
 
         payload = points.PointPolicyUpdate(
             daily_bonus=3,
@@ -98,7 +97,6 @@ class PointSystemTests(unittest.TestCase):
             forbidden_app=-12,
             late_cancel=-4,
             point_request_amount=15,
-            booking_min_points=70,
             warning_threshold=15,
             ban_level_1_below=15,
             ban_level_1_days=30,
@@ -111,7 +109,6 @@ class PointSystemTests(unittest.TestCase):
         )
         response = points.update_point_policy(payload, self.admin, self.session)
         self.assertEqual(response["data"]["complete_session"], 6)
-        self.assertEqual(response["data"]["booking_min_points"], 70)
         self.assertEqual(response["data"]["updated_by"], self.admin.id)
 
         self._point_record().points = 50
@@ -125,7 +122,6 @@ class PointSystemTests(unittest.TestCase):
         self.assertEqual(event["change"], 6)
         self.assertEqual(event["after"], 56)
         restriction = points.get_booking_restriction(self.student.id, self.session)
-        self.assertEqual(restriction["booking_min_points"], 70)
         self.assertEqual(restriction["points_warning_threshold"], 15)
 
     def test_policy_rejects_invalid_threshold_order(self):
@@ -231,6 +227,56 @@ class PointSystemTests(unittest.TestCase):
                 points.test_deduct_user_points(other_admin.id, self.admin, self.session)
 
         self.assertEqual(context.exception.status_code, 404)
+
+    def test_low_points_do_not_block_booking_without_active_ban(self):
+        self._point_record().points = 50
+        self.session.commit()
+
+        restriction = points.get_booking_restriction(self.student.id, self.session)
+
+        self.assertTrue(restriction["booking_allowed"])
+        self.assertIsNone(restriction["booking_block_reason"])
+
+    def test_penalty_escalates_to_highest_duration_without_stacking(self):
+        policy = points.get_or_create_point_policy(self.session)
+        policy.ban_level_3_below = 50
+        policy.ban_level_3_days = 5
+        self._point_record().points = 85
+        self.session.commit()
+
+        first_time = datetime(2026, 9, 13, 10, 0, tzinfo=timezone.utc)
+        escalation_time = first_time + timedelta(hours=1)
+        for event_number, event_time in enumerate(
+            (first_time, first_time, first_time, escalation_time),
+            start=1,
+        ):
+            with patch.object(points, "_now_utc", return_value=event_time):
+                points.apply_point_event(
+                    self.student.id,
+                    "forbidden_app",
+                    self.session,
+                    event_id=f"penalty-escalation:{event_number}",
+                    effective_at=event_time,
+                    policy=policy,
+                )
+
+        ban_rows = self.session.query(models.BanRecord).filter_by(
+            user_id=self.student.id,
+        ).order_by(models.BanRecord.ban_until.desc()).all()
+        self.assertEqual(len(ban_rows), 2)
+        effective_until = points._as_aware(ban_rows[0].ban_until)
+        expected_until = escalation_time + timedelta(days=5)
+        self.assertEqual(effective_until, expected_until)
+
+    def test_highest_matching_penalty_is_selected(self):
+        policy = points.get_or_create_point_policy(self.session)
+        policy.ban_level_1_days = 2
+        policy.ban_level_2_days = 7
+        policy.ban_level_3_days = 5
+        policy.ban_level_4_days = 1
+        self.session.commit()
+
+        self.assertEqual(points._highest_ban_days(10, policy), 7)
 
 
 if __name__ == "__main__":

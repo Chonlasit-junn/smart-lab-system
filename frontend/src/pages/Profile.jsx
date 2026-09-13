@@ -510,7 +510,7 @@ export default function Profile() {
                     {pointsError}
                   </Alert>
                 ) : numericPoints !== null &&
-                  (profile.is_banned || numericPoints < 80) ? (
+                  (profile.is_banned || numericPoints <= pointWarningThreshold) ? (
                   <Alert
                     severity={numericPoints === 0 || profile.is_banned ? "error" : "warning"}
                     sx={{ mb: 3 }}
@@ -518,7 +518,7 @@ export default function Profile() {
                     {numericPoints === 0 ? (
                       <Box>
                         <Typography fontWeight="700">
-                          คะแนนของคุณเหลือ 0 คะแนน จึงไม่สามารถจองห้องได้
+                          คะแนนของคุณเหลือ 0 คะแนน กรุณาติดต่อ Admin เพื่อขอความช่วยเหลือ
                         </Typography>
                         {pointRequest?.status === "pending" ? (
                           <Typography variant="body2" sx={{ mt: 0.5 }}>
@@ -540,10 +540,8 @@ export default function Profile() {
                     ) : profile.is_banned ? (
                       `บัญชีถูกระงับการจองถึง ${new Date(profile.ban_until).toLocaleString("th-TH")}`
                     ) : numericPoints <= pointWarningThreshold ? (
-                      `คำเตือน: คะแนนเหลือ ${numericPoints} คะแนน ใกล้ถึง 0 และขณะนี้ไม่สามารถจองห้องได้`
-                    ) : (
-                      `คะแนนเหลือ ${numericPoints} คะแนน ต่ำกว่าเกณฑ์ 80 คะแนน จึงไม่สามารถจองห้องได้`
-                    )}
+                      `คำเตือน: คะแนนเหลือ ${numericPoints} คะแนน ใกล้ถึง 0 โปรดระมัดระวังการทำผิดกฎ`
+                    ) : null}
                   </Alert>
                 ) : null}
                 <Grid container spacing={3}>
@@ -896,9 +894,9 @@ export default function Profile() {
                             fontWeight: "bold",
                           }}
                         />
-                      ) : numericPoints !== null && numericPoints < 80 ? (
+                      ) : numericPoints !== null && numericPoints <= pointWarningThreshold ? (
                         <Chip
-                          label="คะแนนต่ำกว่าเกณฑ์ — จองไม่ได้"
+                          label="คะแนนต่ำ — โปรดระวังการทำผิดกฎ"
                           size="small"
                           sx={{
                             bgcolor: "#fff7ed",

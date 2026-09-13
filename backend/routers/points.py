@@ -13,7 +13,6 @@ from routers.users import get_current_user
 router = APIRouter(tags=["Point System"])
 
 MAX_POINTS = 100
-BOOKING_MIN_POINTS = 80
 POINT_WARNING_THRESHOLD = 20
 POINT_REQUEST_AMOUNT = 10
 ADMIN_TEST_DEDUCTION = 10
@@ -52,7 +51,6 @@ DEFAULT_POINT_POLICY = {
     "forbidden_app": -10,
     "late_cancel": -3,
     "point_request_amount": POINT_REQUEST_AMOUNT,
-    "booking_min_points": BOOKING_MIN_POINTS,
     "warning_threshold": POINT_WARNING_THRESHOLD,
     "ban_level_1_below": 20,
     "ban_level_1_days": 30,
@@ -72,7 +70,6 @@ class PointPolicyUpdate(BaseModel):
     forbidden_app: int = Field(..., ge=-100, le=0)
     late_cancel: int = Field(..., ge=-100, le=0)
     point_request_amount: int = Field(..., ge=1, le=100)
-    booking_min_points: int = Field(..., ge=1, le=MAX_POINTS)
     warning_threshold: int = Field(..., ge=0, le=MAX_POINTS)
     ban_level_1_below: int = Field(..., ge=1, le=MAX_POINTS)
     ban_level_1_days: int = Field(..., ge=0, le=365)
@@ -189,16 +186,6 @@ def _validate_point_policy_values(values: dict) -> None:
             status_code=422,
             detail="Ban score thresholds must be strictly increasing.",
         )
-    if values["warning_threshold"] >= values["booking_min_points"]:
-        raise HTTPException(
-            status_code=422,
-            detail="Warning threshold must be lower than the booking threshold.",
-        )
-    if values["ban_level_4_below"] > values["booking_min_points"]:
-        raise HTTPException(
-            status_code=422,
-            detail="The highest ban threshold cannot exceed the booking threshold.",
-        )
 
 
 def _warning_level(
@@ -206,13 +193,10 @@ def _warning_level(
     policy: Optional[models.PointPolicy] = None,
 ) -> str:
     warning_threshold = _policy_value(policy, "warning_threshold")
-    booking_min_points = _policy_value(policy, "booking_min_points")
     if points == 0:
         return "zero"
     if points <= warning_threshold:
         return "critical"
-    if points < booking_min_points:
-        return "warning"
     return "normal"
 
 
@@ -326,6 +310,23 @@ def _get_active_ban(user_id: int, db: Session) -> Optional[models.BanRecord]:
     ).order_by(models.BanRecord.ban_until.desc()).first()
 
 
+def _highest_ban_days(
+    points: int,
+    policy: Optional[models.PointPolicy] = None,
+) -> Optional[int]:
+    """Return the longest penalty matching the user's current score.
+
+    A score can match several threshold rows at once. The longest configured
+    Ban is the effective penalty; lower penalties must not be added on top.
+    """
+    matching_days = [
+        int(rule["ban_days"])
+        for rule in _ban_rules(policy)
+        if points < int(rule["below"]) and int(rule["ban_days"]) > 0
+    ]
+    return max(matching_days, default=None)
+
+
 def apply_ban_if_needed(
     user_id: int,
     points: int,
@@ -333,12 +334,8 @@ def apply_ban_if_needed(
     event_reason: Optional[str] = None,
     policy: Optional[models.PointPolicy] = None,
 ) -> Optional[int]:
-    """สร้างประวัติ Ban เฉพาะเมื่อ Ban ใหม่ยาวกว่าที่กำลังใช้อยู่"""
-    ban_days = next(
-        (rule["ban_days"] for rule in sorted(_ban_rules(policy), key=lambda item: item["below"])
-         if points < rule["below"]),
-        None,
-    )
+    """Apply only the highest matching penalty without stacking durations."""
+    ban_days = _highest_ban_days(points, policy)
     if ban_days is None or ban_days <= 0:
         return None
 
@@ -606,16 +603,12 @@ def get_booking_restriction(user_id: int, db: Session) -> dict:
         record.points = points
     ban_until = is_user_banned(user_id, db)
     reasons = []
-    booking_min_points = _policy_value(policy, "booking_min_points")
-    if points < booking_min_points:
-        reasons.append(f"คะแนน {points} ต่ำกว่าเกณฑ์ {booking_min_points}")
     if ban_until:
         reasons.append("บัญชีถูกระงับการจองชั่วคราว")
 
     return {
         "points": points,
-        "booking_min_points": booking_min_points,
-        "booking_allowed": not reasons,
+        "booking_allowed": ban_until is None,
         "booking_block_reason": " และ ".join(reasons) if reasons else None,
         "is_banned": ban_until is not None,
         "ban_until": ban_until,
@@ -870,7 +863,7 @@ def get_all_user_points(
             "points": points,
             "daily_score": daily_score,
             "daily_score_date": today,
-            "booking_allowed": points >= _policy_value(policy, "booking_min_points") and ban_until is None,
+            "booking_allowed": ban_until is None,
             "is_banned": ban_until is not None,
             "ban_until": ban_until,
             "warning_level": _warning_level(points, policy),
@@ -885,7 +878,6 @@ def get_all_user_points(
     return {
         "data": result,
         "score_date": today,
-        "booking_min_points": _policy_value(policy, "booking_min_points"),
         "points_warning_threshold": _policy_value(policy, "warning_threshold"),
         "point_request_amount": _policy_value(policy, "point_request_amount"),
         "point_requests": [
@@ -895,8 +887,8 @@ def get_all_user_points(
         "summary": {
             "total_users": len(result),
             "average_points": round(sum(scores) / len(scores), 1) if scores else 0,
-            "below_booking_threshold": sum(
-                item["points"] < _policy_value(policy, "booking_min_points") for item in result
+            "low_point_users": sum(
+                item["points"] <= _policy_value(policy, "warning_threshold") for item in result
             ),
             "banned_users": sum(item["is_banned"] for item in result),
             "booking_allowed": sum(item["booking_allowed"] for item in result),
@@ -1216,7 +1208,7 @@ def get_low_point_users(
         models.User,
         models.User.id == models.UserPoints.user_id,
     ).filter(
-        models.UserPoints.points < _policy_value(policy, "booking_min_points"),
+        models.UserPoints.points <= _policy_value(policy, "warning_threshold"),
         ~models.User.roles.any(models.Role.name == "admin"),
     ).order_by(models.UserPoints.points.asc()).all()
 
@@ -1292,10 +1284,9 @@ def get_admin_user_details(
         "points": points,
         "daily_score": daily_score,
         "daily_score_date": today,
-        "booking_min_points": _policy_value(policy, "booking_min_points"),
         "points_warning_threshold": _policy_value(policy, "warning_threshold"),
         "point_request_amount": _policy_value(policy, "point_request_amount"),
-        "booking_allowed": points >= _policy_value(policy, "booking_min_points") and ban_until is None,
+        "booking_allowed": ban_until is None,
         "is_banned": ban_until is not None,
         "ban_until": ban_until,
         "warning_level": _warning_level(points, policy),
@@ -1423,8 +1414,9 @@ def get_admin_user_details(
                 "usage_start_time": usage.usage_start_time,
                 "usage_end_time": usage.usage_end_time,
                 "duration_seconds": usage.duration_seconds,
-                "device_name": usage.device_name,
-                "device_mac": usage.device_mac,
+                # Device identity is stored once on the parent session.
+                "device_name": access_log.device_used,
+                "device_mac": access_log.device_mac,
                 "event_id": usage.event_id,
                 "created_at": usage.created_at,
             }

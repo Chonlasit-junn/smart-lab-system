@@ -250,11 +250,6 @@ def start_session(
 def log_usage(
     session_id: int = Form(...),
     usage_data: str = Form(...),
-    device_name: Optional[str] = Form(None),
-    device_mac: Optional[str] = Form(None),
-    # Backward-compatible names used by the unmerged Agent refactor.
-    device: Optional[str] = Form(None),
-    mac: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     access_log = db.query(models.LabAccessLog).filter(
@@ -269,15 +264,6 @@ def log_usage(
             raise HTTPException(status_code=422, detail="usage_data must be a JSON list.")
 
         now = datetime.now()
-        # Keep accepting legacy payload fields while using the Session as the
-        # canonical source for device identity.
-        resolved_device_name = (
-            access_log.device_used or device_name or device or ""
-        ).strip() or None
-        resolved_device_mac = (
-            access_log.device_mac or device_mac or mac or ""
-        ).strip() or None
-
         parsed_logs = []
         for item in logs:
             if not isinstance(item, dict) or not str(item.get("name", "")).strip():
@@ -344,8 +330,6 @@ def log_usage(
                 duration_seconds=item["duration_seconds"],
                 usage_start_time=item["usage_start_time"],
                 usage_end_time=item["usage_end_time"],
-                device_name=resolved_device_name,
-                device_mac=resolved_device_mac,
                 event_id=event_id,
             ))
             created_count += 1

@@ -852,8 +852,6 @@ class SmartLabAgent:
                 payload={
                     "session_id": self.current_session_id,
                     "usage_data": json.dumps([segment], ensure_ascii=False),
-                    "device_name": DEVICE_NAME,
-                    "device_mac": DEVICE_MAC,
                 },
                 session_id=self.current_session_id,
                 event_id=segment["event_id"],
@@ -1165,8 +1163,6 @@ class SmartLabAgent:
                     payload={
                         "session_id": session_id,
                         "usage_data": json.dumps([segment], ensure_ascii=False),
-                        "device_name": DEVICE_NAME,
-                        "device_mac": DEVICE_MAC,
                     },
                     session_id=session_id,
                     event_id=segment.get("event_id"),
@@ -1195,8 +1191,6 @@ class SmartLabAgent:
                         data={
                             "session_id": session_id,
                             "usage_data": json.dumps(summary, ensure_ascii=False),
-                            "device_name": DEVICE_NAME,
-                            "device_mac": DEVICE_MAC,
                         },
                     )
                     print(f"Server Response: {r.status_code if r else 'Timeout'}")
