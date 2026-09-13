@@ -18,7 +18,6 @@ import {
   Dialog,
   DialogContent,
   Popover,
-  Badge,
 } from "@mui/material";
 import {
   Search,
@@ -39,7 +38,6 @@ import {
   CheckCircle,
   Settings,
   Close,
-  MoreVert as MoreVertIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -375,6 +373,7 @@ export default function Booking() {
   };
 
   // Add User Menu Popover States
+  // Add User Menu Popover States
   const [anchorEl, setAnchorEl] = useState(null);
   const openUserMenu = Boolean(anchorEl);
 
@@ -501,145 +500,9 @@ export default function Booking() {
             <IconButton sx={{ display: { xs: "block", md: "none" } }}>
               <Search sx={{ color: "#111827" }} />
             </IconButton>
-            <IconButton onClick={handleNotifClick}>
-              <Badge
-                variant="dot"
-                color="error"
-                overlap="circular"
-                invisible={!notifications.some((n) => n.unread)}
-              >
-                <Notifications sx={{ color: "#111827" }} />
-              </Badge>
+            <IconButton>
+              <Notifications sx={{ color: "#111827" }} />
             </IconButton>
-
-            {/* Notification Popover (UI only, ยังไม่มีข้อมูลจริง) */}
-            <Popover
-              anchorEl={notifAnchorEl}
-              open={openNotifMenu}
-              onClose={handleCloseNotifMenu}
-              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-              transformOrigin={{ vertical: "top", horizontal: "right" }}
-              PaperProps={{
-                sx: {
-                  mt: 1.5,
-                  width: 380,
-                  maxWidth: "92vw",
-                  maxHeight: 520,
-                  borderRadius: 3,
-                  bgcolor: "#eff6ff",
-                  color: "#0f172a",
-                  boxShadow: "0 20px 45px rgba(15,23,42,0.35)",
-                  overflow: "hidden",
-                  display: "flex",
-                  flexDirection: "column",
-                },
-              }}
-            >
-              {/* Header */}
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  px: 2.5,
-                  py: 2,
-                  flexShrink: 0,
-                }}
-              >
-                <Typography fontSize="16px" fontWeight="700">
-                  การแจ้งเตือน
-                </Typography>
-              </Box>
-
-              {/* Scrollable notification list */}
-              <Box sx={{ overflowY: "auto", px: 1, pb: 1 }}>
-                {notifications.length === 0 ? (
-                  <Box sx={{ py: 4, textAlign: "center" }}>
-                    <Typography fontSize="13px" sx={{ color: "#64748b" }}>
-                      ยังไม่มีการแจ้งเตือน
-                    </Typography>
-                  </Box>
-                ) : (
-                  notifications.map((n) => (
-                    <Box
-                      key={n.id}
-                      sx={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "rgba(0, 0, 0, 0.04)" },
-                      }}
-                    >
-                      {/* Unread dot */}
-                      <Box sx={{ pt: 1.2 }}>
-                        {n.unread ? (
-                          <Box
-                            sx={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: "50%",
-                              bgcolor: "#2563eb",
-                            }}
-                          />
-                        ) : (
-                          <Box sx={{ width: 8, height: 8 }} />
-                        )}
-                      </Box>
-
-                      <Avatar
-                        sx={{
-                          bgcolor: n.color,
-                          width: 36,
-                          height: 36,
-                          fontSize: 14,
-                        }}
-                      >
-                        {n.title.charAt(0)}
-                      </Avatar>
-
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography
-                          fontSize="13.5px"
-                          fontWeight="600"
-                          sx={{
-                            color: "#1e293b",
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                          }}
-                        >
-                          {n.title}
-                        </Typography>
-                        <Typography
-                          fontSize="12px"
-                          sx={{ color: "#475569", mt: 0.3 }}
-                        >
-                          {n.subtitle}
-                        </Typography>
-                        <Typography
-                          fontSize="12px"
-                          sx={{ color: "#64748b", mt: 0.3 }}
-                        >
-                          {n.time}
-                        </Typography>
-                      </Box>
-
-                      <IconButton
-                        size="small"
-                        sx={{ color: "#94a3b8", mt: 0.5 }}
-                      >
-                        <MoreVertIcon sx={{ fontSize: 18 }} />
-                      </IconButton>
-                    </Box>
-                  ))
-                )}
-              </Box>
-            </Popover>
 
             {/* Profile Section */}
             {currentUser ? (
