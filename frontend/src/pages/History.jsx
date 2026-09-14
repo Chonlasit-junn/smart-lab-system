@@ -159,7 +159,7 @@ export default function History() {
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="bold"
+              fontWeight="800"
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
@@ -424,7 +424,7 @@ export default function History() {
             >
               <Typography
                 variant="h6"
-                fontWeight="bold"
+                fontWeight="700"
                 color="#64748b"
                 sx={{ mb: 3 }}
               >

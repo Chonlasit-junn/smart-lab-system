@@ -392,7 +392,7 @@ export default function ManageLabs() {
       {/* --- SIDEBAR --- */}
       <Box
         sx={{
-          width: "240px",
+          width: "var(--sidebar-width)",
           bgcolor: "#f0f7ff",
           borderRight: "1px solid #e2efff",
           display: "flex",
@@ -454,8 +454,9 @@ export default function ManageLabs() {
                   bgcolor: isActive ? "white" : "transparent",
                   color: isActive ? "#3b82f6" : "#94a3b8",
                   fontWeight: isActive ? "700" : "600",
+                  fontSize: "var(--sidebar-font-size)",
                   boxShadow: isActive ? "0 10px 25px rgba(0,0,0,0.03)" : "none",
-                  borderRadius: 4,
+                  borderRadius: "var(--sidebar-active-radius)",
                   textTransform: "none",
                   transition: "0.3s",
                   "&:hover": {

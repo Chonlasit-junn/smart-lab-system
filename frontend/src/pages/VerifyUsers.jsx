@@ -123,7 +123,11 @@ export default function VerifyUsers() {
       setPendingUsers(response.data?.data || []);
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
-      setError(typeof detail === "string" ? detail : "ไม่สามารถโหลดรายการผู้ใช้ที่รอตรวจสอบได้");
+      setError(
+        typeof detail === "string"
+          ? detail
+          : "ไม่สามารถโหลดรายการผู้ใช้ที่รอตรวจสอบได้",
+      );
     } finally {
       setLoading(false);
     }
@@ -135,7 +139,10 @@ export default function VerifyUsers() {
   }, [fetchPendingUsers]);
 
   const handleVerify = async (userId, action) => {
-    if (action === "reject" && !window.confirm("Are you sure you want to reject and delete this user?")) {
+    if (
+      action === "reject" &&
+      !window.confirm("Are you sure you want to reject and delete this user?")
+    ) {
       return;
     }
 
@@ -146,7 +153,9 @@ export default function VerifyUsers() {
       await fetchPendingUsers();
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
-      setError(typeof detail === "string" ? detail : `Failed to ${action} user.`);
+      setError(
+        typeof detail === "string" ? detail : `Failed to ${action} user.`,
+      );
     } finally {
       setProcessingId(null);
     }
@@ -157,7 +166,8 @@ export default function VerifyUsers() {
     if (!query) return pendingUsers;
 
     return pendingUsers.filter((user) => {
-      const searchableText = `${user.first_name || ""} ${user.last_name || ""} ${user.email || ""} ${user.phone || ""}`.toLowerCase();
+      const searchableText =
+        `${user.first_name || ""} ${user.last_name || ""} ${user.email || ""} ${user.phone || ""}`.toLowerCase();
       return searchableText.includes(query);
     });
   }, [pendingUsers, searchQuery]);
@@ -180,7 +190,7 @@ export default function VerifyUsers() {
       {/* SIDEBAR */}
       <Box
         sx={{
-          width: 240,
+          width: "var(--sidebar-width)",
           bgcolor: "#f0f7ff",
           borderRight: "1px solid #e2efff",
           display: { xs: "none", md: "flex" },
@@ -205,10 +215,22 @@ export default function VerifyUsers() {
             <Computer sx={{ color: "white", fontSize: 28 }} />
           </Box>
           <Box>
-            <Typography variant="h6" fontWeight="800" sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}>
+            <Typography
+              variant="h6"
+              fontWeight="800"
+              sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}
+            >
               Smart Lab
             </Typography>
-            <Typography variant="caption" sx={{ color: "#64748b", fontWeight: "500", display: "block", mt: -0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "#64748b",
+                fontWeight: "500",
+                display: "block",
+                mt: -0.5,
+              }}
+            >
               Admin Dashboard
             </Typography>
           </Box>
@@ -231,8 +253,9 @@ export default function VerifyUsers() {
                   bgcolor: isActive ? "white" : "transparent",
                   color: isActive ? "#3b82f6" : "#94a3b8",
                   fontWeight: isActive ? "700" : "600",
+                  fontSize: "var(--sidebar-font-size)",
                   boxShadow: isActive ? "0 10px 25px rgba(0,0,0,0.03)" : "none",
-                  borderRadius: 4,
+                  borderRadius: "var(--sidebar-active-radius)",
                   textTransform: "none",
                   transition: "0.3s",
                   "&:hover": {
@@ -250,7 +273,15 @@ export default function VerifyUsers() {
       </Box>
 
       {/* MAIN AREA */}
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", minWidth: 0 }}>
+      <Box
+        sx={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflowX: "hidden",
+          minWidth: 0,
+        }}
+      >
         {/* HEADER */}
         <Box
           sx={{
@@ -266,10 +297,21 @@ export default function VerifyUsers() {
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <IconButton onClick={() => navigate("/admin")} sx={{ display: { xs: "inline-flex", md: "none" }, color: "#64748b" }} aria-label="Back to dashboard">
+            <IconButton
+              onClick={() => navigate("/admin")}
+              sx={{
+                display: { xs: "inline-flex", md: "none" },
+                color: "#64748b",
+              }}
+              aria-label="Back to dashboard"
+            >
               <ArrowBack />
             </IconButton>
-            <Typography variant="h5" fontWeight="800" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>
+            <Typography
+              variant="h5"
+              fontWeight="800"
+              sx={{ color: "#1e293b", letterSpacing: "-1px" }}
+            >
               Verify Users
             </Typography>
           </Box>
@@ -301,17 +343,34 @@ export default function VerifyUsers() {
             <IconButton sx={{ bgcolor: "#f8fafc" }} aria-label="Notifications">
               <Notifications sx={{ color: "#64748b" }} />
             </IconButton>
-            <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
+            <Divider
+              orientation="vertical"
+              flexItem
+              sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
+            />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box sx={{ textAlign: "right", display: { xs: "none", sm: "block" } }}>
-                <Typography variant="subtitle2" fontWeight="800" color="#1e293b">
+              <Box
+                sx={{
+                  textAlign: "right",
+                  display: { xs: "none", sm: "block" },
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  fontWeight="800"
+                  color="#1e293b"
+                >
                   System Admin
                 </Typography>
                 <Typography variant="caption" fontWeight="600" color="#94a3b8">
                   Administrator
                 </Typography>
               </Box>
-              <IconButton onClick={(event) => setAnchorEl(event.currentTarget)} aria-label="Open admin menu" sx={{ p: 0.8, "&:hover": { bgcolor: "#f1f5f9" } }}>
+              <IconButton
+                onClick={(event) => setAnchorEl(event.currentTarget)}
+                aria-label="Open admin menu"
+                sx={{ p: 0.8, "&:hover": { bgcolor: "#f1f5f9" } }}
+              >
                 <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}>
                   <Person sx={{ fontSize: 20 }} />
                 </Avatar>
@@ -332,16 +391,39 @@ export default function VerifyUsers() {
                   },
                 }}
               >
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 2, pt: 1.5 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    px: 2,
+                    pt: 1.5,
+                  }}
+                >
                   <Typography fontSize="13px" fontWeight="600" color="#64748b">
                     admin@smartlab.ac.th
                   </Typography>
-                  <IconButton size="small" onClick={() => setAnchorEl(null)} aria-label="Close menu">
+                  <IconButton
+                    size="small"
+                    onClick={() => setAnchorEl(null)}
+                    aria-label="Close menu"
+                  >
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />
                   </IconButton>
                 </Box>
                 <Box sx={{ px: 2, py: 1.5 }}>
-                  <Button fullWidth onClick={handleLogout} startIcon={<Logout />} sx={{ justifyContent: "flex-start", color: "#ef4444", fontWeight: "700", textTransform: "none", borderRadius: 2 }}>
+                  <Button
+                    fullWidth
+                    onClick={handleLogout}
+                    startIcon={<Logout />}
+                    sx={{
+                      justifyContent: "flex-start",
+                      color: "#ef4444",
+                      fontWeight: "700",
+                      textTransform: "none",
+                      borderRadius: 2,
+                    }}
+                  >
                     Log out
                   </Button>
                 </Box>
@@ -354,9 +436,23 @@ export default function VerifyUsers() {
         <Box sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
           <Fade in timeout={400}>
             <Box>
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 2, mb: 4, flexWrap: "wrap" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: { xs: "flex-start", sm: "center" },
+                  gap: 2,
+                  mb: 4,
+                  flexWrap: "wrap",
+                }}
+              >
                 <Box>
-                  <Typography variant="h4" fontWeight="800" color="#1e293b" sx={{ letterSpacing: "-1px" }}>
+                  <Typography
+                    variant="h4"
+                    fontWeight="800"
+                    color="#1e293b"
+                    sx={{ letterSpacing: "-1px" }}
+                  >
                     Verify Guest Users
                   </Typography>
                   <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
@@ -366,7 +462,13 @@ export default function VerifyUsers() {
                 <Chip
                   icon={<PendingActions />}
                   label={`${pendingUsers.length} Pending`}
-                  sx={{ bgcolor: "#fff7ed", color: "#c2410c", fontWeight: "800", borderRadius: 2.5, "& .MuiChip-icon": { color: "inherit" } }}
+                  sx={{
+                    bgcolor: "#fff7ed",
+                    color: "#c2410c",
+                    fontWeight: "800",
+                    borderRadius: 2.5,
+                    "& .MuiChip-icon": { color: "inherit" },
+                  }}
                 />
               </Box>
 
@@ -377,12 +479,33 @@ export default function VerifyUsers() {
               )}
 
               {loading ? (
-                <Paper elevation={0} sx={{ minHeight: 320, display: "flex", justifyContent: "center", alignItems: "center", borderRadius: 5, border: "1px solid #e2e8f0" }}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    minHeight: 320,
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    borderRadius: 5,
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
                   <CircularProgress />
                 </Paper>
               ) : pendingUsers.length === 0 ? (
-                <Paper elevation={0} sx={{ p: { xs: 5, md: 8 }, textAlign: "center", borderRadius: 5, border: "1px dashed #cbd5e1", bgcolor: "transparent" }}>
-                  <PersonOutline sx={{ fontSize: 64, color: "#94a3b8", mb: 2 }} />
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: { xs: 5, md: 8 },
+                    textAlign: "center",
+                    borderRadius: 5,
+                    border: "1px dashed #cbd5e1",
+                    bgcolor: "transparent",
+                  }}
+                >
+                  <PersonOutline
+                    sx={{ fontSize: 64, color: "#94a3b8", mb: 2 }}
+                  />
                   <Typography variant="h6" color="#64748b" fontWeight="700">
                     No Pending Verifications
                   </Typography>
@@ -391,7 +514,16 @@ export default function VerifyUsers() {
                   </Typography>
                 </Paper>
               ) : filteredUsers.length === 0 ? (
-                <Paper elevation={0} sx={{ p: { xs: 5, md: 8 }, textAlign: "center", borderRadius: 5, border: "1px dashed #cbd5e1", bgcolor: "transparent" }}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: { xs: 5, md: 8 },
+                    textAlign: "center",
+                    borderRadius: 5,
+                    border: "1px dashed #cbd5e1",
+                    bgcolor: "transparent",
+                  }}
+                >
                   <Search sx={{ fontSize: 56, color: "#94a3b8", mb: 2 }} />
                   <Typography variant="h6" color="#64748b" fontWeight="700">
                     No Matching Users
@@ -401,7 +533,13 @@ export default function VerifyUsers() {
                   </Typography>
                 </Paper>
               ) : (
-                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 3 }}>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                    gap: 3,
+                  }}
+                >
                   {filteredUsers.map((user) => {
                     const imageUrl = getProfileImage(user.profile_pic);
                     const isProcessing = processingId === user.id;
@@ -409,14 +547,25 @@ export default function VerifyUsers() {
                       <Paper
                         key={user.id}
                         elevation={0}
-                        sx={{ borderRadius: 5, overflow: "hidden", border: "1px solid #e2e8f0", transition: "0.3s", "&:hover": { transform: "translateY(-4px)", boxShadow: "0 18px 35px rgba(15,23,42,0.08)" } }}
+                        sx={{
+                          borderRadius: 5,
+                          overflow: "hidden",
+                          border: "1px solid #e2e8f0",
+                          transition: "0.3s",
+                          "&:hover": {
+                            transform: "translateY(-4px)",
+                            boxShadow: "0 18px 35px rgba(15,23,42,0.08)",
+                          },
+                        }}
                       >
                         <Box
                           sx={{
                             height: 220,
                             width: "100%",
                             bgcolor: "#e2e8f0",
-                            backgroundImage: imageUrl ? `url(${imageUrl})` : "none",
+                            backgroundImage: imageUrl
+                              ? `url(${imageUrl})`
+                              : "none",
                             backgroundSize: "cover",
                             backgroundPosition: "center",
                             display: "flex",
@@ -425,34 +574,95 @@ export default function VerifyUsers() {
                           }}
                         >
                           {!imageUrl && (
-                            <Avatar sx={{ bgcolor: stringToColor(`${user.first_name} ${user.last_name}`), width: 82, height: 82, fontSize: 28, fontWeight: "800" }}>
+                            <Avatar
+                              sx={{
+                                bgcolor: stringToColor(
+                                  `${user.first_name} ${user.last_name}`,
+                                ),
+                                width: 82,
+                                height: 82,
+                                fontSize: 28,
+                                fontWeight: "800",
+                              }}
+                            >
                               {getInitials(user)}
                             </Avatar>
                           )}
                         </Box>
 
                         <Box sx={{ p: 3 }}>
-                          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 1, mb: 1 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                              gap: 1,
+                              mb: 1,
+                            }}
+                          >
                             <Box sx={{ minWidth: 0 }}>
-                              <Typography variant="h6" fontWeight="800" color="#1e293b" noWrap>
+                              <Typography
+                                variant="h6"
+                                fontWeight="800"
+                                color="#1e293b"
+                                noWrap
+                              >
                                 {user.first_name} {user.last_name}
                               </Typography>
                               <Typography variant="caption" color="#94a3b8">
                                 User ID #{user.id}
                               </Typography>
                             </Box>
-                            <Chip label="Guest User" size="small" sx={{ bgcolor: "#f1f5f9", color: "#64748b", fontWeight: "700", flexShrink: 0 }} />
+                            <Chip
+                              label="Guest User"
+                              size="small"
+                              sx={{
+                                bgcolor: "#f1f5f9",
+                                color: "#64748b",
+                                fontWeight: "700",
+                                flexShrink: 0,
+                              }}
+                            />
                           </Box>
 
-                          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 3, mt: 2 }}>
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, color: "#475569", minWidth: 0 }}>
-                              <Email fontSize="small" sx={{ color: "#94a3b8", flexShrink: 0 }} />
+                          <Box
+                            sx={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 1.5,
+                              mb: 3,
+                              mt: 2,
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1.5,
+                                color: "#475569",
+                                minWidth: 0,
+                              }}
+                            >
+                              <Email
+                                fontSize="small"
+                                sx={{ color: "#94a3b8", flexShrink: 0 }}
+                              />
                               <Typography variant="body2" noWrap>
                                 {user.email}
                               </Typography>
                             </Box>
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, color: "#475569" }}>
-                              <Phone fontSize="small" sx={{ color: "#94a3b8" }} />
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1.5,
+                                color: "#475569",
+                              }}
+                            >
+                              <Phone
+                                fontSize="small"
+                                sx={{ color: "#94a3b8" }}
+                              />
                               <Typography variant="body2">
                                 {user.phone || "No phone provided"}
                               </Typography>
@@ -469,7 +679,11 @@ export default function VerifyUsers() {
                               startIcon={<Cancel />}
                               disabled={isProcessing}
                               onClick={() => handleVerify(user.id, "reject")}
-                              sx={{ borderRadius: 3, fontWeight: "700", textTransform: "none" }}
+                              sx={{
+                                borderRadius: 3,
+                                fontWeight: "700",
+                                textTransform: "none",
+                              }}
                             >
                               Reject
                             </Button>
@@ -480,7 +694,12 @@ export default function VerifyUsers() {
                               startIcon={<CheckCircle />}
                               disabled={isProcessing}
                               onClick={() => handleVerify(user.id, "approve")}
-                              sx={{ borderRadius: 3, fontWeight: "700", textTransform: "none", boxShadow: "none" }}
+                              sx={{
+                                borderRadius: 3,
+                                fontWeight: "700",
+                                textTransform: "none",
+                                boxShadow: "none",
+                              }}
                             >
                               {isProcessing ? "Saving..." : "Approve"}
                             </Button>
