@@ -125,18 +125,9 @@ const getInitials = (user) => {
   return initials.toUpperCase() || "U";
 };
 
-<<<<<<< HEAD
 const getScoreColor = (score, warningThreshold = DEFAULT_WARNING_THRESHOLD) => {
   if (score <= warningThreshold) return "#ef4444";
   if (score < 60) return "#f59e0b";
-=======
-const getScoreColor = (
-  score,
-  bookingMinPoints = DEFAULT_BOOKING_MIN_POINTS,
-) => {
-  if (score < 40) return "#ef4444";
-  if (score < bookingMinPoints) return "#f59e0b";
->>>>>>> f7a7031 (ปรับ ui ในส่วนของ side bar, top header และ search bar ของ user ให้มีขนาดเท่ากับของ admin และแก้ให้ขนาดความกว้างของ admin ให้ถูกเรียกจาก index.css ทั้งยังมีส่วนของกระดิ่งที่กดแล้วจะมีการแสดงส่วนที่ถูกหักจาก user)
   return "#10b981";
 };
 
@@ -178,30 +169,12 @@ const getRoleColor = (role) =>
     guest: { bgcolor: "#f1f5f9", color: "#64748b" },
   })[role] || { bgcolor: "#f1f5f9", color: "#64748b" };
 
-<<<<<<< HEAD
 const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
   const scores = userRows.map((user) => Math.max(0, Math.min(100, Number(user.points) || 0)));
   return {
     total_users: userRows.length,
     average_points: scores.length ? Math.round((scores.reduce((total, score) => total + score, 0) / scores.length) * 10) / 10 : 0,
     low_point_users: userRows.filter((user) => Number(user.points) <= warningThreshold).length,
-=======
-const buildSummary = (userRows, bookingMinPoints, pendingPointRequests = 0) => {
-  const scores = userRows.map((user) =>
-    Math.max(0, Math.min(100, Number(user.points) || 0)),
-  );
-  return {
-    total_users: userRows.length,
-    average_points: scores.length
-      ? Math.round(
-          (scores.reduce((total, score) => total + score, 0) / scores.length) *
-            10,
-        ) / 10
-      : 0,
-    below_booking_threshold: userRows.filter(
-      (user) => Number(user.points) < bookingMinPoints,
-    ).length,
->>>>>>> f7a7031 (ปรับ ui ในส่วนของ side bar, top header และ search bar ของ user ให้มีขนาดเท่ากับของ admin และแก้ให้ขนาดความกว้างของ admin ให้ถูกเรียกจาก index.css ทั้งยังมีส่วนของกระดิ่งที่กดแล้วจะมีการแสดงส่วนที่ถูกหักจาก user)
     banned_users: userRows.filter((user) => user.is_banned).length,
     booking_allowed: userRows.filter((user) => user.booking_allowed).length,
     zero_point_users: userRows.filter((user) => Number(user.points) === 0)
@@ -218,13 +191,7 @@ export default function AdminPoints() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
-<<<<<<< HEAD
   const [warningThreshold, setWarningThreshold] = useState(DEFAULT_WARNING_THRESHOLD);
-=======
-  const [bookingMinPoints, setBookingMinPoints] = useState(
-    DEFAULT_BOOKING_MIN_POINTS,
-  );
->>>>>>> f7a7031 (ปรับ ui ในส่วนของ side bar, top header และ search bar ของ user ให้มีขนาดเท่ากับของ admin และแก้ให้ขนาดความกว้างของ admin ให้ถูกเรียกจาก index.css ทั้งยังมีส่วนของกระดิ่งที่กดแล้วจะมีการแสดงส่วนที่ถูกหักจาก user)
   const [scoreDate, setScoreDate] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -257,7 +224,6 @@ export default function AdminPoints() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const payload = response.data || {};
-<<<<<<< HEAD
       const nextWarningThreshold = Number.isFinite(Number(payload.points_warning_threshold))
         ? Number(payload.points_warning_threshold)
         : DEFAULT_WARNING_THRESHOLD;
@@ -266,25 +232,6 @@ export default function AdminPoints() {
       setRows(userRows);
       setSummary(buildSummary(userRows, nextWarningThreshold, pendingPointRequests.length));
       setWarningThreshold(nextWarningThreshold);
-=======
-      const nextBookingMinPoints =
-        Number(payload.booking_min_points) || DEFAULT_BOOKING_MIN_POINTS;
-      const userRows = (Array.isArray(payload.data) ? payload.data : []).filter(
-        (user) => user.role !== "admin",
-      );
-      const pendingPointRequests = Array.isArray(payload.point_requests)
-        ? payload.point_requests
-        : [];
-      setRows(userRows);
-      setSummary(
-        buildSummary(
-          userRows,
-          nextBookingMinPoints,
-          pendingPointRequests.length,
-        ),
-      );
-      setBookingMinPoints(nextBookingMinPoints);
->>>>>>> f7a7031 (ปรับ ui ในส่วนของ side bar, top header และ search bar ของ user ให้มีขนาดเท่ากับของ admin และแก้ให้ขนาดความกว้างของ admin ให้ถูกเรียกจาก index.css ทั้งยังมีส่วนของกระดิ่งที่กดแล้วจะมีการแสดงส่วนที่ถูกหักจาก user)
       setScoreDate(payload.score_date || null);
       setPointRequests(pendingPointRequests);
     } catch (requestError) {
@@ -760,18 +707,8 @@ export default function AdminPoints() {
               <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
                 ตรวจสอบคะแนนสะสม คะแนนรายวัน และสิทธิ์การจองของทุกบัญชี
               </Typography>
-<<<<<<< HEAD
               <Typography variant="caption" color="#94a3b8" sx={{ display: "block", mt: 0.5 }}>
                 คะแนนรายวัน ณ {formatDate(scoreDate)} · การจองขึ้นกับสถานะ Ban เท่านั้น
-=======
-              <Typography
-                variant="caption"
-                color="#94a3b8"
-                sx={{ display: "block", mt: 0.5 }}
-              >
-                คะแนนรายวัน ณ {formatDate(scoreDate)} · เกณฑ์การจอง{" "}
-                {bookingMinPoints} คะแนน
->>>>>>> f7a7031 (ปรับ ui ในส่วนของ side bar, top header และ search bar ของ user ให้มีขนาดเท่ากับของ admin และแก้ให้ขนาดความกว้างของ admin ให้ถูกเรียกจาก index.css ทั้งยังมีส่วนของกระดิ่งที่กดแล้วจะมีการแสดงส่วนที่ถูกหักจาก user)
               </Typography>
             </Box>
             <Button
@@ -1086,24 +1023,9 @@ export default function AdminPoints() {
                       </TableRow>
                     ) : (
                       filteredRows.map((user) => {
-<<<<<<< HEAD
                         const points = Math.max(0, Math.min(100, Number(user.points) || 0));
                         const dailyScore = Math.max(0, Math.min(100, Number(user.daily_score) || 0));
                         const scoreColor = getScoreColor(points, warningThreshold);
-=======
-                        const points = Math.max(
-                          0,
-                          Math.min(100, Number(user.points) || 0),
-                        );
-                        const dailyScore = Math.max(
-                          0,
-                          Math.min(100, Number(user.daily_score) || 0),
-                        );
-                        const scoreColor = getScoreColor(
-                          points,
-                          bookingMinPoints,
-                        );
->>>>>>> f7a7031 (ปรับ ui ในส่วนของ side bar, top header และ search bar ของ user ให้มีขนาดเท่ากับของ admin และแก้ให้ขนาดความกว้างของ admin ให้ถูกเรียกจาก index.css ทั้งยังมีส่วนของกระดิ่งที่กดแล้วจะมีการแสดงส่วนที่ถูกหักจาก user)
                         const roleColor = getRoleColor(user.role);
                         const testActionBusy =
                           testDeductionId === user.user_id ||
