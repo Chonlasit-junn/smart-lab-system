@@ -107,7 +107,9 @@ def response_detail(response):
 API_URL    = os.getenv("SMART_LAB_API_URL", "https://h0sh1na-smart-lab-backend.hf.space").rstrip("/")
 LAB_CODE   = os.getenv("SMART_LAB_CODE", "LAB01")
 DEBUG_MODE = os.getenv("SMART_LAB_AGENT_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
-_cleanup_default = "1" if getattr(sys, "frozen", False) else "0"
+# Keep workstation cleanup opt-in while it is being validated on Lab machines.
+# Set SMART_LAB_SESSION_CLEANUP=1 explicitly when this feature is ready.
+_cleanup_default = "0"
 SESSION_CLEANUP_ENABLED = os.getenv(
     "SMART_LAB_SESSION_CLEANUP",
     _cleanup_default,

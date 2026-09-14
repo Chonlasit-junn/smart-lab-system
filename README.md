@@ -182,7 +182,7 @@ python agent.pyw
 - `SMART_LAB_API_URL`: override URL ของ Backend โดยไม่ต้องแก้ source
 - `SMART_LAB_CODE`: override รหัสห้อง
 - `SMART_LAB_AGENT_DEBUG=1`: ป้องกันการ logout Windows ระหว่างทดสอบ; ตั้งเป็น `0` ตอนใช้งานจริง
-- `SMART_LAB_SESSION_CLEANUP=1`: เปิดการ cleanup เมื่อรันจาก source; executable ที่ build แล้วเปิดเป็นค่าเริ่มต้น และตั้งเป็น `0` เพื่อปิดชั่วคราว
+- `SMART_LAB_SESSION_CLEANUP=1`: เปิดการ cleanup แบบ opt-in; ค่าเริ่มต้นของทั้ง source และ executable คือปิด (`0`)
 - `SMART_LAB_AGENT_DATA_DIR`: โฟลเดอร์สำหรับ local SQLite outbox; ค่าเริ่มต้นคือ `%LOCALAPPDATA%\SmartLabAgent`
 - `SMART_LAB_POLICY_REFRESH_SECONDS`: ความถี่ refresh policy; ค่าเริ่มต้น 60 วินาที
 - `DEVICE_NAME` และ `DEVICE_MAC`: อ่านจากเครื่องและส่งตอนสร้าง session
