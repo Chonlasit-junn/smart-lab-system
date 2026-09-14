@@ -195,7 +195,7 @@ export default function Reserved() {
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="bold"
+              fontWeight="800"
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
@@ -461,7 +461,7 @@ export default function Reserved() {
             >
               <Typography
                 variant="h6"
-                fontWeight="bold"
+                fontWeight="700"
                 color="#0f172a"
                 sx={{ mb: 3 }}
               >
@@ -533,7 +533,11 @@ export default function Reserved() {
                           </TableCell>
                           <TableCell sx={{ color: "#475569" }}>
                             {row.start_time} - {row.end_time}
-                            <Typography variant="caption" display="block" color="#94a3b8">
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              color="#94a3b8"
+                            >
                               {!row.status || row.status === "reserved"
                                 ? "รอยืนยันการเข้าใช้งาน"
                                 : row.status === "attended"
@@ -563,7 +567,11 @@ export default function Reserved() {
                               </IconButton>
                             ) : (
                               <Chip
-                                label={row.status === "no_show" ? "No-show" : "Closed"}
+                                label={
+                                  row.status === "no_show"
+                                    ? "No-show"
+                                    : "Closed"
+                                }
                                 size="small"
                                 variant="outlined"
                               />

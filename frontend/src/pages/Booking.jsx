@@ -554,7 +554,7 @@ export default function Booking() {
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="bold"
+              fontWeight="800"
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
@@ -953,7 +953,12 @@ export default function Booking() {
           {!selectedRoom && (
             <Fade in={!selectedRoom} timeout={400}>
               <Box>
-                <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
+                <Typography
+                  variant="h6"
+                  fontWeight="700"
+                  color="#64748b"
+                  sx={{ mb: 3 }}
+                >
                   {searchQuery
                     ? `Search Results for "${searchQuery}"`
                     : "Select a Lab Room"}
