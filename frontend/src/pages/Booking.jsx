@@ -14,10 +14,8 @@ import {
   Slide,
   Fade,
   Chip,
-  Alert,
   Dialog,
   DialogContent,
-  Popover,
 } from "@mui/material";
 import {
   Search,
@@ -36,8 +34,7 @@ import {
   Menu as MenuIcon,
   ArrowBack,
   CheckCircle,
-  Settings,
-  Close,
+  ConfirmationNumber,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -84,10 +81,6 @@ export default function Booking() {
   // Data States
   const [labs, setLabs] = useState([]);
   const [availability, setAvailability] = useState(null);
-  const [pointStatus, setPointStatus] = useState(null);
-  const [pointsLoading, setPointsLoading] = useState(false);
-  const [pointsError, setPointsError] = useState("");
-  const [pointRequestLoading, setPointRequestLoading] = useState(false);
 
   // Selection States
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -120,41 +113,6 @@ export default function Booking() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLabs();
   }, [fetchLabs]);
-
-  useEffect(() => {
-    if (!currentUser?.email) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPointStatus(null);
-      setPointsError("");
-      return undefined;
-    }
-
-    let cancelled = false;
-    const token = localStorage.getItem("access_token");
-    setPointsLoading(true);
-    setPointsError("");
-
-    axios
-      .get(`${API_URL}/users/me/points`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((response) => {
-        if (!cancelled) setPointStatus(response.data);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.error("[API Error] Failed to fetch point status:", error);
-        setPointStatus(null);
-        setPointsError("ไม่สามารถตรวจสอบคะแนนได้ จึงยังไม่อนุญาตให้จอง");
-      })
-      .finally(() => {
-        if (!cancelled) setPointsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUser?.email]);
 
   /**
    * Fetches availability for a specific lab room on a given date.
@@ -256,6 +214,11 @@ export default function Booking() {
   // 6. ACTION HANDLERS
   // ============================================================================
 
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
+
   /**
    * Clears the current selection states during the booking process.
    */
@@ -316,73 +279,18 @@ export default function Booking() {
         total_participants: 1,
       };
 
-      const token = localStorage.getItem("access_token");
-      await axios.post(`${API_URL}/bookings`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await axios.post(`${API_URL}/bookings`, payload);
       setSuccessDialogOpen(true);
     } catch (error) {
-      const detail = error.response?.data?.detail;
       const errMsg =
-        (typeof detail === "string" ? detail : detail?.message) ||
-        "Failed to confirm booking";
+        error.response?.data?.detail || "Failed to confirm booking";
       alert(`Booking Failed: ${errMsg}`);
-    }
-  };
-
-  const handlePointRequest = async () => {
-    const token = localStorage.getItem("access_token");
-    if (
-      !token ||
-      Number(pointStatus?.points) !== 0 ||
-      pointStatus?.point_request?.status === "pending"
-    ) {
-      return;
-    }
-
-    try {
-      setPointRequestLoading(true);
-      const response = await axios.post(
-        `${API_URL}/users/me/points/request`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      const request = response.data?.point_request;
-      if (request) {
-        setPointStatus((currentStatus) => ({
-          ...currentStatus,
-          point_request: request,
-          can_request_points: false,
-        }));
-      }
-    } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
-      const message =
-        typeof detail === "string"
-          ? detail
-          : "ไม่สามารถส่งคำขอเพิ่มคะแนนได้ กรุณาลองใหม่อีกครั้ง";
-      alert(message);
-    } finally {
-      setPointRequestLoading(false);
     }
   };
 
   const handleCloseSuccessDialog = () => {
     setSuccessDialogOpen(false);
     handleBackToRooms();
-  };
-
-  // Add User Menu Popover States
-  const [anchorEl, setAnchorEl] = useState(null);
-  const openUserMenu = Boolean(anchorEl);
-
-  const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
-  const handleCloseUserMenu = () => setAnchorEl(null);
-
-  const handleLogoutAction = () => {
-    handleCloseUserMenu();
-    logout();
-    navigate("/");
   };
 
   // ============================================================================
@@ -445,6 +353,12 @@ export default function Booking() {
           <div className="menu-item" onClick={() => setIsSupportOpen(true)}>
             <SupportAgent /> Support
           </div>
+          <div className="menu-item" onClick={() => navigate("/my-tickets")}>
+            <ConfirmationNumber /> My Tickets
+          </div>
+          <div className="menu-item" onClick={handleLogout}>
+            <Logout /> Log Out
+          </div>
         </div>
       </div>
 
@@ -496,15 +410,18 @@ export default function Booking() {
             {/* Profile Section */}
             {currentUser ? (
               <Box
+                onClick={() => navigate("/profile")}
                 sx={{
                   display: "flex",
                   alignItems: "center",
                   gap: 1.5,
                   borderLeft: "1px solid #e2e8f0",
                   pl: { xs: 1, sm: 3 },
+                  cursor: "pointer",
+                  transition: "0.2s",
+                  "&:hover": { opacity: 0.75 },
                 }}
               >
-                {/* ข้อความชื่อผู้ใช้ */}
                 <Box
                   className="profile-text-container"
                   sx={{ textAlign: "right" }}
@@ -520,171 +437,11 @@ export default function Booking() {
                     {currentUser.role}
                   </Typography>
                 </Box>
-
-                {/* ปุ่ม Avatar สำหรับกดเปิด Popover */}
-                <IconButton
-                  onClick={handleAvatarClick}
-                  sx={{ p: 0.5, "&:hover": { bgcolor: "#f1f5f9" } }}
-                >
-                  <Avatar
-                    sx={{
-                      bgcolor: "#111827",
-                      width: 36,
-                      height: 36,
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-                    }}
-                  >
-                    {currentUser.initial || currentUser.name?.charAt(0)}
-                  </Avatar>
-                </IconButton>
-
-                {/* Popover Card */}
-                <Popover
-                  anchorEl={anchorEl}
-                  open={openUserMenu}
-                  onClose={handleCloseUserMenu}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                  PaperProps={{
-                    sx: {
-                      mt: 1.5,
-                      width: 320,
-                      borderRadius: 5,
-                      boxShadow: "0 20px 45px rgba(15,23,42,0.16)",
-                      border: "1px solid #e2e8f0",
-                      overflow: "hidden",
-                    },
-                  }}
-                >
-                  {/* Header: อีเมล + ปุ่มปิด */}
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      px: 2,
-                      pt: 1.5,
-                    }}
-                  >
-                    <Typography
-                      fontSize="13px"
-                      fontWeight="600"
-                      color="#64748b"
-                      sx={{ pl: 0.5 }}
-                    >
-                      {currentUser.email}
-                    </Typography>
-                    <IconButton size="small" onClick={handleCloseUserMenu}>
-                      <Close sx={{ fontSize: 18, color: "#64748b" }} />
-                    </IconButton>
-                  </Box>
-
-                  {/* Profile Main Body */}
-                  <Box sx={{ textAlign: "center", px: 3, pb: 3, pt: 0.5 }}>
-                    <Avatar
-                      sx={{
-                        bgcolor: "#0f172a",
-                        width: 84,
-                        height: 84,
-                        mx: "auto",
-                        fontSize: "32px",
-                        boxShadow:
-                          "0 0 0 4px #eff6ff, 0 8px 20px rgba(59,130,246,0.25)",
-                      }}
-                    >
-                      {currentUser.initial || currentUser.name?.charAt(0)}
-                    </Avatar>
-
-                    <Typography
-                      sx={{ mt: 1.5, color: "#1e293b" }}
-                      fontWeight="700"
-                      fontSize="18px"
-                    >
-                      Hi, {currentUser.name}
-                    </Typography>
-
-                    <Button
-                      variant="outlined"
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        mt: 2,
-                        borderRadius: 20,
-                        textTransform: "none",
-                        fontWeight: "700",
-                        fontSize: "13px",
-                        px: 2.5,
-                        py: 0.6,
-                        color: "#3b82f6",
-                        borderColor: "#cbd8f5",
-                        "&:hover": {
-                          borderColor: "#3b82f6",
-                          bgcolor: "#eff6ff",
-                        },
-                      }}
-                    >
-                      Manage your Account
-                    </Button>
-                  </Box>
-
-                  <Divider />
-
-                  {/* Menu Action List */}
-                  <Box sx={{ px: 1, py: 1 }}>
-                    <Box
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#f8fafc" },
-                      }}
-                    >
-                      <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="700"
-                        color="#1e293b"
-                      >
-                        Setting
-                      </Typography>
-                    </Box>
-                    <Box
-                      onClick={handleLogoutAction}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#fef2f2" },
-                      }}
-                    >
-                      <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="700"
-                        color="#ef4444"
-                      >
-                        Log out
-                      </Typography>
-                    </Box>
-                  </Box>
-                </Popover>
+                <Avatar sx={{ bgcolor: "#111827", width: 36, height: 36 }}>
+                  {currentUser.initial}
+                </Avatar>
               </Box>
             ) : (
-              /* กรณี Guest User (กดแล้วพาไปหน้า Login) */
               <Box
                 onClick={() => navigate("/")}
                 sx={{
@@ -739,18 +496,11 @@ export default function Booking() {
                 <Grid container spacing={3}>
                   {filteredLabs.length > 0 ? (
                     filteredLabs.map((room) => (
-                      <Grid
-                        item
-                        xs={12}
-                        sm={6}
-                        lg={4}
-                        key={room.id}
-                        sx={{ minWidth: 0 }}
-                      >
+                      <Grid item xs={12} sm={6} lg={4} key={room.id}>
                         <Paper
                           elevation={0}
                           onClick={() => handleSelectRoom(room)}
-                          className="room-card lab-card"
+                          className="room-card"
                           sx={{
                             opacity: room.status === "active" ? 1 : 0.6,
                             pointerEvents:
@@ -774,7 +524,6 @@ export default function Booking() {
                                 display: "flex",
                                 justifyContent: "space-between",
                                 alignItems: "center",
-                                minWidth: 0,
                               }}
                             >
                               <Typography
@@ -810,8 +559,6 @@ export default function Booking() {
                             <Typography
                               variant="body2"
                               color="#64748b"
-                              className="lab-card-name"
-                              title={room.name}
                               sx={{ mt: 1 }}
                             >
                               {room.name}
@@ -822,7 +569,6 @@ export default function Booking() {
                                 display: "flex",
                                 justifyContent: "space-between",
                                 color: "#64748b",
-                                minWidth: 0,
                               }}
                             >
                               <Box
@@ -830,9 +576,6 @@ export default function Booking() {
                                   display: "flex",
                                   alignItems: "center",
                                   gap: 1,
-                                  minWidth: 0,
-                                  overflowWrap: "anywhere",
-                                  textAlign: "right",
                                 }}
                               >
                                 <PeopleAlt fontSize="small" />
@@ -1312,39 +1055,6 @@ export default function Booking() {
                         </Typography>
                       </Box>
 
-                      {currentUser && pointsError ? (
-                        <Alert severity="error">
-                          {pointsError}
-                        </Alert>
-                      ) : null}
-                      {currentUser && pointStatus?.booking_allowed === false ? (
-                        <Alert severity={Number(pointStatus.points) === 0 ? "error" : "warning"}>
-                          <Box>
-                            <Typography>
-                              จองห้องไม่ได้: {pointStatus.booking_block_reason}
-                            </Typography>
-                            {Number(pointStatus.points) === 0 && (
-                              pointStatus.point_request?.status === "pending" ? (
-                                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                                  ส่งคำขอเพิ่ม {pointStatus.point_request.requested_points || pointStatus.point_request_amount || 10} คะแนนแล้ว กรุณารอ Admin พิจารณา
-                                </Typography>
-                              ) : (
-                                <Button
-                                  variant="outlined"
-                                  size="small"
-                                  startIcon={<SupportAgent />}
-                                  onClick={handlePointRequest}
-                                  disabled={pointRequestLoading || pointStatus.can_request_points === false}
-                                  sx={{ mt: 1.25, borderColor: "currentColor", color: "inherit", textTransform: "none", fontWeight: "700" }}
-                                >
-                                  {pointRequestLoading ? "กำลังส่งคำขอ..." : `ติดต่อ Admin เพื่อขอเพิ่ม ${pointStatus.point_request_amount || 10} คะแนน`}
-                                </Button>
-                              )
-                            )}
-                          </Box>
-                        </Alert>
-                      ) : null}
-
                       <Paper
                         elevation={0}
                         sx={{
@@ -1384,14 +1094,6 @@ export default function Booking() {
                             currentUser
                               ? handleConfirmBooking
                               : () => navigate("/")
-                          }
-                          disabled={
-                            Boolean(
-                              currentUser &&
-                                (pointsLoading ||
-                                  pointsError ||
-                                  !pointStatus?.booking_allowed),
-                            )
                           }
                           sx={{
                             bgcolor: "#0284c7",

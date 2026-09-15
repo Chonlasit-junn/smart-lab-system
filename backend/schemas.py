@@ -5,6 +5,7 @@ from datetime import date
 
 
 
+
 # --- Auth ---
 
 class OTPRequest(BaseModel):
@@ -22,6 +23,15 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+
+# --- Users --- 
+class UserBasicInfo(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+
+    class Config:
+        from_attributes = True
 
 # --- Labs ---
 
@@ -72,23 +82,25 @@ class BookingCreate(BaseModel):
 
 # --- Tickets ---
 # รูปแบบข้อมูลที่ User จะส่งมาตอนสร้าง Ticket
-class TicketCreate(BaseModel):
-    user_id: int
+class TicketBase(BaseModel):
     subject: str
     message: str
 
-# รูปแบบข้อมูลสำหรับการอัปเดตสถานะโดย Admin
-class TicketUpdateStatus(BaseModel):
-    status: str # เช่น "closed", "in_progress"
+class TicketCreate(TicketBase):
+    pass  # ไม่ต้องรับ user_id จาก client แล้ว จะดึงจาก token แทน
 
-# รูปแบบข้อมูลที่ API จะส่งกลับไปให้ Frontend
-class TicketResponse(BaseModel):
+# อัปเดต TicketResponse ให้มีข้อมูล user แนบไปด้วย
+class TicketResponse(TicketBase):
     id: int
     user_id: int
-    subject: str
-    message: str
     status: str
-    created_at: datetime
+    created_at: Optional[datetime] = None
+    
+    # เพิ่มบรรทัดนี้เพื่อดึง object ของ UserBasicInfo มาด้วย
+    user: Optional[UserBasicInfo] = None
 
     class Config:
         from_attributes = True
+
+class TicketUpdateStatus(BaseModel):
+    status: str = Field(..., example="closed")

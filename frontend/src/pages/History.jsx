@@ -15,9 +15,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Popover,
-  Button,
-  Divider,
 } from "@mui/material";
 import {
   Notifications,
@@ -28,14 +25,13 @@ import {
   Logout,
   Computer,
   Menu as MenuIcon,
-  Person,
-  Settings,
-  Close,
+  ConfirmationNumber,
 } from "@mui/icons-material";
 
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import SupportModal from "./SupportModal";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -44,17 +40,17 @@ export default function History() {
   const { currentUser, logout } = useAuth();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [pastBookings, setPastBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMyHistory = useCallback(async () => {
     if (!currentUser) return;
+
     try {
       setLoading(true);
-      const token = localStorage.getItem("access_token");
       const response = await axios.get(
         `${API_URL}/bookings/user/${currentUser.email}`,
-        { headers: { Authorization: `Bearer ${token}` } },
       );
       const allBookings = response.data.data;
 
@@ -83,15 +79,7 @@ export default function History() {
     fetchMyHistory();
   }, [currentUser, fetchMyHistory, navigate]);
 
-  // Add User Menu Popover States
-  const [anchorEl, setAnchorEl] = useState(null);
-  const openUserMenu = Boolean(anchorEl);
-
-  const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
-  const handleCloseUserMenu = () => setAnchorEl(null);
-
-  const handleLogoutAction = () => {
-    handleCloseUserMenu();
+  const handleLogout = () => {
     logout();
     navigate("/");
   };
@@ -142,8 +130,14 @@ export default function History() {
           className="sidebar-menu"
           style={{ flex: "none", paddingBottom: "24px" }}
         >
-          <div className="menu-item">
+          <div className="menu-item" onClick={() => setIsSupportOpen(true)}>
             <SupportAgent /> Support
+          </div>
+          <div className="menu-item" onClick={() => navigate("/my-tickets")}>
+            <ConfirmationNumber /> My Tickets
+          </div>
+          <div className="menu-item" onClick={handleLogout}>
+            <Logout /> Log Out
           </div>
         </div>
       </div>
@@ -177,7 +171,7 @@ export default function History() {
             <IconButton>
               <Notifications sx={{ color: "#111827" }} />
             </IconButton>
-            {currentUser ? (
+            {currentUser && (
               <Box
                 sx={{
                   display: "flex",
@@ -187,7 +181,6 @@ export default function History() {
                   pl: { xs: 1, sm: 3 },
                 }}
               >
-                {/* ข้อความชื่อผู้ใช้ */}
                 <Box
                   className="profile-text-container"
                   sx={{ textAlign: "right" }}
@@ -203,202 +196,8 @@ export default function History() {
                     {currentUser.role}
                   </Typography>
                 </Box>
-
-                {/* ปุ่ม Avatar สำหรับกดเปิด Popover */}
-                <IconButton
-                  onClick={handleAvatarClick}
-                  sx={{ p: 0.5, "&:hover": { bgcolor: "#f1f5f9" } }}
-                >
-                  <Avatar
-                    sx={{
-                      bgcolor: "#111827",
-                      width: 36,
-                      height: 36,
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-                    }}
-                  >
-                    {currentUser.initial || currentUser.name?.charAt(0)}
-                  </Avatar>
-                </IconButton>
-
-                {/* Popover Card */}
-                <Popover
-                  anchorEl={anchorEl}
-                  open={openUserMenu}
-                  onClose={handleCloseUserMenu}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                  PaperProps={{
-                    sx: {
-                      mt: 1.5,
-                      width: 320,
-                      borderRadius: 5,
-                      boxShadow: "0 20px 45px rgba(15,23,42,0.16)",
-                      border: "1px solid #e2e8f0",
-                      overflow: "hidden",
-                    },
-                  }}
-                >
-                  {/* Header: อีเมล + ปุ่มปิด */}
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      px: 2,
-                      pt: 1.5,
-                    }}
-                  >
-                    <Typography
-                      fontSize="13px"
-                      fontWeight="600"
-                      color="#64748b"
-                      sx={{ pl: 0.5 }}
-                    >
-                      {currentUser.email}
-                    </Typography>
-                    <IconButton size="small" onClick={handleCloseUserMenu}>
-                      <Close sx={{ fontSize: 18, color: "#64748b" }} />
-                    </IconButton>
-                  </Box>
-
-                  {/* Profile Main Body */}
-                  <Box sx={{ textAlign: "center", px: 3, pb: 3, pt: 0.5 }}>
-                    <Avatar
-                      sx={{
-                        bgcolor: "#0f172a",
-                        width: 84,
-                        height: 84,
-                        mx: "auto",
-                        fontSize: "32px",
-                        boxShadow:
-                          "0 0 0 4px #eff6ff, 0 8px 20px rgba(59,130,246,0.25)",
-                      }}
-                    >
-                      {currentUser.initial || currentUser.name?.charAt(0)}
-                    </Avatar>
-
-                    <Typography
-                      sx={{ mt: 1.5, color: "#1e293b" }}
-                      fontWeight="700"
-                      fontSize="18px"
-                    >
-                      Hi, {currentUser.name}
-                    </Typography>
-
-                    <Button
-                      variant="outlined"
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        mt: 2,
-                        borderRadius: 20,
-                        textTransform: "none",
-                        fontWeight: "700",
-                        fontSize: "13px",
-                        px: 2.5,
-                        py: 0.6,
-                        color: "#3b82f6",
-                        borderColor: "#cbd8f5",
-                        "&:hover": {
-                          borderColor: "#3b82f6",
-                          bgcolor: "#eff6ff",
-                        },
-                      }}
-                    >
-                      Manage your Account
-                    </Button>
-                  </Box>
-
-                  <Divider />
-
-                  {/* Menu Action List */}
-                  <Box sx={{ px: 1, py: 1 }}>
-                    <Box
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#f8fafc" },
-                      }}
-                    >
-                      <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="700"
-                        color="#1e293b"
-                      >
-                        Setting
-                      </Typography>
-                    </Box>
-                    <Box
-                      onClick={handleLogoutAction}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#fef2f2" },
-                      }}
-                    >
-                      <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="700"
-                        color="#ef4444"
-                      >
-                        Log out
-                      </Typography>
-                    </Box>
-                  </Box>
-                </Popover>
-              </Box>
-            ) : (
-              /* กรณี Guest User (กดแล้วพาไปหน้า Login) */
-              <Box
-                onClick={() => navigate("/")}
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1.5,
-                  borderLeft: "1px solid #e2e8f0",
-                  pl: { xs: 1, sm: 3 },
-                  cursor: "pointer",
-                  transition: "0.2s",
-                  "&:hover": { opacity: 0.7 },
-                }}
-              >
-                <Box
-                  className="profile-text-container"
-                  sx={{ textAlign: "right" }}
-                >
-                  <Typography
-                    variant="subtitle2"
-                    fontWeight="bold"
-                    lineHeight={1.2}
-                    color="textSecondary"
-                  >
-                    Guest User
-                  </Typography>
-                  <Typography variant="caption" color="primary.main">
-                    Click to Log in
-                  </Typography>
-                </Box>
-                <Avatar sx={{ bgcolor: "#cbd5e1", width: 36, height: 36 }}>
-                  <Person sx={{ color: "#64748b" }} />
+                <Avatar sx={{ bgcolor: "#111827", width: 36, height: 36 }}>
+                  {currentUser.initial}
                 </Avatar>
               </Box>
             )}
@@ -518,6 +317,11 @@ export default function History() {
           )}
         </div>
       </div>
+       <SupportModal 
+        open={isSupportOpen} 
+        onClose={() => setIsSupportOpen(false)} 
+        user={currentUser} 
+      />
     </div>
   );
 }
