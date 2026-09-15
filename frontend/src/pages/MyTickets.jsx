@@ -11,8 +11,8 @@ export default function MyTickets() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // token เก็บไว้ตอน login — ปรับ key ตามระบบ auth จริงของคุณ
-  const token = localStorage.getItem('token');
+  // ต้องตรงกับ key ที่ auth-context.jsx ใช้ตอน login (localStorage.setItem('access_token', token))
+  const token = localStorage.getItem('access_token');
 
   useEffect(() => {
     document.title = 'คำร้องของฉัน';
