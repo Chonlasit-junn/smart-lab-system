@@ -535,6 +535,9 @@ export default function Booking() {
           className="sidebar-menu"
           style={{ flex: "none", paddingBottom: "24px" }}
         >
+          <div className="menu-item" onClick={() => navigate("/my-tickets")}>
+            <Assignment /> My Tickets
+          </div>
           <div className="menu-item" onClick={() => setIsSupportOpen(true)}>
             <SupportAgent /> Support
           </div>
@@ -1740,7 +1743,6 @@ export default function Booking() {
       <SupportModal
         open={isSupportOpen}
         onClose={() => setIsSupportOpen(false)}
-        user={currentUser}
       />
     </div>
   );

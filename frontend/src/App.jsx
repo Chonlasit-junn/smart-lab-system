@@ -15,6 +15,7 @@ import VerifyUsers from './pages/VerifyUsers';
 import BlacklistManager from './pages/BlacklistManager';
 import Profile from './pages/Profile';
 import TicketManager from './pages/TicketManager';
+import MyTickets from './pages/MyTickets';
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
             <Route path="/blacklist" element={<BlacklistManager />} />
             <Route path="/profile" element={<Profile />} />   {/* ← ย้ายขึ้นมาก่อน * */}
             <Route path="/ticket" element={<TicketManager />} />
+            <Route path="/my-tickets" element={<MyTickets />} />
             <Route path="*" element={<Navigate to="/" replace />} />
             
           </Routes>

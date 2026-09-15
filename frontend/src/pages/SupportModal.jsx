@@ -5,29 +5,30 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-export default function SupportModal({ open, onClose, user }) {
+export default function SupportModal({ open, onClose }) {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (!subject || !message) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
-    
+
+    const token = localStorage.getItem('access_token');
+    if (!token) return alert('กรุณาเข้าสู่ระบบก่อนส่งคำร้อง');
+
     try {
       setLoading(true);
-      // ส่งข้อมูลไปที่ Backend
-      await axios.post(`${API_URL}/tickets`, {
-        user_id: user.id, // ใช้ ID ของ user ที่ล็อกอินอยู่
-        subject: subject,
-        message: message,
-      });
+      // Backend จะผูก Ticket กับผู้ใช้จาก token ไม่รับ user_id จาก client
+      await axios.post(
+        `${API_URL}/tickets`,
+        { subject, message },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
       alert('ส่ง Ticket ให้แอดมินเรียบร้อยแล้ว');
       setSubject('');
       setMessage('');
       onClose(); // ปิด Modal
     } catch (error) {
-      console.log("Data sent:", { user_id: user?.id, subject, message }); 
-      
       // เอา Error จาก Backend มาแสดงที่หน้าจอเลย
       const errorMsg = error.response?.data?.detail || error.message;
       console.error('Failed to send ticket:', errorMsg);

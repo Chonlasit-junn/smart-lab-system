@@ -71,15 +71,14 @@ class BookingCreate(BaseModel):
 
 
 # --- Tickets ---
-# รูปแบบข้อมูลที่ User จะส่งมาตอนสร้าง Ticket
+# user_id มาจาก access token ไม่รับจาก client
 class TicketCreate(BaseModel):
-    user_id: int
-    subject: str
-    message: str
+    subject: str = Field(..., min_length=1, max_length=255)
+    message: str = Field(..., min_length=1)
 
 # รูปแบบข้อมูลสำหรับการอัปเดตสถานะโดย Admin
 class TicketUpdateStatus(BaseModel):
-    status: str # เช่น "closed", "in_progress"
+    status: str = Field(..., min_length=1) # เช่น "closed", "in_progress"
 
 # รูปแบบข้อมูลที่ API จะส่งกลับไปให้ Frontend
 class TicketResponse(BaseModel):

@@ -23,7 +23,10 @@ export default function TicketManager() {
   const fetchTickets = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/tickets`);
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(`${API_URL}/tickets`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setTickets(response.data?.data || []);
     } catch (error) {
       console.error('[TicketManager] Failed to fetch tickets:', error);
@@ -35,7 +38,12 @@ export default function TicketManager() {
   // ฟังก์ชันอัปเดตสถานะ Ticket เป็น Closed
   const handleCloseTicket = async (ticketId) => {
     try {
-      await axios.patch(`${API_URL}/admin/tickets/${ticketId}`, { status: 'closed' });
+      const token = localStorage.getItem('access_token');
+      await axios.patch(
+        `${API_URL}/admin/tickets/${ticketId}`,
+        { status: 'closed' },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
       // อัปเดต State ในหน้าจอให้เปลี่ยนเป็น closed ทันทีโดยไม่ต้องรีเฟรชหน้า
       setTickets(tickets.map(t => t.id === ticketId ? { ...t, status: 'closed' } : t));
     } catch (error) {
@@ -71,6 +79,7 @@ export default function TicketManager() {
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>User ID</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>หัวข้อ (Subject)</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>รายละเอียด (Message)</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>วันที่ (Timestamp)</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>สถานะ</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b', textAlign: 'center' }}>จัดการ</TableCell>
                 </TableRow>
@@ -83,6 +92,9 @@ export default function TicketManager() {
                       <TableCell>{ticket.user_id}</TableCell>
                       <TableCell sx={{ fontWeight: '700', color: '#334155' }}>{ticket.subject}</TableCell>
                       <TableCell sx={{ color: '#475569' }}>{ticket.message}</TableCell>
+                      <TableCell sx={{ color: '#475569' }}>
+                        {ticket.created_at ? new Date(ticket.created_at).toLocaleString('th-TH') : '-'}
+                      </TableCell>
                       <TableCell>
                         <Chip
                           label={ticket.status === 'open' ? 'รอแก้ไข' : 'ปิดแล้ว'}
@@ -113,7 +125,7 @@ export default function TicketManager() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 4, color: '#94a3b8' }}>
+                    <TableCell colSpan={7} align="center" sx={{ py: 4, color: '#94a3b8' }}>
                       ไม่มีคำร้องขอความช่วยเหลือในขณะนี้
                     </TableCell>
                   </TableRow>
