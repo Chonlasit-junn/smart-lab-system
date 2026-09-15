@@ -67,8 +67,14 @@ Invoke-RestMethod http://127.0.0.1:8000/
 2. `backend/migrations/002_session_device_identity.sql`
 3. `backend/migrations/003_agent_session_hardening.sql`
 4. `backend/migrations/004_agent_delivery_reliability.sql`
+5. `backend/migrations/005_point_system.sql`
+6. `backend/migrations/006_agent_policy_hardening.sql`
+7. `backend/migrations/007_point_requests.sql`
+8. `backend/migrations/008_point_policy.sql`
+9. `backend/migrations/009_remove_booking_point_requirement.sql`
+10. `backend/migrations/010_database_cleanup.sql`
 
-Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session และป้องกัน log ซ้ำจาก retry ด้วย idempotency key การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่ม column ให้ตารางเดิมได้ จึงต้องรัน SQL migration แยก
+Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม, policy/evidence ของ Agent และจัดโครงสร้าง legacy ให้ตรงกับแอป การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่มหรือลบ column ของตารางเดิมได้ จึงต้องรัน SQL migration แยก
 
 ### 3. รัน Frontend
 
@@ -176,8 +182,19 @@ python agent.pyw
 - `SMART_LAB_API_URL`: override URL ของ Backend โดยไม่ต้องแก้ source
 - `SMART_LAB_CODE`: override รหัสห้อง
 - `SMART_LAB_AGENT_DEBUG=1`: ป้องกันการ logout Windows ระหว่างทดสอบ; ตั้งเป็น `0` ตอนใช้งานจริง
+- `SMART_LAB_SESSION_CLEANUP=1`: เปิดการ cleanup เมื่อรันจาก source; executable ที่ build แล้วเปิดเป็นค่าเริ่มต้น และตั้งเป็น `0` เพื่อปิดชั่วคราว
 - `SMART_LAB_AGENT_DATA_DIR`: โฟลเดอร์สำหรับ local SQLite outbox; ค่าเริ่มต้นคือ `%LOCALAPPDATA%\SmartLabAgent`
+- `SMART_LAB_POLICY_REFRESH_SECONDS`: ความถี่ refresh policy; ค่าเริ่มต้น 60 วินาที
 - `DEVICE_NAME` และ `DEVICE_MAC`: อ่านจากเครื่องและส่งตอนสร้าง session
+
+เมื่อจบ Session และเปิดใช้ Session Cleanup ระบบจะขอปิดโปรแกรมของ Windows user เดิมก่อน
+แล้วบังคับปิดเฉพาะโปรแกรมที่ยังค้างหลังรอ 10 วินาที โดยคง Agent และ Windows shell ไว้
+จากนั้นล้าง cookies, history, saved login และ cache ของ Chrome/Edge/Brave/Vivaldi/Opera/Firefox
+แต่เก็บ Bookmark และ Extension ไว้ และลบเฉพาะไฟล์ใหม่ที่ถูกสร้างใน Downloads ระหว่าง Session
+ข้อมูลใน Backend และรายการใน local outbox ที่ยังรอส่งจะไม่ถูกลบ
+
+ฟีเจอร์นี้อาจทำให้ข้อมูลที่ยังไม่ได้บันทึกในโปรแกรมอื่นหายได้ และ Browser Sync หรือ Windows
+Credential Manager อาจทำให้ข้อมูลบางอย่างกลับมาได้ จึงควรทดสอบบนเครื่อง Lab ก่อนเปิดใช้จริง
 
 ถ้าต้อง build executable ให้ติดตั้ง requirements-build.txt แล้วรัน pyinstaller --clean --noconfirm agent.spec
 
@@ -196,6 +213,7 @@ python agent.pyw
 
 - ตอน login: `POST /login`
 - ตอนเริ่ม session: `POST /agent/start-session` พร้อม `client_session_id` ที่เก็บไว้จนกว่า Backend จะตอบสำเร็จ
+- ตอนเริ่มและระหว่าง session: `GET /agent/policy` เพื่อโหลดกฎ Blacklist และ refresh ทุก 60 วินาที
 - ระหว่างใช้งาน: `POST /agent/heartbeat` ทุก 30 วินาที
 - ตอนจบ session: `POST /agent/log-usage` และ `POST /agent/end-session`
 - Agent เก็บ usage และ violation ลง local SQLite outbox ก่อนส่ง โดยแต่ละ usage/violation มี `event_id`; ถ้าเน็ตหลุดจะ retry อัตโนมัติเมื่อ Heartbeat กลับมาสำเร็จ
@@ -208,15 +226,46 @@ python agent.pyw
 1. เพิ่ม `notepad` ในหน้า Admin > Blacklist หรือในตาราง `blacklisted_apps`
 2. เปิด Agent และเริ่ม session ใหม่
 3. เปิด Notepad
-4. Agent จะตรวจทุกประมาณ 5 วินาทีและควรแสดง violation dialog พร้อมจบ session
+4. Agent จะตรวจ Process ใหม่และ Active Window ทุกประมาณ 5 วินาที ควรแสดง violation dialog พร้อมจบ session
 5. ตรวจว่ามีแถวใน `usage_violations`
 
 ข้อมูล violation ที่ Agent ส่ง:
 
 ```text
 POST /agent/log-violation
-session_id, program_name, reason, action_taken
+session_id, program_name, reason, action_taken,
+process_name, exe_path, window_title, detection_source
 ```
+
+กฎ Blacklist รองรับ `process_name`, `process_name_or_title`, `exe_path` และ `window_title` ผ่าน `match_type`/`match_value` ในตาราง `blacklisted_apps` ส่วน Backend จะตรวจซ้ำก่อนบันทึก violation เพื่อไม่รับรายการที่ไม่ตรงกับกฎที่เปิดใช้งานอยู่
+
+## หน้า Admin คะแนนผู้ใช้
+
+เปิดหน้า `/admin/points` จากเมนู `User Points` เพื่อดูคะแนนสะสม คะแนนรายวัน สถานะการจอง และสถานะ Ban ของผู้ใช้ทั้งหมด หน้าเว็บเรียก `GET /admin/points` ซึ่งอนุญาตเฉพาะบัญชีที่มี role `admin` และรองรับการค้นหา กรอง และเรียงลำดับข้อมูล
+
+เมื่อคะแนนเหลือไม่เกินค่า `warning_threshold` (ค่าเริ่มต้น 20) ระบบจะแสดงคำเตือนให้ผู้ใช้ทราบ หากคะแนนเป็น 0 ผู้ใช้จะกด `ติดต่อ Admin เพื่อขอเพิ่มคะแนน` ได้หนึ่งคำขอที่ยังรอผลต่อครั้ง โดยจำนวนแต้มอิงจาก `point_request_amount` คำขอจะแสดงในหน้า `/admin/points` เพื่อให้ Admin อนุมัติหรือไม่อนุมัติ หากอนุมัติ ระบบจะบันทึกประวัติใน `point_logs` ด้วยเหตุผล `admin_grant` บัญชีที่คะแนนเป็น 0 จะไม่รับ Daily +1 อัตโนมัติ เพื่อไม่ให้ข้ามขั้นตอนคำขอกู้คะแนน
+
+ในหน้า `/admin/points` มีปุ่ม `ลด 10 แต้ม (ทดสอบ)` และ `Reset เป็น 100 (ทดสอบ)` ต่อผู้ใช้สำหรับจำลอง flow คะแนนต่ำ/เป็นศูนย์ ปุ่มใช้ได้เฉพาะ Admin การ Reset จะทำได้ต่อเมื่อผู้ใช้มี point event จากการทดสอบล่าสุด, เพิ่มคะแนนกลับเป็น 100 เป็น log ใหม่ด้วยเหตุผล `admin_test_reset` และล้างเฉพาะ Ban ที่ถูกสร้างจากการหักคะแนนทดสอบ โดยไม่ลบประวัติเดิม หากมีคำขอเพิ่มคะแนนที่ยัง pending ต้องจัดการคำขอนั้นก่อน
+
+ฟังก์ชัน Test point และ endpoint ที่เกี่ยวข้องควรนำออกหรือปิดก่อนใช้งาน Production เพราะเปลี่ยนข้อมูลคะแนนจริงในฐานข้อมูล
+
+เปิดหน้า `/admin/points/policy` จากเมนู `Point Criteria` เพื่อปรับคะแนน Daily bonus, จบ Session, No-show, โปรแกรมต้องห้าม, ยกเลิกช้า, จำนวนแต้มที่คืนเมื่ออนุมัติคำขอ, เกณฑ์แจ้งเตือน และจำนวนวัน Ban แต่ละระดับ ค่าใหม่ถูกใช้กับเหตุการณ์และการตรวจสอบ Ban ครั้งถัดไป โดยไม่แก้ไขประวัติคะแนนเดิม ระบบจะบันทึกผู้แก้ไขและเวลาไว้ใน `point_policies` การจองห้องไม่มีเกณฑ์คะแนนขั้นต่ำแล้ว ผู้ใช้จะจองไม่ได้เฉพาะกรณีมี Ban ที่ยังไม่หมดอายุ
+
+ถ้าคะแนนเข้าเงื่อนไข Ban หลายระดับ ระบบจะเลือกจำนวนวันของโทษที่สูงสุดเพียงรายการเดียว เช่น จากเดิม Ban 2 วันแล้วคะแนนลดลงเข้าเงื่อนไข Ban 5 วัน ระบบจะขยายวันสิ้นสุดเป็นโทษ 5 วันจากเวลาที่ตรวจพบ ไม่บวกเป็น 7 วัน และยังเก็บรายการเดิมไว้เป็นประวัติ
+
+### Automated tests
+
+รันจากโฟลเดอร์โปรเจค:
+
+```powershell
+cd backend
+.\venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
+
+cd ..\frontend
+npm test
+```
+
+ชุดทดสอบ Backend ใช้ SQLite ชั่วคราวและไม่เชื่อมต่อหรือแก้ไข Supabase ส่วน Frontend ใช้ Node built-in test runner จึงไม่เพิ่ม dependency ใหม่
 
 ## Query ตรวจผลใน Supabase
 
@@ -255,7 +304,7 @@ order by p.id desc
 limit 50;
 ```
 
-> `lab_access_logs` เป็นแหล่งข้อมูลหลักของเครื่องในระดับ session ส่วน `program_usage_logs.device_name/device_mac` ยังเก็บไว้เพื่อรองรับข้อมูลเก่าและ compatibility ของ Agent รุ่นเดิม
+> `lab_access_logs` เป็นแหล่งข้อมูลหลักเพียงจุดเดียวของเครื่องในระดับ session ส่วน `program_usage_logs` อ้างอิง session ผ่าน `lab_access_log_id` และรายงานต้อง JOIN ไปยัง session เมื่อต้องการชื่อหรือ MAC ของเครื่อง
 
 ### ตรวจ violation
 
