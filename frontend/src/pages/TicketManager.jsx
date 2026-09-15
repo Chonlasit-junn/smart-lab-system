@@ -71,6 +71,8 @@ export default function TicketManager() {
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>User ID</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>หัวข้อ (Subject)</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>รายละเอียด (Message)</TableCell>
+                  {/* เพิ่มคอลัมน์ Timestamp ตรงนี้ */}
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>วันที่ (Timestamp)</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>สถานะ</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#64748b', textAlign: 'center' }}>จัดการ</TableCell>
                 </TableRow>
@@ -83,6 +85,10 @@ export default function TicketManager() {
                       <TableCell>{ticket.user_id}</TableCell>
                       <TableCell sx={{ fontWeight: '700', color: '#334155' }}>{ticket.subject}</TableCell>
                       <TableCell sx={{ color: '#475569' }}>{ticket.message}</TableCell>
+                      {/* นำ created_at มาจัดฟอร์แมต */}
+                      <TableCell sx={{ color: '#475569' }}>
+                        {ticket.created_at ? new Date(ticket.created_at).toLocaleString('th-TH') : '-'}
+                      </TableCell>
                       <TableCell>
                         <Chip
                           label={ticket.status === 'open' ? 'รอแก้ไข' : 'ปิดแล้ว'}

@@ -233,8 +233,10 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True) # หรือ ForeignKey("users.id") ถ้ามีการเชื่อม Relation
+    user_id = Column(Integer, ForeignKey("users.id"), index=True) 
     subject = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
-    status = Column(String(50), default="open") # สถานะเริ่มต้นคือ open
+    status = Column(String(50), default="open")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")

@@ -36,8 +36,9 @@ export default function Admin() {
   const location = useLocation();
 
   const [loading, setLoading]                       = useState(true);
-  const [stats, setStats]                           = useState({ totalRequests: 0, activeUsers: 0, pendingApprovals: 0 });
+  const [stats, setStats] = useState({ totalRequests: 0, activeUsers: 0, pendingApprovals: 0, supportTickets: 0 });
   const [recentReservations, setRecentReservations] = useState([]);
+  
 
   // set tab title once on mount
   useEffect(() => {
@@ -49,42 +50,48 @@ export default function Admin() {
   }, []);
 
   const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const [bookingsRes, usersRes, pendingRes] = await Promise.all([
-        axios.get(`${API_URL}/bookings`),
-        axios.get(`${API_URL}/users`),
-        axios.get(`${API_URL}/admin/users/pending`),
-      ]);
+  try {
+    setLoading(true);
+    // เพิ่ม axios.get สำหรับ tickets
+    const [bookingsRes, usersRes, pendingRes, ticketsRes] = await Promise.all([
+      axios.get(`${API_URL}/bookings`),
+      axios.get(`${API_URL}/users`),
+      axios.get(`${API_URL}/admin/users/pending`),
+      axios.get(`${API_URL}/tickets`),
+    ]);
 
-      const bookings = bookingsRes.data?.data || [];
-      const users    = usersRes.data?.data    || [];
-      const pending  = pendingRes.data?.data  || [];
+    const bookings = bookingsRes.data?.data || [];
+    const users    = usersRes.data?.data    || [];
+    const pending  = pendingRes.data?.data  || [];
+    const tickets  = ticketsRes.data?.data  || [];
 
-      // backend already returns newest-first, but sort locally as a safety net
-      const sorted = [...bookings].sort(
-        (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
-      );
+    // นับจำนวน ticket ที่สถานะเป็น open
+    const openTicketsCount = tickets.filter(t => t.status === 'open').length;
 
-      setRecentReservations(sorted.slice(0, 10));
-      setStats({
-        totalRequests:   bookings.length,
-        activeUsers:     users.length,
-        pendingApprovals: pending.length,
-      });
-    } catch (error) {
-      console.error('[Admin] failed to fetch dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const sorted = [...bookings].sort(
+      (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+    );
+
+    setRecentReservations(sorted.slice(0, 10));
+    setStats({
+      totalRequests:   bookings.length,
+      activeUsers:     users.length,
+      pendingApprovals: pending.length,
+      supportTickets:  openTicketsCount, // อัปเดตค่าตรงนี้
+    });
+  } catch (error) {
+    console.error('[Admin] failed to fetch dashboard data:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const STATS_DATA = [
-    { label: 'Total Requests',  v: stats.totalRequests,    c: '#3b82f6', i: <Person /> },
-    { label: 'Active Users',    v: stats.activeUsers,      c: '#10b981', i: <Group /> },
-    { label: 'Pending Users',   v: stats.pendingApprovals, c: '#f59e0b', i: <PendingActions />, path: '/verify-users' },
-    { label: 'Support Tickets', v: 0,                      c: '#ef4444', i: <SupportAgent /> },
-  ];
+  { label: 'Total Requests',  v: stats.totalRequests,    c: '#3b82f6', i: <Person /> },
+  { label: 'Active Users',    v: stats.activeUsers,      c: '#10b981', i: <Group /> },
+  { label: 'Pending Users',   v: stats.pendingApprovals, c: '#f59e0b', i: <PendingActions />, path: '/verify-users' },
+  { label: 'Support Tickets', v: stats.supportTickets,   c: '#ef4444', i: <SupportAgent />, path: '/ticket' },
+];
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#fcfdfe', fontFamily: "'Inter', sans-serif" }}>
