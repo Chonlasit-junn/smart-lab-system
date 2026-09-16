@@ -1,7 +1,7 @@
 // ============================================================================
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -18,6 +18,8 @@ import {
   Popover,
   Button,
   Divider,
+  Chip,
+  Badge,
 } from "@mui/material";
 import {
   Notifications,
@@ -36,8 +38,26 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import {
+  formatRelativeTime,
+  formatFullTime,
+  groupNotifications,
+} from "../utils/notificationTime";
 
 const API_URL = import.meta.env.VITE_API_URL;
+
+// ป้ายชื่อเหตุผลของการเปลี่ยนแปลงคะแนน (ใช้แสดงในกระดิ่งแจ้งเตือน)
+const POINT_REASON_LABELS = {
+  daily_bonus: "Daily bonus",
+  no_show: "ไม่มาตามการจอง",
+  forbidden_app: "ใช้โปรแกรมต้องห้าม",
+  late_cancel: "ยกเลิกการจองกระชั้นชิด",
+  complete_session: "จบการใช้งานปกติ",
+  admin_grant: "Admin อนุมัติเพิ่มคะแนน",
+};
+
+// localStorage key prefix ที่ใช้จำว่าผู้ใช้อ่านแจ้งเตือนคะแนนล่าสุดถึงไอดีไหนแล้ว
+const LAST_SEEN_POINT_LOG_KEY = "last_seen_point_log_id";
 
 export default function History() {
   const navigate = useNavigate();
@@ -46,6 +66,12 @@ export default function History() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pastBookings, setPastBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // State สำหรับกระดิ่งแจ้งเตือน (ดึงจากประวัติการเปลี่ยนแปลงคะแนน เหมือนหน้า Booking)
+  const [pointLogs, setPointLogs] = useState([]);
+  const [lastSeenLogId, setLastSeenLogId] = useState(
+    () => Number(localStorage.getItem(LAST_SEEN_POINT_LOG_KEY)) || 0,
+  );
 
   const fetchMyHistory = useCallback(async () => {
     if (!currentUser) return;
@@ -83,12 +109,86 @@ export default function History() {
     fetchMyHistory();
   }, [currentUser, fetchMyHistory, navigate]);
 
+  // ดึงประวัติการเปลี่ยนแปลงคะแนน เพื่อนำมาแสดงในกระดิ่งแจ้งเตือน
+  useEffect(() => {
+    if (!currentUser?.email) {
+      setPointLogs([]);
+      return undefined;
+    }
+
+    const token = localStorage.getItem("access_token");
+
+    const fetchPointLogs = async () => {
+      try {
+        const response = await axios.get(
+          `${API_URL}/users/me/points/logs?limit=10`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        setPointLogs(response.data?.data || []);
+      } catch (error) {
+        console.error("[API Error] Failed to fetch point logs:", error);
+      }
+    };
+
+    fetchPointLogs();
+    const intervalId = setInterval(fetchPointLogs, 15000);
+    return () => clearInterval(intervalId);
+  }, [currentUser?.email]);
+
   // Add User Menu Popover States
   const [anchorEl, setAnchorEl] = useState(null);
   const openUserMenu = Boolean(anchorEl);
 
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleCloseUserMenu = () => setAnchorEl(null);
+
+  // ----- กระดิ่งแจ้งเตือน (เหมือนหน้า Booking) -----
+  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+  const openNotifMenu = Boolean(notifAnchorEl);
+
+  const handleNotifClick = (e) => {
+    setNotifAnchorEl(e.currentTarget);
+    if (pointLogs.length > 0) {
+      const latestId = Math.max(...pointLogs.map((log) => log.id));
+      if (latestId > lastSeenLogId) {
+        setLastSeenLogId(latestId);
+        localStorage.setItem(LAST_SEEN_POINT_LOG_KEY, String(latestId));
+      }
+    }
+  };
+  const handleCloseNotifMenu = () => setNotifAnchorEl(null);
+
+  // นาฬิกาสำหรับคำนวณเวลาสัมพัทธ์ ("12 นาทีที่ผ่านมา") ให้ขยับเองทุก 1 นาที
+  const [notifNow, setNotifNow] = useState(() => new Date());
+  useEffect(() => {
+    const timerId = setInterval(() => setNotifNow(new Date()), 60000);
+    return () => clearInterval(timerId);
+  }, []);
+
+  const notifications = useMemo(
+    () =>
+      pointLogs.map((log) => {
+        const isPositive = log.change > 0;
+        const reasonLabel = POINT_REASON_LABELS[log.reason] || log.reason;
+        return {
+          id: log.id,
+          title: `${reasonLabel} ${isPositive ? "+" : ""}${log.change} คะแนน`,
+          subtitle: log.note || "—",
+          createdAt: log.created_at || null,
+          time: formatRelativeTime(log.created_at, notifNow),
+          fullTime: formatFullTime(log.created_at),
+          color: isPositive ? "#16a34a" : "#dc2626",
+          iconText: isPositive ? "+" : "-",
+          unread: log.id > lastSeenLogId,
+        };
+      }),
+    [pointLogs, lastSeenLogId, notifNow],
+  );
+
+  const notificationGroups = useMemo(
+    () => groupNotifications(notifications, { now: notifNow }),
+    [notifications, notifNow],
+  );
 
   const handleLogoutAction = () => {
     handleCloseUserMenu();
@@ -174,9 +274,187 @@ export default function History() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton>
-              <Notifications sx={{ color: "#111827" }} />
+            <IconButton onClick={handleNotifClick}>
+              <Badge
+                variant="dot"
+                color="error"
+                overlap="circular"
+                invisible={!notifications.some((n) => n.unread)}
+              >
+                <Notifications sx={{ color: "#111827" }} />
+              </Badge>
             </IconButton>
+
+            {/* Notification Popover */}
+            <Popover
+              anchorEl={notifAnchorEl}
+              open={openNotifMenu}
+              onClose={handleCloseNotifMenu}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              transformOrigin={{ vertical: "top", horizontal: "right" }}
+              PaperProps={{
+                sx: {
+                  mt: 1.5,
+                  width: 380,
+                  maxWidth: "92vw",
+                  maxHeight: 520,
+                  borderRadius: 3,
+                  bgcolor: "#FFFFFF",
+                  color: "#0f172a",
+                  boxShadow: "0 20px 45px rgba(15,23,42,0.35)",
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  px: 2.5,
+                  py: 2,
+                  flexShrink: 0,
+                }}
+              >
+                <Typography fontSize="16px" fontWeight="700">
+                  การแจ้งเตือน
+                </Typography>
+                {notifications.some((n) => n.unread) && (
+                  <Chip
+                    size="small"
+                    label={`ใหม่ ${notifications.filter((n) => n.unread).length}`}
+                    sx={{
+                      bgcolor: "#2563eb",
+                      color: "#fff",
+                      fontSize: 11,
+                      height: 22,
+                    }}
+                  />
+                )}
+              </Box>
+
+              <Box sx={{ overflowY: "auto", px: 1, pb: 1 }}>
+                {notificationGroups.length === 0 ? (
+                  <Box sx={{ py: 4, textAlign: "center" }}>
+                    <Typography fontSize="13px" sx={{ color: "#64748b" }}>
+                      ยังไม่มีการแจ้งเตือน
+                    </Typography>
+                  </Box>
+                ) : (
+                  notificationGroups.map((group, groupIndex) => (
+                    <Box key={group.key} sx={{ pb: 0.5 }}>
+                      {groupIndex > 0 && (
+                        <Divider sx={{ my: 1, borderColor: "#e2e8f0" }} />
+                      )}
+
+                      <Box
+                        sx={{
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 1,
+                          bgcolor: "#FFFFFF",
+                          px: 1.5,
+                          pt: 1,
+                          pb: 0.75,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 1,
+                        }}
+                      >
+                        <Typography
+                          fontSize="13px"
+                          fontWeight="700"
+                          sx={{ color: "#0f172a" }}
+                        >
+                          {group.label}
+                        </Typography>
+                        <Typography fontSize="11.5px" sx={{ color: "#94a3b8" }}>
+                          {group.items.length} รายการ
+                        </Typography>
+                      </Box>
+
+                      {group.items.map((n) => (
+                        <Box
+                          key={n.id}
+                          title={n.fullTime}
+                          sx={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 1.5,
+                            px: 1.5,
+                            py: 1,
+                            borderRadius: 2,
+                            cursor: "pointer",
+                            bgcolor: n.unread
+                              ? "rgba(37, 99, 235, 0.06)"
+                              : "transparent",
+                            "&:hover": { bgcolor: "rgba(0, 0, 0, 0.04)" },
+                          }}
+                        >
+                          <Box sx={{ pt: 1.2 }}>
+                            {n.unread ? (
+                              <Box
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: "50%",
+                                  bgcolor: "#2563eb",
+                                }}
+                              />
+                            ) : (
+                              <Box sx={{ width: 8, height: 8 }} />
+                            )}
+                          </Box>
+
+                          <Avatar
+                            sx={{
+                              bgcolor: n.color,
+                              width: 36,
+                              height: 36,
+                              fontSize: 14,
+                            }}
+                          >
+                            {n.iconText}
+                          </Avatar>
+
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography
+                              fontSize="13.5px"
+                              fontWeight="600"
+                              sx={{
+                                color: "#1e293b",
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {n.title}
+                            </Typography>
+                            <Typography
+                              fontSize="12px"
+                              sx={{ color: "#475569", mt: 0.3 }}
+                            >
+                              {n.subtitle}
+                            </Typography>
+                            <Typography
+                              fontSize="12px"
+                              sx={{ color: "#64748b", mt: 0.3 }}
+                            >
+                              {n.time}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Box>
+                  ))
+                )}
+              </Box>
+            </Popover>
+
             {currentUser ? (
               <Box
                 sx={{
