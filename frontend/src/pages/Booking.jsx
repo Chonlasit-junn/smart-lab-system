@@ -45,6 +45,11 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import SupportModal from "./SupportModal";
+import {
+  formatRelativeTime,
+  formatFullTime,
+  groupNotifications,
+} from "../utils/notificationTime";
 
 // API Endpoint configuration
 const API_URL = import.meta.env.VITE_API_URL;
@@ -457,6 +462,13 @@ export default function Booking() {
   };
   const handleCloseNotifMenu = () => setNotifAnchorEl(null);
 
+  // นาฬิกาสำหรับคำนวณเวลาสัมพัทธ์ ("12 นาทีที่ผ่านมา") ให้ขยับเองทุก 1 นาที
+  const [notifNow, setNotifNow] = useState(() => new Date());
+  useEffect(() => {
+    const timerId = setInterval(() => setNotifNow(new Date()), 60000);
+    return () => clearInterval(timerId);
+  }, []);
+
   // Notifications are derived from the user's point-change history.
   const notifications = useMemo(
     () =>
@@ -467,15 +479,21 @@ export default function Booking() {
           id: log.id,
           title: `${reasonLabel} ${isPositive ? "+" : ""}${log.change} คะแนน`,
           subtitle: log.note || "—",
-          time: log.created_at
-            ? new Date(log.created_at).toLocaleString("th-TH")
-            : "—",
+          createdAt: log.created_at || null,
+          time: formatRelativeTime(log.created_at, notifNow),
+          fullTime: formatFullTime(log.created_at),
           color: isPositive ? "#16a34a" : "#dc2626",
           iconText: isPositive ? "+" : "-",
           unread: log.id > lastSeenLogId,
         };
       }),
-    [pointLogs, lastSeenLogId],
+    [pointLogs, lastSeenLogId, notifNow],
+  );
+
+  // แบ่งการแจ้งเตือนออกเป็น 2 กลุ่มแบบ YouTube: "วันนี้" และ "ที่ผ่านมา"
+  const notificationGroups = useMemo(
+    () => groupNotifications(notifications, { now: notifNow }),
+    [notifications, notifNow],
   );
 
   // ============================================================================
@@ -630,85 +648,138 @@ export default function Booking() {
                 <Typography fontSize="16px" fontWeight="700">
                   การแจ้งเตือน
                 </Typography>
+                {notifications.some((n) => n.unread) && (
+                  <Chip
+                    size="small"
+                    label={`ใหม่ ${notifications.filter((n) => n.unread).length}`}
+                    sx={{
+                      bgcolor: "#2563eb",
+                      color: "#fff",
+                      fontSize: 11,
+                      height: 22,
+                    }}
+                  />
+                )}
               </Box>
 
-              {/* Scrollable notification list */}
+              {/* Scrollable notification list — แบ่งเป็น "วันนี้" / "ที่ผ่านมา" */}
               <Box sx={{ overflowY: "auto", px: 1, pb: 1 }}>
-                {notifications.length === 0 ? (
+                {notificationGroups.length === 0 ? (
                   <Box sx={{ py: 4, textAlign: "center" }}>
                     <Typography fontSize="13px" sx={{ color: "#64748b" }}>
                       ยังไม่มีการแจ้งเตือน
                     </Typography>
                   </Box>
                 ) : (
-                  notifications.map((n) => (
-                    <Box
-                      key={n.id}
-                      sx={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "rgba(0, 0, 0, 0.04)" },
-                      }}
-                    >
-                      {/* Unread dot */}
-                      <Box sx={{ pt: 1.2 }}>
-                        {n.unread ? (
-                          <Box
-                            sx={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: "50%",
-                              bgcolor: "#2563eb",
-                            }}
-                          />
-                        ) : (
-                          <Box sx={{ width: 8, height: 8 }} />
-                        )}
-                      </Box>
+                  notificationGroups.map((group, groupIndex) => (
+                    <Box key={group.key} sx={{ pb: 0.5 }}>
+                      {/* เส้นคั่นระหว่างกลุ่ม (ไม่ต้องมีเหนือกลุ่มแรก) */}
+                      {groupIndex > 0 && (
+                        <Divider sx={{ my: 1, borderColor: "#e2e8f0" }} />
+                      )}
 
-                      <Avatar
+                      {/* หัวข้อกลุ่ม: ติดอยู่ด้านบนขณะเลื่อน เหมือน YouTube */}
+                      <Box
                         sx={{
-                          bgcolor: n.color,
-                          width: 36,
-                          height: 36,
-                          fontSize: 14,
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 1,
+                          bgcolor: "#FFFFFF",
+                          px: 1.5,
+                          pt: 1,
+                          pb: 0.75,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 1,
                         }}
                       >
-                        {n.iconText}
-                      </Avatar>
-
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography
-                          fontSize="13.5px"
-                          fontWeight="600"
-                          sx={{
-                            color: "#1e293b",
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                          }}
+                          fontSize="13px"
+                          fontWeight="700"
+                          sx={{ color: "#0f172a" }}
                         >
-                          {n.title}
+                          {group.label}
                         </Typography>
-                        <Typography
-                          fontSize="12px"
-                          sx={{ color: "#475569", mt: 0.3 }}
-                        >
-                          {n.subtitle}
-                        </Typography>
-                        <Typography
-                          fontSize="12px"
-                          sx={{ color: "#64748b", mt: 0.3 }}
-                        >
-                          {n.time}
+                        <Typography fontSize="11.5px" sx={{ color: "#94a3b8" }}>
+                          {group.items.length} รายการ
                         </Typography>
                       </Box>
+
+                      {group.items.map((n) => (
+                        <Box
+                          key={n.id}
+                          title={n.fullTime}
+                          sx={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 1.5,
+                            px: 1.5,
+                            py: 1,
+                            borderRadius: 2,
+                            cursor: "pointer",
+                            bgcolor: n.unread
+                              ? "rgba(37, 99, 235, 0.06)"
+                              : "transparent",
+                            "&:hover": { bgcolor: "rgba(0, 0, 0, 0.04)" },
+                          }}
+                        >
+                          {/* Unread dot */}
+                          <Box sx={{ pt: 1.2 }}>
+                            {n.unread ? (
+                              <Box
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: "50%",
+                                  bgcolor: "#2563eb",
+                                }}
+                              />
+                            ) : (
+                              <Box sx={{ width: 8, height: 8 }} />
+                            )}
+                          </Box>
+
+                          <Avatar
+                            sx={{
+                              bgcolor: n.color,
+                              width: 36,
+                              height: 36,
+                              fontSize: 14,
+                            }}
+                          >
+                            {n.iconText}
+                          </Avatar>
+
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography
+                              fontSize="13.5px"
+                              fontWeight="600"
+                              sx={{
+                                color: "#1e293b",
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {n.title}
+                            </Typography>
+                            <Typography
+                              fontSize="12px"
+                              sx={{ color: "#475569", mt: 0.3 }}
+                            >
+                              {n.subtitle}
+                            </Typography>
+                            <Typography
+                              fontSize="12px"
+                              sx={{ color: "#64748b", mt: 0.3 }}
+                            >
+                              {n.time}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      ))}
                     </Box>
                   ))
                 )}
