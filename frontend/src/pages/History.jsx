@@ -31,7 +31,6 @@ import {
   Computer,
   Menu as MenuIcon,
   Person,
-  Settings,
   Close,
 } from "@mui/icons-material";
 
@@ -599,31 +598,6 @@ export default function History() {
 
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
-                    <Box
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#f8fafc" },
-                      }}
-                    >
-                      <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="700"
-                        color="#1e293b"
-                      >
-                        Setting
-                      </Typography>
-                    </Box>
                     <Box
                       onClick={handleLogoutAction}
                       sx={{
