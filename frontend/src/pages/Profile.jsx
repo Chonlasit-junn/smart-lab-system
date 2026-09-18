@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -13,6 +13,7 @@ import {
   Popover,
   Button,
   Alert,
+  Badge as MuiBadge,
 } from "@mui/material";
 import {
   Notifications,
@@ -30,14 +31,21 @@ import {
   CalendarMonth,
   Star,
   Person,
-  Settings,
   Close,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import {
+  formatRelativeTime,
+  formatFullTime,
+  groupNotifications,
+} from "../utils/notificationTime";
 
 const API_URL = import.meta.env.VITE_API_URL;
+
+// localStorage key prefix ที่ใช้จำว่าผู้ใช้อ่านแจ้งเตือนคะแนนล่าสุดถึงไอดีไหนแล้ว
+const LAST_SEEN_POINT_LOG_KEY = "last_seen_point_log_id";
 
 const FACULTY_NAMES = {
   business: "School of Business Administration",
@@ -72,6 +80,10 @@ export default function Profile() {
   const [pointLogs, setPointLogs] = useState([]);
   const [pointsError, setPointsError] = useState("");
   const [pointRequestLoading, setPointRequestLoading] = useState(false);
+  // State สำหรับกระดิ่งแจ้งเตือน (ใช้ pointLogs ที่ fetchProfile ดึงมาแล้ว)
+  const [lastSeenLogId, setLastSeenLogId] = useState(
+    () => Number(localStorage.getItem(LAST_SEEN_POINT_LOG_KEY)) || 0,
+  );
 
   useEffect(() => {
     if (!currentUser) {
@@ -89,11 +101,12 @@ export default function Profile() {
       const token = localStorage.getItem("access_token");
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [profileResult, pointsResult, logsResult] = await Promise.allSettled([
-        axios.get(`${API_URL}/users/me`, { headers }),
-        axios.get(`${API_URL}/users/me/points`, { headers }),
-        axios.get(`${API_URL}/users/me/points/logs?limit=20`, { headers }),
-      ]);
+      const [profileResult, pointsResult, logsResult] =
+        await Promise.allSettled([
+          axios.get(`${API_URL}/users/me`, { headers }),
+          axios.get(`${API_URL}/users/me/points`, { headers }),
+          axios.get(`${API_URL}/users/me/points/logs?limit=20`, { headers }),
+        ]);
 
       if (profileResult.status !== "fulfilled") {
         throw profileResult.reason;
@@ -110,7 +123,9 @@ export default function Profile() {
       }
       setProfile({ ...profileData, ...pointData });
       setPointLogs(
-        logsResult.status === "fulfilled" ? logsResult.value.data.data || [] : [],
+        logsResult.status === "fulfilled"
+          ? logsResult.value.data.data || []
+          : [],
       );
     } catch (err) {
       setError("ไม่สามารถโหลดข้อมูลโปรไฟล์ได้");
@@ -120,12 +135,81 @@ export default function Profile() {
     }
   };
 
+  // รีเฟรชประวัติการเปลี่ยนแปลงคะแนนเป็นระยะ เพื่อให้กระดิ่งแจ้งเตือนอัปเดตแบบใกล้เคียงเรียลไทม์
+  useEffect(() => {
+    if (!currentUser?.email) return undefined;
+
+    const token = localStorage.getItem("access_token");
+    const fetchPointLogs = async () => {
+      try {
+        const response = await axios.get(
+          `${API_URL}/users/me/points/logs?limit=20`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        setPointLogs(response.data?.data || []);
+      } catch (error) {
+        console.error("[API Error] Failed to fetch point logs:", error);
+      }
+    };
+
+    const intervalId = setInterval(fetchPointLogs, 15000);
+    return () => clearInterval(intervalId);
+  }, [currentUser?.email]);
+
   // Add User Menu Popover States
   const [anchorEl, setAnchorEl] = useState(null);
   const openUserMenu = Boolean(anchorEl);
 
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleCloseUserMenu = () => setAnchorEl(null);
+
+  // ----- กระดิ่งแจ้งเตือน (เหมือนหน้า Booking) -----
+  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+  const openNotifMenu = Boolean(notifAnchorEl);
+
+  const handleNotifClick = (e) => {
+    setNotifAnchorEl(e.currentTarget);
+    if (pointLogs.length > 0) {
+      const latestId = Math.max(...pointLogs.map((log) => log.id));
+      if (latestId > lastSeenLogId) {
+        setLastSeenLogId(latestId);
+        localStorage.setItem(LAST_SEEN_POINT_LOG_KEY, String(latestId));
+      }
+    }
+  };
+  const handleCloseNotifMenu = () => setNotifAnchorEl(null);
+
+  // นาฬิกาสำหรับคำนวณเวลาสัมพัทธ์ ("12 นาทีที่ผ่านมา") ให้ขยับเองทุก 1 นาที
+  const [notifNow, setNotifNow] = useState(() => new Date());
+  useEffect(() => {
+    const timerId = setInterval(() => setNotifNow(new Date()), 60000);
+    return () => clearInterval(timerId);
+  }, []);
+
+  const notifications = useMemo(
+    () =>
+      pointLogs.map((log) => {
+        const isPositive = log.change > 0;
+        const reasonLabel = POINT_REASON_LABELS[log.reason] || log.reason;
+        return {
+          id: log.id,
+          title: `${reasonLabel} ${isPositive ? "+" : ""}${log.change} คะแนน`,
+          subtitle: log.note || "—",
+          createdAt: log.created_at || null,
+          time: formatRelativeTime(log.created_at, notifNow),
+          fullTime: formatFullTime(log.created_at),
+          color: isPositive ? "#16a34a" : "#dc2626",
+          iconText: isPositive ? "+" : "-",
+          unread: log.id > lastSeenLogId,
+        };
+      }),
+    [pointLogs, lastSeenLogId, notifNow],
+  );
+
+  const notificationGroups = useMemo(
+    () => groupNotifications(notifications, { now: notifNow }),
+    [notifications, notifNow],
+  );
 
   const handleLogoutAction = () => {
     handleCloseUserMenu();
@@ -135,7 +219,12 @@ export default function Profile() {
 
   const handlePointRequest = async () => {
     const token = localStorage.getItem("access_token");
-    if (!token || numericPoints !== 0 || profile?.point_request?.status === "pending") return;
+    if (
+      !token ||
+      numericPoints !== 0 ||
+      profile?.point_request?.status === "pending"
+    )
+      return;
 
     try {
       setPointRequestLoading(true);
@@ -154,7 +243,10 @@ export default function Profile() {
       }
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
-      const message = typeof detail === "string" ? detail : "ไม่สามารถส่งคำขอเพิ่มคะแนนได้ กรุณาลองใหม่อีกครั้ง";
+      const message =
+        typeof detail === "string"
+          ? detail
+          : "ไม่สามารถส่งคำขอเพิ่มคะแนนได้ กรุณาลองใหม่อีกครั้ง";
       window.alert(message);
     } finally {
       setPointRequestLoading(false);
@@ -184,8 +276,7 @@ export default function Profile() {
         ? "ผู้ดูแลระบบ"
         : "บุคคลทั่วไป";
 
-  const numericPoints =
-    profile?.points == null ? null : Number(profile.points);
+  const numericPoints = profile?.points == null ? null : Number(profile.points);
   const pointWarningThreshold = Number(profile?.points_warning_threshold) || 20;
   const pointRequestAmount = Number(profile?.point_request_amount) || 10;
   const pointRequest = profile?.point_request;
@@ -267,9 +358,192 @@ export default function Profile() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton>
-              <Notifications sx={{ color: "#111827" }} />
+            <IconButton onClick={handleNotifClick}>
+              <MuiBadge
+                variant="dot"
+                color="error"
+                overlap="circular"
+                invisible={!notifications.some((n) => n.unread)}
+              >
+                <Notifications sx={{ color: "#111827" }} />
+              </MuiBadge>
             </IconButton>
+
+            {/* Notification Popover */}
+            <Popover
+              anchorEl={notifAnchorEl}
+              open={openNotifMenu}
+              onClose={handleCloseNotifMenu}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              transformOrigin={{ vertical: "top", horizontal: "right" }}
+              PaperProps={{
+                sx: {
+                  mt: 1.5,
+                  width: 380,
+                  maxWidth: "92vw",
+                  maxHeight: 520,
+                  borderRadius: 3,
+                  bgcolor: "#FFFFFF",
+                  color: "#0f172a",
+                  boxShadow: "0 20px 45px rgba(15,23,42,0.35)",
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  px: 2.5,
+                  py: 2,
+                  flexShrink: 0,
+                }}
+              >
+                <Typography fontSize="16px" fontWeight="700">
+                  การแจ้งเตือน
+                </Typography>
+                {notifications.some((n) => n.unread) && (
+                  <Chip
+                    size="small"
+                    label={`ใหม่ ${notifications.filter((n) => n.unread).length}`}
+                    sx={{
+                      bgcolor: "#2563eb",
+                      color: "#fff",
+                      fontSize: 11,
+                      height: 22,
+                    }}
+                  />
+                )}
+              </Box>
+
+              <Box sx={{ overflowY: "auto", px: 1, pb: 1 }}>
+                {notificationGroups.length === 0 ? (
+                  <Box sx={{ py: 4, textAlign: "center" }}>
+                    <Typography fontSize="13px" sx={{ color: "#64748b" }}>
+                      ยังไม่มีการแจ้งเตือน
+                    </Typography>
+                  </Box>
+                ) : (
+                  notificationGroups.map((group, groupIndex) => (
+                    <Box key={group.key} sx={{ pb: 0.5 }}>
+                      {groupIndex > 0 && (
+                        <Divider sx={{ my: 1, borderColor: "#e2e8f0" }} />
+                      )}
+
+                      <Box
+                        sx={{
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 1,
+                          bgcolor: "#FFFFFF",
+                          px: 1.5,
+                          pt: 1,
+                          pb: 0.75,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 1,
+                        }}
+                      >
+                        <Typography
+                          fontSize="13px"
+                          fontWeight="700"
+                          sx={{ color: "#0f172a" }}
+                        >
+                          {group.label}
+                        </Typography>
+                        {group.key === "today" && (
+                          <Typography
+                            fontSize="11.5px"
+                            sx={{ color: "#94a3b8" }}
+                          >
+                            {group.items.length} รายการ
+                          </Typography>
+                        )}
+                      </Box>
+
+                      {group.items.map((n) => (
+                        <Box
+                          key={n.id}
+                          title={n.fullTime}
+                          sx={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 1.5,
+                            px: 1.5,
+                            py: 1,
+                            borderRadius: 2,
+                            cursor: "pointer",
+                            bgcolor: n.unread
+                              ? "rgba(37, 99, 235, 0.06)"
+                              : "transparent",
+                            "&:hover": { bgcolor: "rgba(0, 0, 0, 0.04)" },
+                          }}
+                        >
+                          <Box sx={{ pt: 1.2 }}>
+                            {n.unread ? (
+                              <Box
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: "50%",
+                                  bgcolor: "#2563eb",
+                                }}
+                              />
+                            ) : (
+                              <Box sx={{ width: 8, height: 8 }} />
+                            )}
+                          </Box>
+
+                          <Avatar
+                            sx={{
+                              bgcolor: n.color,
+                              width: 36,
+                              height: 36,
+                              fontSize: 14,
+                            }}
+                          >
+                            {n.iconText}
+                          </Avatar>
+
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography
+                              fontSize="13.5px"
+                              fontWeight="600"
+                              sx={{
+                                color: "#1e293b",
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {n.title}
+                            </Typography>
+                            <Typography
+                              fontSize="12px"
+                              sx={{ color: "#475569", mt: 0.3 }}
+                            >
+                              {n.subtitle}
+                            </Typography>
+                            <Typography
+                              fontSize="12px"
+                              sx={{ color: "#64748b", mt: 0.3 }}
+                            >
+                              {n.time}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Box>
+                  ))
+                )}
+              </Box>
+            </Popover>
+
             {currentUser ? (
               <Box
                 sx={{
@@ -407,31 +681,6 @@ export default function Profile() {
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
                     <Box
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#f8fafc" },
-                      }}
-                    >
-                      <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="700"
-                        color="#1e293b"
-                      >
-                        Setting
-                      </Typography>
-                    </Box>
-                    <Box
                       onClick={handleLogoutAction}
                       sx={{
                         display: "flex",
@@ -510,19 +759,28 @@ export default function Profile() {
                     {pointsError}
                   </Alert>
                 ) : numericPoints !== null &&
-                  (profile.is_banned || numericPoints <= pointWarningThreshold) ? (
+                  (profile.is_banned ||
+                    numericPoints <= pointWarningThreshold) ? (
                   <Alert
-                    severity={numericPoints === 0 || profile.is_banned ? "error" : "warning"}
+                    severity={
+                      numericPoints === 0 || profile.is_banned
+                        ? "error"
+                        : "warning"
+                    }
                     sx={{ mb: 3 }}
                   >
                     {numericPoints === 0 ? (
                       <Box>
                         <Typography fontWeight="700">
-                          คะแนนของคุณเหลือ 0 คะแนน กรุณาติดต่อ Admin เพื่อขอความช่วยเหลือ
+                          คะแนนของคุณเหลือ 0 คะแนน กรุณาติดต่อ Admin
+                          เพื่อขอความช่วยเหลือ
                         </Typography>
                         {pointRequest?.status === "pending" ? (
                           <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            ส่งคำขอเพิ่ม {pointRequest.requested_points || pointRequestAmount} คะแนนแล้ว กรุณารอ Admin พิจารณา
+                            ส่งคำขอเพิ่ม{" "}
+                            {pointRequest.requested_points ||
+                              pointRequestAmount}{" "}
+                            คะแนนแล้ว กรุณารอ Admin พิจารณา
                           </Typography>
                         ) : (
                           <Button
@@ -530,10 +788,21 @@ export default function Profile() {
                             size="small"
                             startIcon={<SupportAgent />}
                             onClick={handlePointRequest}
-                            disabled={pointRequestLoading || profile.can_request_points === false}
-                            sx={{ mt: 1.25, borderColor: "currentColor", color: "inherit", textTransform: "none", fontWeight: "700" }}
+                            disabled={
+                              pointRequestLoading ||
+                              profile.can_request_points === false
+                            }
+                            sx={{
+                              mt: 1.25,
+                              borderColor: "currentColor",
+                              color: "inherit",
+                              textTransform: "none",
+                              fontWeight: "700",
+                            }}
                           >
-                            {pointRequestLoading ? "กำลังส่งคำขอ..." : `ติดต่อ Admin เพื่อขอเพิ่ม ${pointRequestAmount} คะแนน`}
+                            {pointRequestLoading
+                              ? "กำลังส่งคำขอ..."
+                              : `ติดต่อ Admin เพื่อขอเพิ่ม ${pointRequestAmount} คะแนน`}
                           </Button>
                         )}
                       </Box>
@@ -835,12 +1104,17 @@ export default function Profile() {
 
                       <LinearProgress
                         variant="determinate"
-                        value={numericPoints == null ? 0 : Math.max(0, Math.min(100, numericPoints))}
+                        value={
+                          numericPoints == null
+                            ? 0
+                            : Math.max(0, Math.min(100, numericPoints))
+                        }
                         sx={{
                           height: 10,
                           borderRadius: 5,
                           mb: 2,
-                          bgcolor: numericPoints == null ? "#e2e8f0" : "#f1f5f9",
+                          bgcolor:
+                            numericPoints == null ? "#e2e8f0" : "#f1f5f9",
                           "& .MuiLinearProgress-bar": {
                             borderRadius: 5,
                             bgcolor: pointColor,
@@ -859,7 +1133,11 @@ export default function Profile() {
                         <Typography variant="body2" color="#64748b">
                           คะแนนวันนี้
                         </Typography>
-                        <Typography variant="body2" fontWeight="bold" color="#334155">
+                        <Typography
+                          variant="body2"
+                          fontWeight="bold"
+                          color="#334155"
+                        >
                           {profile.daily_score ?? "—"} / 100
                         </Typography>
                       </Box>
@@ -894,7 +1172,8 @@ export default function Profile() {
                             fontWeight: "bold",
                           }}
                         />
-                      ) : numericPoints !== null && numericPoints <= pointWarningThreshold ? (
+                      ) : numericPoints !== null &&
+                        numericPoints <= pointWarningThreshold ? (
                         <Chip
                           label="คะแนนต่ำ — โปรดระวังการทำผิดกฎ"
                           size="small"
@@ -917,7 +1196,12 @@ export default function Profile() {
                       )}
 
                       <Divider sx={{ my: 3 }} />
-                      <Typography variant="subtitle2" fontWeight="bold" color="#334155" sx={{ mb: 1.5 }}>
+                      <Typography
+                        variant="subtitle2"
+                        fontWeight="bold"
+                        color="#334155"
+                        sx={{ mb: 1.5 }}
+                      >
                         ประวัติการเปลี่ยนคะแนน
                       </Typography>
                       {pointLogs.length === 0 ? (
@@ -925,7 +1209,13 @@ export default function Profile() {
                           ยังไม่มีประวัติการเปลี่ยนคะแนน
                         </Typography>
                       ) : (
-                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 1.25,
+                          }}
+                        >
                           {pointLogs.map((log) => {
                             const isPositive = log.change > 0;
                             return (
@@ -942,11 +1232,26 @@ export default function Profile() {
                                 }}
                               >
                                 <Box sx={{ minWidth: 0 }}>
-                                  <Typography variant="body2" fontWeight="600" color="#334155" noWrap>
-                                    {POINT_REASON_LABELS[log.reason] || log.reason}
+                                  <Typography
+                                    variant="body2"
+                                    fontWeight="600"
+                                    color="#334155"
+                                    noWrap
+                                  >
+                                    {POINT_REASON_LABELS[log.reason] ||
+                                      log.reason}
                                   </Typography>
-                                  <Typography variant="caption" color="#94a3b8" noWrap>
-                                    {log.note || "—"} · {log.created_at ? new Date(log.created_at).toLocaleString("th-TH") : "—"}
+                                  <Typography
+                                    variant="caption"
+                                    color="#94a3b8"
+                                    noWrap
+                                  >
+                                    {log.note || "—"} ·{" "}
+                                    {log.created_at
+                                      ? new Date(log.created_at).toLocaleString(
+                                          "th-TH",
+                                        )
+                                      : "—"}
                                   </Typography>
                                 </Box>
                                 <Typography
@@ -955,7 +1260,8 @@ export default function Profile() {
                                   color={isPositive ? "#16a34a" : "#dc2626"}
                                   sx={{ flexShrink: 0 }}
                                 >
-                                  {isPositive ? "+" : ""}{log.change}
+                                  {isPositive ? "+" : ""}
+                                  {log.change}
                                 </Typography>
                               </Box>
                             );
