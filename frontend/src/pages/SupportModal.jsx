@@ -12,22 +12,25 @@ export default function SupportModal({ open, onClose, user }) {
 
   const handleSubmit = async () => {
     if (!subject || !message) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
-    
+
+    // ต้องตรงกับ key ที่ auth-context.jsx ใช้ตอน login (localStorage.setItem('access_token', token))
+    const token = localStorage.getItem('access_token');
+
     try {
       setLoading(true);
-      // ส่งข้อมูลไปที่ Backend
-      await axios.post(`${API_URL}/tickets`, {
-        user_id: user.id, // ใช้ ID ของ user ที่ล็อกอินอยู่
-        subject: subject,
-        message: message,
-      });
+      // ไม่ส่ง user_id แล้ว — backend ดึง user จาก token เอง (get_current_user)
+      await axios.post(
+        `${API_URL}/tickets`,
+        { subject, message },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       alert('ส่ง Ticket ให้แอดมินเรียบร้อยแล้ว');
       setSubject('');
       setMessage('');
       onClose(); // ปิด Modal
     } catch (error) {
-      console.log("Data sent:", { user_id: user?.id, subject, message }); 
-      
+      console.log("Data sent:", { subject, message });
+
       // เอา Error จาก Backend มาแสดงที่หน้าจอเลย
       const errorMsg = error.response?.data?.detail || error.message;
       console.error('Failed to send ticket:', errorMsg);
