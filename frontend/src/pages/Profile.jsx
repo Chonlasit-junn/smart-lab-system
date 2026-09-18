@@ -456,9 +456,14 @@ export default function Profile() {
                         >
                           {group.label}
                         </Typography>
-                        <Typography fontSize="11.5px" sx={{ color: "#94a3b8" }}>
-                          {group.items.length} รายการ
-                        </Typography>
+                        {group.key === "today" && (
+                          <Typography
+                            fontSize="11.5px"
+                            sx={{ color: "#94a3b8" }}
+                          >
+                            {group.items.length} รายการ
+                          </Typography>
+                        )}
                       </Box>
 
                       {group.items.map((n) => (

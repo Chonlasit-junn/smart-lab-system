@@ -193,7 +193,7 @@ export default function Booking() {
     const fetchPointLogs = async () => {
       try {
         const response = await axios.get(
-          `${API_URL}/users/me/points/logs?limit=10`,
+          `${API_URL}/users/me/points/logs?limit=15`,
           {
             headers: { Authorization: `Bearer ${token}` },
           },
@@ -701,9 +701,14 @@ export default function Booking() {
                         >
                           {group.label}
                         </Typography>
-                        <Typography fontSize="11.5px" sx={{ color: "#94a3b8" }}>
-                          {group.items.length} รายการ
-                        </Typography>
+                        {group.key === "today" && (
+                          <Typography
+                            fontSize="11.5px"
+                            sx={{ color: "#94a3b8" }}
+                          >
+                            {group.items.length} รายการ
+                          </Typography>
+                        )}
                       </Box>
 
                       {group.items.map((n) => (
