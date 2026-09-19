@@ -248,6 +248,15 @@ def delete_lab(
 ):
     lab = db.query(models.Lab).filter(models.Lab.id == lab_id).first()
     if not lab: raise HTTPException(status_code=404, detail="Lab not found.")
+
+    registered_device_count = db.query(models.LabDevice).filter(
+        models.LabDevice.lab_id == lab_id,
+    ).count()
+    if registered_device_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Move or revoke all registered devices before deleting this Lab.",
+        )
     
     db.query(models.ClassSchedule).filter(models.ClassSchedule.lab_id == lab_id).delete()
     db.query(models.Booking).filter(models.Booking.lab_id == lab_id).delete()

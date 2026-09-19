@@ -10,6 +10,7 @@ import Admin from './pages/Admin';
 import AdminPoints from './pages/AdminPoints';
 import AdminPointPolicy from './pages/AdminPointPolicy';
 import ManageLabs from './pages/ManageLabs';
+import AdminDevices from './pages/AdminDevices';
 import Reserved from './pages/Reserved';
 import History from './pages/History';
 import VerifyUsers from './pages/VerifyUsers';
@@ -46,6 +47,7 @@ function App() {
             <Route path="/admin/points" element={<AdminRoute><AdminPoints /></AdminRoute>} />
             <Route path="/admin/points/policy" element={<AdminRoute><AdminPointPolicy /></AdminRoute>} />
             <Route path="/manage-labs" element={<AdminRoute><ManageLabs /></AdminRoute>} />
+            <Route path="/admin/devices" element={<AdminRoute><AdminDevices /></AdminRoute>} />
             <Route path="/verify-users" element={<AdminRoute><VerifyUsers /></AdminRoute>} />
             <Route path="/blacklist" element={<AdminRoute><BlacklistManager /></AdminRoute>} />
             <Route path="/ticket" element={<AdminRoute><TicketManager /></AdminRoute>} />

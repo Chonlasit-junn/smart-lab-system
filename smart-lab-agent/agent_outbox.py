@@ -16,6 +16,8 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator, Optional
 
+from agent_device import get_agent_data_dir
+
 
 class AgentOutbox:
     """Persist pending Agent requests and login-attempt identifiers locally."""
@@ -25,14 +27,7 @@ class AgentOutbox:
             self.path = os.path.abspath(db_path)
             data_dir = os.path.dirname(self.path) or os.getcwd()
         else:
-            data_dir = os.getenv("SMART_LAB_AGENT_DATA_DIR")
-            if not data_dir:
-                data_dir = (
-                    os.getenv("LOCALAPPDATA")
-                    or os.getenv("APPDATA")
-                    or os.path.join(os.path.expanduser("~"), ".smart_lab_agent")
-                )
-            data_dir = os.path.join(data_dir, "SmartLabAgent")
+            data_dir = str(get_agent_data_dir())
             self.path = os.path.join(data_dir, "outbox.sqlite3")
 
         os.makedirs(data_dir, exist_ok=True)

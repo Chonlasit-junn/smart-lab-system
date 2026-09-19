@@ -9,6 +9,7 @@ import time
 import requests
 import pygetwindow as gw
 from datetime import datetime
+from agent_device import load_device_registration
 from agent_outbox import AgentOutbox
 from agent_policy import (
     DEFAULT_FALLBACK_RULES,
@@ -105,7 +106,18 @@ def response_detail(response):
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 API_URL    = os.getenv("SMART_LAB_API_URL", "https://h0sh1na-smart-lab-backend.hf.space").rstrip("/")
-LAB_CODE   = os.getenv("SMART_LAB_CODE", "LAB01")
+DEVICE_REGISTRATION = load_device_registration() or {}
+REGISTERED_DEVICE_ID = str(DEVICE_REGISTRATION.get("device_id") or "").strip()
+DEVICE_TOKEN = str(DEVICE_REGISTRATION.get("device_token") or "").strip()
+LAB_CODE   = str(
+    DEVICE_REGISTRATION.get("lab_code")
+    or os.getenv("SMART_LAB_CODE", "LAB01")
+).strip()
+AGENT_VERSION = os.getenv("SMART_LAB_AGENT_VERSION", "source")
+ALLOW_UNREGISTERED_DEVICE = os.getenv(
+    "SMART_LAB_ALLOW_UNREGISTERED_DEVICE",
+    "0",
+).strip().lower() in {"1", "true", "yes", "on"}
 DEBUG_MODE = os.getenv("SMART_LAB_AGENT_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
 # Keep workstation cleanup opt-in while it is being validated on Lab machines.
 # Set SMART_LAB_SESSION_CLEANUP=1 explicitly when this feature is ready.
@@ -521,6 +533,12 @@ class LoginOverlay(QWidget):
             self._show_error("กรุณากรอกข้อมูลให้ครบถ้วน")
             return
 
+        if not ALLOW_UNREGISTERED_DEVICE and (
+            not REGISTERED_DEVICE_ID or not DEVICE_TOKEN
+        ):
+            self._show_error("เครื่องนี้ยังไม่ได้ลงทะเบียนกับ Lab กรุณาติดต่อผู้ดูแล")
+            return
+
         self.error_label.hide()
         self.login_btn.setText("⏳ กำลังตรวจสอบ...")
         self.login_btn.setEnabled(False)
@@ -542,6 +560,9 @@ class LoginOverlay(QWidget):
                     "lab_code": LAB_CODE,
                     "device": DEVICE_NAME,
                     "device_mac": DEVICE_MAC,
+                    "device_id": REGISTERED_DEVICE_ID or None,
+                    "device_token": DEVICE_TOKEN or None,
+                    "agent_version": AGENT_VERSION,
                     "client_session_id": client_session_id,
                 }
                 session_res = post_with_retry(
@@ -815,6 +836,8 @@ class SmartLabAgent:
                 data={
                     "session_id": self.current_session_id,
                     "device_mac": DEVICE_MAC,
+                    "device_id": REGISTERED_DEVICE_ID or None,
+                    "device_token": DEVICE_TOKEN or None,
                 },
                 retries=1,
                 timeout=10,

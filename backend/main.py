@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 import models
 from database import engine, Base
-from routers import auth, users, labs, agent, gatekeeper, admin, blacklist, points, tickets
+from routers import auth, users, labs, agent, devices, gatekeeper, admin, blacklist, points, tickets
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,6 +24,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(labs.router)
 app.include_router(agent.router)
+app.include_router(devices.router)
 app.include_router(gatekeeper.router)
 app.include_router(admin.router)
 app.include_router(blacklist.router)

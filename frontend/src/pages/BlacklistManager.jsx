@@ -61,6 +61,11 @@ const SIDE_MENU_ITEMS = [
     path: "/manage-labs",
   },
   {
+    text: "Lab Devices",
+    icon: <Computer sx={{ fontSize: 20 }} />,
+    path: "/admin/devices",
+  },
+  {
     text: "Verify Users",
     icon: <HowToReg sx={{ fontSize: 20 }} />,
     path: "/verify-users",

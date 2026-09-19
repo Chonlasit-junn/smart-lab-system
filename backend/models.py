@@ -89,6 +89,52 @@ class Lab(Base):
 
     bookings = relationship("Booking", back_populates="lab", cascade="all, delete-orphan")
     schedules = relationship("ClassSchedule", back_populates="lab", cascade="all, delete-orphan")
+    devices = relationship("LabDevice", back_populates="lab", cascade="all, delete-orphan")
+
+
+class LabDevice(Base):
+    """A workstation provisioned to one Lab by an administrator."""
+
+    __tablename__ = "lab_devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String(128), unique=True, index=True, nullable=False)
+    lab_id = Column(Integer, ForeignKey("labs.id"), nullable=False, index=True)
+    device_name = Column(String(255), nullable=False)
+    device_mac = Column(String(64), nullable=True)
+    status = Column(
+        String(32),
+        nullable=False,
+        default="active",
+        server_default="active",
+        index=True,
+    )  # active | maintenance | revoked
+    agent_token_hash = Column(String(64), unique=True, nullable=False)
+    agent_version = Column(String(64), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    lab = relationship("Lab", back_populates="devices")
+
+
+class LabDeviceEnrollment(Base):
+    """Short-lived, one-time code used to provision a workstation."""
+
+    __tablename__ = "lab_device_enrollments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    lab_id = Column(Integer, ForeignKey("labs.id"), nullable=False, index=True)
+    token_hash = Column(String(64), unique=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    used_device_id = Column(String(128), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class BlacklistedApp(Base):
@@ -120,6 +166,7 @@ class LabAccessLog(Base):
     exit_time = Column(DateTime(timezone=True), nullable=True)
     access_type = Column(String, nullable=False)  # entry | manual
     status = Column(String, nullable=False)        # success | denied
+    lab_device_id = Column(Integer, ForeignKey("lab_devices.id"), nullable=True, index=True)
     device_used = Column(String, nullable=True)
     device_mac = Column(String, nullable=True)
     client_session_id = Column(String, nullable=True, index=True)
@@ -135,6 +182,7 @@ class LabAccessLog(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     booking = relationship("Booking", back_populates="access_logs")
+    lab_device = relationship("LabDevice")
 
 
 class ProgramUsageLog(Base):

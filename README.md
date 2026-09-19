@@ -73,8 +73,9 @@ Invoke-RestMethod http://127.0.0.1:8000/
 8. `backend/migrations/008_point_policy.sql`
 9. `backend/migrations/009_remove_booking_point_requirement.sql`
 10. `backend/migrations/010_database_cleanup.sql`
+11. `backend/migrations/011_lab_device_registration.sql`
 
-Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม, policy/evidence ของ Agent และจัดโครงสร้าง legacy ให้ตรงกับแอป การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่มหรือลบ column ของตารางเดิมได้ จึงต้องรัน SQL migration แยก
+Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม, policy/evidence ของ Agent, การลงทะเบียนเครื่องกับ Lab และจัดโครงสร้าง legacy ให้ตรงกับแอป การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่มหรือลบ column ของตารางเดิมได้ จึงต้องรัน SQL migration แยก
 
 ### 3. รัน Frontend
 
@@ -165,6 +166,22 @@ Invoke-RestMethod -Method Post `
 
 Agent รุ่น source อยู่ที่ `smart-lab-agent/agent.pyw` ส่วนไฟล์ executable ที่ build แล้วอาจถูกเก็บแยก เพราะโฟลเดอร์ `dist/` ถูก ignore โดย Git
 
+### ลงทะเบียนเครื่องกับ Lab ก่อนใช้งาน
+
+Agent รุ่นปัจจุบันต้องผูกเครื่องกับ Lab ก่อนสร้าง Session โดยให้ Admin เปิดหน้า `/admin/devices`
+เลือก Lab แล้วสร้าง Enrollment Code จากนั้นรันคำสั่งนี้บนเครื่องเป้าหมาย:
+
+```powershell
+cd smart-lab-agent
+py -3.11 provision_device.py `
+  --api-url http://127.0.0.1:8000 `
+  --enrollment-code <รหัสจากหน้า Admin>
+```
+
+สคริปต์จะสร้าง Device ID, แลกเป็น Credential แบบใช้ประจำเครื่อง และบันทึกไว้ที่
+`%LOCALAPPDATA%\SmartLabAgent\device_registration.json` จากนั้นให้ปิดแล้วเปิด Agent ใหม่
+รหัสลงทะเบียนใช้ได้ครั้งเดียวและผูกกับ Lab ที่ Admin เลือกเท่านั้น ไม่ควรส่งรหัสนี้ให้ผู้ใช้ทั่วไป
+
 ### รันจาก source เพื่อดู log
 
 ```powershell
@@ -178,14 +195,18 @@ python agent.pyw
 ค่าหลักใน `agent.pyw`:
 
 - `API_URL`: URL ของ Backend ที่ Agent จะเรียก
-- `LAB_CODE`: รหัสห้องที่ต้องมีอยู่ใน Database เช่น `LAB01`
 - `SMART_LAB_API_URL`: override URL ของ Backend โดยไม่ต้องแก้ source
-- `SMART_LAB_CODE`: override รหัสห้อง
+- `SMART_LAB_CODE`: ใช้เฉพาะโหมด Legacy/ทดสอบ เมื่อ Backend ตั้ง `SMART_LAB_REQUIRE_DEVICE_REGISTRATION=0`
+- `SMART_LAB_REQUIRE_DEVICE_REGISTRATION=1`: บังคับให้ Backend รับเฉพาะเครื่องที่ลงทะเบียนแล้ว (ค่าเริ่มต้น)
 - `SMART_LAB_AGENT_DEBUG=1`: ป้องกันการ logout Windows ระหว่างทดสอบ; ตั้งเป็น `0` ตอนใช้งานจริง
 - `SMART_LAB_SESSION_CLEANUP=1`: เปิดการ cleanup แบบ opt-in; ค่าเริ่มต้นของทั้ง source และ executable คือปิด (`0`)
 - `SMART_LAB_AGENT_DATA_DIR`: โฟลเดอร์สำหรับ local SQLite outbox; ค่าเริ่มต้นคือ `%LOCALAPPDATA%\SmartLabAgent`
 - `SMART_LAB_POLICY_REFRESH_SECONDS`: ความถี่ refresh policy; ค่าเริ่มต้น 60 วินาที
 - `DEVICE_NAME` และ `DEVICE_MAC`: อ่านจากเครื่องและส่งตอนสร้าง session
+
+เมื่อใช้งานจริง Backend จะใช้ `device_id` ที่ลงทะเบียนไว้เป็นแหล่งข้อมูลว่าเครื่องอยู่ Lab ใด
+ไม่เชื่อ `lab_code` ที่ผู้ใช้แก้จาก Environment เพียงอย่างเดียว หากยังไม่ได้ลงทะเบียน
+Agent จะไม่อนุญาตให้ Login สร้าง Session
 
 เมื่อจบ Session และเปิดใช้ Session Cleanup ระบบจะขอปิดโปรแกรมของ Windows user เดิมก่อน
 แล้วบังคับปิดเฉพาะโปรแกรมที่ยังค้างหลังรอ 10 วินาที โดยคง Agent และ Windows shell ไว้
