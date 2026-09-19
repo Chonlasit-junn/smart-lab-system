@@ -31,25 +31,25 @@ TEST_STUDENT_PASSWORD = os.getenv("SEED_TEST_STUDENT_PASSWORD")
 DEFAULT_BLACKLIST = [
     {
         "app_name": "BitTorrent",
-        "description": "ห้ามใช้โปรแกรมโหลดไฟล์ละเมิดลิขสิทธิ์",
+        "description": "ไม่อนุญาตให้ใช้โปรแกรมสำหรับดาวน์โหลดหรือแลกเปลี่ยนไฟล์ที่อาจละเมิดลิขสิทธิ์ภายในห้องปฏิบัติการ",
         "match_type": "process_name_or_title",
         "match_value": "bittorrent",
     },
     {
         "app_name": "CheatEngine",
-        "description": "ห้ามใช้โปรแกรมดัดแปลงหน่วยความจำ",
+        "description": "ไม่อนุญาตให้ใช้โปรแกรมสำหรับแก้ไขหรือดัดแปลงหน่วยความจำของโปรแกรมภายในห้องปฏิบัติการ",
         "match_type": "process_name_or_title",
         "match_value": "cheatengine",
     },
     {
         "app_name": "GenshinImpact",
-        "description": "ไม่อนุญาตให้เล่นเกม Genshin ขณะใช้งานห้องแล็บ",
+        "description": "ไม่อนุญาตให้ใช้โปรแกรมเกม Genshin Impact ระหว่างการใช้งานห้องปฏิบัติการ",
         "match_type": "process_name_or_title",
         "match_value": "genshinimpact",
     },
     {
         "app_name": "StarRail",
-        "description": "ไม่อนุญาตให้ขึ้นรถไฟ Star Rail ในเวลาเรียนครับกัปตัน!",
+        "description": "ไม่อนุญาตให้ใช้โปรแกรมเกม Honkai: Star Rail ระหว่างการใช้งานห้องปฏิบัติการ",
         "match_type": "process_name_or_title",
         "match_value": "starrail",
     },

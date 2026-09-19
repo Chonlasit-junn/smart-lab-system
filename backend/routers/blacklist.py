@@ -5,6 +5,7 @@ from typing import Optional
 import models
 from database import get_db
 from policy import DEFAULT_MATCH_TYPE, SUPPORTED_MATCH_TYPES, serialize_rule
+from routers.users import require_admin_user
 
 router = APIRouter(prefix="/admin/blacklist", tags=["Blacklist"])
 
@@ -39,13 +40,20 @@ def _resolve_match_value(app_name: str, match_value: Optional[str]) -> str:
 
 
 @router.get("")
-def get_all(db: Session = Depends(get_db)):
+def get_all(
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     apps = db.query(models.BlacklistedApp).order_by(models.BlacklistedApp.created_at.desc()).all()
     return {"data": [serialize_rule(app, include_created_at=True) for app in apps]}
 
 
 @router.post("")
-def create(payload: BlacklistCreate, db: Session = Depends(get_db)):
+def create(
+    payload: BlacklistCreate,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     app_name = payload.app_name.strip()
     if not app_name:
         raise HTTPException(status_code=422, detail="app_name cannot be empty.")
@@ -72,7 +80,12 @@ def create(payload: BlacklistCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{app_id}")
-def update(app_id: int, payload: BlacklistUpdate, db: Session = Depends(get_db)):
+def update(
+    app_id: int,
+    payload: BlacklistUpdate,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     app = db.query(models.BlacklistedApp).filter(models.BlacklistedApp.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="App not found.")
@@ -90,7 +103,11 @@ def update(app_id: int, payload: BlacklistUpdate, db: Session = Depends(get_db))
 
 
 @router.delete("/{app_id}")
-def delete(app_id: int, db: Session = Depends(get_db)):
+def delete(
+    app_id: int,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     app = db.query(models.BlacklistedApp).filter(models.BlacklistedApp.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="App not found.")

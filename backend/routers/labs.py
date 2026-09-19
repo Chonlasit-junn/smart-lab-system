@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, time, date
+from datetime import datetime, timedelta, time, date, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from urllib.parse import unquote
@@ -11,7 +11,7 @@ from routers.points import (
     is_admin_user,
     mark_due_no_shows,
 )
-from routers.users import get_current_user
+from routers.users import get_current_user, require_admin_user
 
 router = APIRouter(tags=["Lab Management & Booking"])
 
@@ -21,6 +21,152 @@ VALID_TIME_SLOTS = {
     3: {"start": time(14, 30), "end": time(16, 50)},
     4: {"start": time(17, 0), "end": time(19, 20)}
 }
+
+# All booking rules are based on the Lab's local calendar, not the server's
+# timezone. Thailand has no daylight-saving changes, so a fixed UTC+7 offset is
+# sufficient and keeps the service compatible with Windows and Linux hosts.
+LAB_TIMEZONE = timezone(timedelta(hours=7))
+
+DAY_OF_WEEK_ALIASES = {
+    "monday": "Monday",
+    "mon": "Monday",
+    "จันทร์": "Monday",
+    "วันจันทร์": "Monday",
+    "จ.": "Monday",
+    "tuesday": "Tuesday",
+    "tue": "Tuesday",
+    "tues": "Tuesday",
+    "อังคาร": "Tuesday",
+    "วันอังคาร": "Tuesday",
+    "อ.": "Tuesday",
+    "wednesday": "Wednesday",
+    "wed": "Wednesday",
+    "พุธ": "Wednesday",
+    "วันพุธ": "Wednesday",
+    "พ.": "Wednesday",
+    "thursday": "Thursday",
+    "thu": "Thursday",
+    "thur": "Thursday",
+    "thurs": "Thursday",
+    "พฤหัส": "Thursday",
+    "พฤหัสบดี": "Thursday",
+    "วันพฤหัสบดี": "Thursday",
+    "พฤ.": "Thursday",
+    "friday": "Friday",
+    "fri": "Friday",
+    "ศุกร์": "Friday",
+    "วันศุกร์": "Friday",
+    "ศ.": "Friday",
+    "saturday": "Saturday",
+    "sat": "Saturday",
+    "เสาร์": "Saturday",
+    "วันเสาร์": "Saturday",
+    "ส.": "Saturday",
+    "sunday": "Sunday",
+    "sun": "Sunday",
+    "อาทิตย์": "Sunday",
+    "วันอาทิตย์": "Sunday",
+    "อา.": "Sunday",
+}
+
+
+def _lab_now() -> datetime:
+    """Return a naive local time for the Lab's timestamp columns."""
+    return datetime.now(LAB_TIMEZONE).replace(tzinfo=None)
+
+
+def normalize_day_of_week(value: str, *, strict: bool = True):
+    """Normalize legacy English/Thai weekday values to canonical English."""
+    normalized = " ".join(str(value or "").strip().casefold().split())
+    canonical = DAY_OF_WEEK_ALIASES.get(normalized)
+    if canonical is None and strict:
+        raise HTTPException(
+            status_code=422,
+            detail="day_of_week must be a valid weekday name.",
+        )
+    return canonical
+
+
+def _schedules_for_date(db: Session, lab_id: int, target_date: date):
+    """Load schedules active on a date and tolerate legacy weekday formats."""
+    schedules = db.query(models.ClassSchedule).filter(
+        models.ClassSchedule.lab_id == lab_id,
+        models.ClassSchedule.valid_from <= target_date,
+        models.ClassSchedule.valid_until >= target_date,
+    ).all()
+    expected_day = target_date.strftime("%A")
+    return [
+        schedule
+        for schedule in schedules
+        if normalize_day_of_week(schedule.day_of_week, strict=False) == expected_day
+    ]
+
+
+def _schedule_overlaps_slot(schedule, slot_times: dict) -> bool:
+    return (
+        schedule.start_time < slot_times["end"]
+        and schedule.end_time > slot_times["start"]
+    )
+
+
+def _validate_schedule_input(
+    schedule: schemas.ScheduleCreate,
+    db: Session,
+    *,
+    exclude_schedule_id: int = None,
+):
+    if schedule.valid_from > schedule.valid_until:
+        raise HTTPException(
+            status_code=422,
+            detail="valid_from must be before or equal to valid_until.",
+        )
+
+    if not schedule.course_code.strip():
+        raise HTTPException(status_code=422, detail="course_code cannot be empty.")
+
+    semester = schedule.semester.strip()
+    academic_year = schedule.academic_year.strip()
+    if not semester or not academic_year:
+        raise HTTPException(
+            status_code=422,
+            detail="semester and academic_year cannot be empty.",
+        )
+
+    lab = db.query(models.Lab).filter(models.Lab.id == schedule.lab_id).first()
+    if not lab:
+        raise HTTPException(status_code=404, detail="Lab not found.")
+
+    day_name = normalize_day_of_week(schedule.day_of_week)
+    slot_times = VALID_TIME_SLOTS.get(schedule.slot_number)
+    if slot_times is None:
+        raise HTTPException(status_code=400, detail="Invalid slot number (must be 1-4).")
+
+    candidates = db.query(models.ClassSchedule).filter(
+        models.ClassSchedule.lab_id == schedule.lab_id,
+    ).all()
+    for existing in candidates:
+        if exclude_schedule_id is not None and existing.id == exclude_schedule_id:
+            continue
+        same_term = (
+            str(existing.semester or "").strip() == semester
+            and str(existing.academic_year or "").strip() == academic_year
+        )
+        same_day = normalize_day_of_week(existing.day_of_week, strict=False) == day_name
+        date_ranges_overlap = (
+            existing.valid_from <= schedule.valid_until
+            and existing.valid_until >= schedule.valid_from
+        )
+        time_ranges_overlap = (
+            existing.start_time < slot_times["end"]
+            and existing.end_time > slot_times["start"]
+        )
+        if same_term and same_day and date_ranges_overlap and time_ranges_overlap:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Time slot conflicts with course {existing.course_code}.",
+            )
+
+    return lab, day_name, slot_times, semester, academic_year
 
 # =========================================================
 # PHASE 1: LABORATORY MANAGEMENT (CRUD)
@@ -32,7 +178,11 @@ def get_all_labs(db: Session = Depends(get_db)):
     return {"data": labs}
 
 @router.post("/admin/labs")
-def create_lab(lab: schemas.LabCreate, db: Session = Depends(get_db)):
+def create_lab(
+    lab: schemas.LabCreate,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     existing_lab = db.query(models.Lab).filter(models.Lab.code == lab.code).first()
     if existing_lab:
         raise HTTPException(status_code=400, detail="Lab code already exists.")
@@ -44,7 +194,12 @@ def create_lab(lab: schemas.LabCreate, db: Session = Depends(get_db)):
     return {"message": "Lab created successfully.", "lab": new_lab}
 
 @router.put("/admin/labs/{lab_id}/status")
-def update_lab_status(lab_id: int, status_update: schemas.LabStatusUpdate, db: Session = Depends(get_db)):
+def update_lab_status(
+    lab_id: int,
+    status_update: schemas.LabStatusUpdate,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     lab = db.query(models.Lab).filter(models.Lab.id == lab_id).first()
     if not lab: raise HTTPException(status_code=404, detail="Lab not found.")
     lab.status = status_update.status
@@ -52,7 +207,12 @@ def update_lab_status(lab_id: int, status_update: schemas.LabStatusUpdate, db: S
     return {"message": f"Lab status updated to {status_update.status}."}
 
 @router.put("/admin/labs/{lab_id}/capacity")
-def update_lab_capacity(lab_id: int, cap_update: schemas.LabCapacityUpdate, db: Session = Depends(get_db)):
+def update_lab_capacity(
+    lab_id: int,
+    cap_update: schemas.LabCapacityUpdate,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     lab = db.query(models.Lab).filter(models.Lab.id == lab_id).first()
     if not lab: raise HTTPException(status_code=404, detail="Lab not found.")
     lab.capacity = cap_update.capacity
@@ -60,7 +220,12 @@ def update_lab_capacity(lab_id: int, cap_update: schemas.LabCapacityUpdate, db: 
     return {"message": f"Lab capacity updated to {cap_update.capacity} seats."}
 
 @router.put("/admin/labs/{lab_id}")
-def update_lab_details(lab_id: int, lab_update: schemas.LabUpdate, db: Session = Depends(get_db)):
+def update_lab_details(
+    lab_id: int,
+    lab_update: schemas.LabUpdate,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     lab = db.query(models.Lab).filter(models.Lab.id == lab_id).first()
     if not lab: raise HTTPException(status_code=404, detail="Lab not found.")
     
@@ -76,7 +241,11 @@ def update_lab_details(lab_id: int, lab_update: schemas.LabUpdate, db: Session =
     return {"message": "Lab details updated successfully."}
 
 @router.delete("/admin/labs/{lab_id}")
-def delete_lab(lab_id: int, db: Session = Depends(get_db)):
+def delete_lab(
+    lab_id: int,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     lab = db.query(models.Lab).filter(models.Lab.id == lab_id).first()
     if not lab: raise HTTPException(status_code=404, detail="Lab not found.")
     
@@ -91,27 +260,56 @@ def delete_lab(lab_id: int, db: Session = Depends(get_db)):
 # =========================================================
 
 @router.post("/admin/schedules")
-def create_schedule(schedule: schemas.ScheduleCreate, db: Session = Depends(get_db)):
-    if schedule.slot_number not in VALID_TIME_SLOTS:
-        raise HTTPException(status_code=400, detail="Invalid slot number (must be 1-4).")
-    slot_times = VALID_TIME_SLOTS[schedule.slot_number]
-
-    existing_class = db.query(models.ClassSchedule).filter(
-        models.ClassSchedule.lab_id == schedule.lab_id, models.ClassSchedule.day_of_week == schedule.day_of_week,
-        models.ClassSchedule.start_time == slot_times["start"], models.ClassSchedule.semester == schedule.semester,
-        models.ClassSchedule.academic_year == schedule.academic_year
-    ).first()
-    if existing_class: raise HTTPException(status_code=400, detail=f"Time slot conflicts with course {existing_class.course_code}.")
-
+def create_schedule(
+    schedule: schemas.ScheduleCreate,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    _lab, day_name, slot_times, semester, academic_year = _validate_schedule_input(schedule, db)
     new_schedule = models.ClassSchedule(
-        lab_id=schedule.lab_id, course_code=schedule.course_code, course_name=schedule.course_name,
-        instructor_name=schedule.instructor_name, start_time=slot_times["start"], end_time=slot_times["end"],
-        day_of_week=schedule.day_of_week, semester=schedule.semester, academic_year=schedule.academic_year,
+        lab_id=schedule.lab_id, course_code=schedule.course_code.strip(), course_name=schedule.course_name.strip(),
+        instructor_name=schedule.instructor_name.strip(), start_time=slot_times["start"], end_time=slot_times["end"],
+        day_of_week=day_name, semester=semester, academic_year=academic_year,
         valid_from=schedule.valid_from, valid_until=schedule.valid_until
     )
     db.add(new_schedule)
     db.commit()
-    return {"message": "Schedule created successfully."}
+    db.refresh(new_schedule)
+    return {"message": "Schedule created successfully.", "schedule": new_schedule}
+
+
+@router.put("/admin/schedules/{schedule_id}")
+def update_schedule(
+    schedule_id: int,
+    schedule: schemas.ScheduleCreate,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    existing = db.query(models.ClassSchedule).filter(
+        models.ClassSchedule.id == schedule_id,
+    ).first()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Schedule not found.")
+
+    _lab, day_name, slot_times, semester, academic_year = _validate_schedule_input(
+        schedule,
+        db,
+        exclude_schedule_id=schedule_id,
+    )
+    existing.lab_id = schedule.lab_id
+    existing.course_code = schedule.course_code.strip()
+    existing.course_name = schedule.course_name.strip()
+    existing.instructor_name = schedule.instructor_name.strip()
+    existing.start_time = slot_times["start"]
+    existing.end_time = slot_times["end"]
+    existing.day_of_week = day_name
+    existing.semester = semester
+    existing.academic_year = academic_year
+    existing.valid_from = schedule.valid_from
+    existing.valid_until = schedule.valid_until
+    db.commit()
+    db.refresh(existing)
+    return {"message": "Schedule updated successfully.", "schedule": existing}
 
 @router.get("/labs/{lab_id}/schedules")
 def get_lab_schedules(lab_id: int, semester: str = None, year: str = None, db: Session = Depends(get_db)):
@@ -121,7 +319,11 @@ def get_lab_schedules(lab_id: int, semester: str = None, year: str = None, db: S
     return {"data": query.all()}
 
 @router.delete("/admin/schedules/{schedule_id}")
-def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
+def delete_schedule(
+    schedule_id: int,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     schedule = db.query(models.ClassSchedule).filter(models.ClassSchedule.id == schedule_id).first()
     if not schedule: raise HTTPException(status_code=404, detail="Schedule not found.")
     db.delete(schedule)
@@ -134,9 +336,12 @@ def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
 
 # 🌟 เพิ่ม GET /bookings เพื่อให้หน้า Admin Dashboard ดึงรายการไปแสดงผลได้
 @router.get("/bookings")
-def get_all_bookings(db: Session = Depends(get_db)):
+def get_all_bookings(
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     """Fetch all bookings for Admin Dashboard"""
-    mark_due_no_shows(db)
+    mark_due_no_shows(db, now=_lab_now())
     bookings = db.query(models.Booking)\
         .options(
             joinedload(models.Booking.user),
@@ -144,11 +349,35 @@ def get_all_bookings(db: Session = Depends(get_db)):
         )\
         .order_by(models.Booking.created_at.desc())\
         .all()
-    return {"data": bookings}
+    return {
+        "data": [
+            {
+                "id": booking.id,
+                "booking_date": booking.booking_date,
+                "start_time": booking.start_time,
+                "end_time": booking.end_time,
+                "purpose": booking.purpose,
+                "total_participants": booking.total_participants,
+                "status": booking.status,
+                "created_at": booking.created_at,
+                "user": {
+                    "id": booking.user.id,
+                    "first_name": booking.user.first_name,
+                    "last_name": booking.user.last_name,
+                } if booking.user else None,
+                "lab": {
+                    "id": booking.lab.id,
+                    "code": booking.lab.code,
+                    "name": booking.lab.name,
+                } if booking.lab else None,
+            }
+            for booking in bookings
+        ]
+    }
 
 @router.get("/labs/{lab_id}/availability")
 def check_availability(lab_id: int, target_date: date, db: Session = Depends(get_db)):
-    mark_due_no_shows(db)
+    mark_due_no_shows(db, now=_lab_now())
     lab = db.query(models.Lab).filter(models.Lab.id == lab_id).first()
     if not lab: raise HTTPException(status_code=404, detail="Lab not found.")
     max_seats = lab.capacity or 0 
@@ -160,11 +389,7 @@ def check_availability(lab_id: int, target_date: date, db: Session = Depends(get
         }
 
     day_name = target_date.strftime("%A")
-    classes = db.query(models.ClassSchedule).filter(
-        models.ClassSchedule.lab_id == lab_id, models.ClassSchedule.day_of_week == day_name,
-        models.ClassSchedule.valid_from <= target_date, models.ClassSchedule.valid_until >= target_date
-    ).all()
-    class_times = [c.start_time for c in classes]
+    classes = _schedules_for_date(db, lab_id, target_date)
 
     bookings = db.query(models.Booking).filter(
         models.Booking.lab_id == lab_id, 
@@ -174,7 +399,7 @@ def check_availability(lab_id: int, target_date: date, db: Session = Depends(get
 
     availability = {}
     for slot, times in VALID_TIME_SLOTS.items():
-        if times["start"] in class_times:
+        if any(_schedule_overlaps_slot(schedule, times) for schedule in classes):
             availability[slot] = {"status": "class", "remaining_seats": 0}
         else:
             seats_taken = sum([b.total_participants for b in bookings if b.start_time == times["start"]])
@@ -189,8 +414,8 @@ def create_booking(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    mark_due_no_shows(db)
-    now = datetime.now() 
+    now = _lab_now()
+    mark_due_no_shows(db, now=now)
     if booking.slot_number not in VALID_TIME_SLOTS: raise HTTPException(status_code=400, detail="Invalid slot number (must be 1-4).")
     
     slot_times = VALID_TIME_SLOTS[booking.slot_number]
@@ -208,7 +433,9 @@ def create_booking(
     if booking.email.lower() != current_user.email.lower() and not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="Booking email does not match the signed-in user.")
 
-    user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    # Serialize bookings for the same user as well, so two browser tabs cannot
+    # create duplicate bookings in different labs for the same slot.
+    user = db.query(models.User).filter(models.User.id == current_user.id).with_for_update().first()
     if not user: raise HTTPException(status_code=404, detail="User not found.")
 
     restriction = get_booking_restriction(user.id, db)
@@ -221,7 +448,9 @@ def create_booking(
             },
         )
 
-    lab = db.query(models.Lab).filter(models.Lab.id == booking.lab_id).first()
+    # Lock the Lab row so two concurrent requests cannot both consume the last
+    # seat after observing the same capacity.
+    lab = db.query(models.Lab).filter(models.Lab.id == booking.lab_id).with_for_update().first()
     if not lab or lab.status != "active": raise HTTPException(status_code=400, detail="Lab is currently closed.")
 
     user_duplicate = db.query(models.Booking).filter(
@@ -234,11 +463,14 @@ def create_booking(
     if user_duplicate:
         raise HTTPException(status_code=400, detail="You have already booked a seat in this time slot.")
 
-    class_exists = db.query(models.ClassSchedule).filter(
-        models.ClassSchedule.lab_id == booking.lab_id, models.ClassSchedule.day_of_week == booking.booking_date.strftime("%A"),
-        models.ClassSchedule.start_time == slot_times["start"], models.ClassSchedule.valid_from <= booking.booking_date,
-        models.ClassSchedule.valid_until >= booking.booking_date
-    ).first()
+    class_exists = next(
+        (
+            schedule
+            for schedule in _schedules_for_date(db, booking.lab_id, booking.booking_date)
+            if _schedule_overlaps_slot(schedule, slot_times)
+        ),
+        None,
+    )
     if class_exists: raise HTTPException(status_code=400, detail="Time slot conflicts with a scheduled class.")
         
     existing_bookings = db.query(models.Booking).filter(
@@ -248,9 +480,11 @@ def create_booking(
         models.Booking.status.in_(["reserved", "attended", "completed"]),
     ).all()
     
-    seats_taken = sum([b.total_participants for b in existing_bookings])
-    if booking.total_participants > (lab.capacity - seats_taken):
-        raise HTTPException(status_code=400, detail=f"Not enough seats available. ({(lab.capacity - seats_taken)} seats left)")
+    capacity = int(lab.capacity or 0)
+    seats_taken = sum((b.total_participants or 0) for b in existing_bookings)
+    remaining_seats = max(0, capacity - seats_taken)
+    if booking.total_participants > remaining_seats:
+        raise HTTPException(status_code=400, detail=f"Not enough seats available. ({remaining_seats} seats left)")
 
     new_booking = models.Booking(
         lab_id=booking.lab_id, user_id=user.id, booking_date=booking.booking_date,
@@ -272,7 +506,7 @@ def get_user_bookings(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    mark_due_no_shows(db)
+    mark_due_no_shows(db, now=_lab_now())
     clean_email = unquote(email).strip()
     if clean_email.lower() != current_user.email.lower() and not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="You cannot view another user's bookings.")
@@ -334,7 +568,7 @@ def cancel_booking(
     if booking.status != "reserved":
         raise HTTPException(status_code=409, detail=f"Booking cannot be cancelled from status '{booking.status}'.")
 
-    now = datetime.now()
+    now = _lab_now()
     booking_start = datetime.combine(booking.booking_date, booking.start_time)
     if now >= booking_start:
         raise HTTPException(status_code=409, detail="Booking has already started and cannot be cancelled.")

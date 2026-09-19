@@ -45,6 +45,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { authConfig } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -123,7 +124,7 @@ export default function BlacklistManager() {
   const fetchBlacklist = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_URL}/admin/blacklist`);
+      const res = await axios.get(`${API_URL}/admin/blacklist`, authConfig());
       setBlacklist(res.data.data || []);
     } catch (err) {
       console.error("[Blacklist] fetch failed:", err);
@@ -158,9 +159,9 @@ export default function BlacklistManager() {
     }
     try {
       if (isEditing) {
-        await axios.put(`${API_URL}/admin/blacklist/${currentId}`, formData);
+        await axios.put(`${API_URL}/admin/blacklist/${currentId}`, formData, authConfig());
       } else {
-        await axios.post(`${API_URL}/admin/blacklist`, formData);
+        await axios.post(`${API_URL}/admin/blacklist`, formData, authConfig());
       }
       setOpenDialog(false);
       fetchBlacklist();
@@ -172,7 +173,7 @@ export default function BlacklistManager() {
   const handleDelete = async (id, appName) => {
     if (!window.confirm(`Remove "${appName}" from the blacklist?`)) return;
     try {
-      await axios.delete(`${API_URL}/admin/blacklist/${id}`);
+      await axios.delete(`${API_URL}/admin/blacklist/${id}`, authConfig());
       fetchBlacklist();
     } catch (err) {
       alert(err.response?.data?.detail || "Delete failed.");

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 import models
 from database import get_db
+from routers.users import require_admin_user
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -12,7 +13,10 @@ class VerifyAction(BaseModel):
 
 
 @router.get("/users/pending")
-def get_pending_users(db: Session = Depends(get_db)):
+def get_pending_users(
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     # join once instead of querying user individually in a loop (avoids N+1)
     pending = (
         db.query(models.User, models.UserPassport)
@@ -38,7 +42,12 @@ def get_pending_users(db: Session = Depends(get_db)):
 
 
 @router.put("/users/{user_id}/verify")
-def verify_user(user_id: int, payload: VerifyAction, db: Session = Depends(get_db)):
+def verify_user(
+    user_id: int,
+    payload: VerifyAction,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     passport = db.query(models.UserPassport).filter(models.UserPassport.user_id == user_id).first()
 

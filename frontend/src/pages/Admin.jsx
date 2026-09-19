@@ -40,6 +40,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { authConfig } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -129,10 +130,11 @@ export default function Admin() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      const requestConfig = authConfig();
       const [bookingsRes, usersRes, pendingRes] = await Promise.all([
-        axios.get(`${API_URL}/bookings`),
-        axios.get(`${API_URL}/users`),
-        axios.get(`${API_URL}/admin/users/pending`),
+        axios.get(`${API_URL}/bookings`, requestConfig),
+        axios.get(`${API_URL}/users`, requestConfig),
+        axios.get(`${API_URL}/admin/users/pending`, requestConfig),
       ]);
 
       const bookings = bookingsRes.data?.data || [];

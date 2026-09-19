@@ -8,6 +8,7 @@ import cv2
 import customtkinter as ctk
 import requests
 from PIL import Image
+from liveness_policy import evaluate_liveness
 
 # Keep CPU inference predictable on the 8 GB scanning machine.
 os.environ.setdefault("OMP_NUM_THREADS", "2")
@@ -24,6 +25,11 @@ BASE_DIR = _base_path()
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 CONFIG = {
     "LIVENESS_THRESHOLD": 0.72,
+    "LIVENESS_SAMPLE_COUNT": 5,
+    "LIVENESS_REQUIRED_PASSES": 4,
+    "LIVENESS_SAMPLE_INTERVAL_SEC": 0.12,
+    "LIVENESS_MIN_MOTION_SCORE": 2.0,
+    "LIVENESS_CROP_SCALE": 2.7,
     "CAMERA_INDEX":       0,
     "DISPLAY_SIZE":       (600, 450),
     "SPOOF_COOLDOWN_SEC": 3,
@@ -72,6 +78,9 @@ class GatekeeperDemo(ctk.CTk):
 
         self._frame_queue   = queue.Queue(maxsize=1)
         self._detect_queue  = queue.Queue(maxsize=1)
+        self._latest_frame_lock = threading.Lock()
+        self._latest_frame = None
+        self._detector_lock = threading.Lock()
 
         self._last_faces    = []
         self._last_frame_hw = (480, 640)
@@ -239,6 +248,8 @@ class GatekeeperDemo(ctk.CTk):
                 time.sleep(0.05)
                 continue
             frame = cv2.flip(frame, 1)
+            with self._latest_frame_lock:
+                self._latest_frame = frame.copy()
             try:
                 self._frame_queue.put_nowait(frame)
             except queue.Full:
@@ -248,22 +259,63 @@ class GatekeeperDemo(ctk.CTk):
                     pass
                 self._frame_queue.put_nowait(frame)
 
+    def _get_latest_frame(self):
+        with self._latest_frame_lock:
+            return self._latest_frame.copy() if self._latest_frame is not None else None
+
+    def _detect_faces(self, frame):
+        height, width = frame.shape[:2]
+        small = cv2.resize(frame, (320, 240))
+        scale_x = width / 320
+        scale_y = height / 240
+        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+        with self._detector_lock:
+            faces = self.detector.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=4,
+                minSize=(60, 60),
+            )
+
+        return [
+            (
+                int(sx * scale_x),
+                int(sy * scale_y),
+                int(sw * scale_x),
+                int(sh * scale_y),
+            )
+            for (sx, sy, sw, sh) in faces
+        ]
+
+    @staticmethod
+    def _crop_face(frame, face, scale=2.7):
+        x, y, width, height = face
+        expansion = max(1.0, float(scale))
+        pad_x = int(width * (expansion - 1.0) / 2.0)
+        pad_y = int(height * (expansion - 1.0) / 2.0)
+        x1 = max(0, x - pad_x)
+        y1 = max(0, y - pad_y)
+        x2 = min(frame.shape[1], x + width + pad_x)
+        y2 = min(frame.shape[0], y + height + pad_y)
+        return frame[y1:y2, x1:x2]
+
+    @staticmethod
+    def _frame_motion_score(previous, current):
+        if previous is None or current is None or previous.size == 0 or current.size == 0:
+            return 0.0
+
+        previous_gray = cv2.cvtColor(previous, cv2.COLOR_BGR2GRAY)
+        current_gray = cv2.cvtColor(current, cv2.COLOR_BGR2GRAY)
+        previous_gray = cv2.resize(previous_gray, (64, 64))
+        current_gray = cv2.resize(current_gray, (64, 64))
+        return float(cv2.absdiff(previous_gray, current_gray).mean())
+
     def _detect_loop(self):
         while True:
             frame = self._detect_queue.get()
             h, w  = frame.shape[:2]
 
-            small   = cv2.resize(frame, (320, 240))
-            scale_x = w / 320
-            scale_y = h / 240
-            gray    = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-            faces   = self.detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(60, 60))
-
-            scaled = []
-            for (sx, sy, sw, sh) in faces:
-                scaled.append((int(sx*scale_x), int(sy*scale_y), int(sw*scale_x), int(sh*scale_y)))
-
-            self._last_faces    = scaled
+            self._last_faces    = self._detect_faces(frame)
             self._last_frame_hw = (h, w)
 
     def _load_models(self):
@@ -349,9 +401,7 @@ class GatekeeperDemo(ctk.CTk):
 
             elif len(faces) == 1:
                 x, y, fw, fh = faces[0]
-                pad  = 15
-                x1   = max(0, x - pad);  y1 = max(0, y - pad)
-                x2   = min(w, x+fw+pad); y2 = min(h, y+fh+pad)
+                scan_frame = frame.copy()
 
                 cv2.rectangle(frame, (x, y), (x+fw, y+fh), (255, 200, 0), 2)
                 for px, py, dx, dy in [(x,y,1,1),(x+fw,y,-1,1),(x,y+fh,1,-1),(x+fw,y+fh,-1,-1)]:
@@ -360,15 +410,15 @@ class GatekeeperDemo(ctk.CTk):
 
                 cv2.ellipse(frame, (cx,cy), (oval_a,oval_b), 0, 0, 360, (56,189,248), 2)
 
-                crop = frame[y1:y2, x1:x2]
+                crop = self._crop_face(scan_frame, faces[0], CONFIG["LIVENESS_CROP_SCALE"])
                 if crop.size > 0:
                     self.is_scanning = True
                     self._last_faces  = []
                     self.after(0, lambda: self.status_label.configure(text="ANALYZING...", text_color=CLR["warning"]))
-                    self.after(0, lambda: self.sub_label.configure(text="กำลังตรวจสอบ..."))
+                    self.after(0, lambda: self.sub_label.configure(text="กำลังตรวจสอบ — กรุณาขยับศีรษะเล็กน้อย"))
                     threading.Thread(
                         target=self._run_liveness,
-                        args=(crop.copy(), frame.copy()),
+                        args=(crop.copy(), scan_frame),
                         daemon=True,
                     ).start()
 
@@ -385,10 +435,62 @@ class GatekeeperDemo(ctk.CTk):
 
     def _run_liveness(self, crop_img, full_frame):
         try:
-            resized = cv2.resize(crop_img, (80, 80))
-            score   = float(self.anti_spoof.predict(resized, self.model_path)[0][1])
-            if score <= CONFIG["LIVENESS_THRESHOLD"]:
-                self.after(0, self._show_result, False, score)
+            scores = []
+            motion_scores = []
+            previous_crop = crop_img
+            identity_frame = full_frame
+
+            for sample_index in range(CONFIG["LIVENESS_SAMPLE_COUNT"]):
+                current_crop = crop_img if sample_index == 0 else None
+                if sample_index > 0:
+                    time.sleep(CONFIG["LIVENESS_SAMPLE_INTERVAL_SEC"])
+                    current_frame = self._get_latest_frame()
+                    if current_frame is None:
+                        continue
+
+                    current_faces = self._detect_faces(current_frame)
+                    if len(current_faces) != 1:
+                        continue
+
+                    current_crop = self._crop_face(
+                        current_frame,
+                        current_faces[0],
+                        CONFIG["LIVENESS_CROP_SCALE"],
+                    )
+                    if current_crop.size > 0:
+                        identity_frame = current_frame
+
+                if current_crop is None or current_crop.size == 0:
+                    continue
+
+                resized = cv2.resize(current_crop, (80, 80))
+                score = float(self.anti_spoof.predict(resized, self.model_path)[0][1])
+                scores.append(score)
+                if sample_index > 0:
+                    motion_scores.append(self._frame_motion_score(previous_crop, current_crop))
+                previous_crop = current_crop
+
+            decision = evaluate_liveness(
+                scores,
+                motion_scores,
+                threshold=CONFIG["LIVENESS_THRESHOLD"],
+                required_samples=CONFIG["LIVENESS_SAMPLE_COUNT"],
+                required_passes=CONFIG["LIVENESS_REQUIRED_PASSES"],
+                min_motion_score=CONFIG["LIVENESS_MIN_MOTION_SCORE"],
+            )
+            print(
+                "[Gatekeeper] liveness samples="
+                f"{decision.sample_count}/{CONFIG['LIVENESS_SAMPLE_COUNT']} "
+                f"passes={decision.passed_samples} "
+                f"motion={decision.motion_detected} reason={decision.reason}"
+            )
+            if not decision.accepted:
+                detail = (
+                    "กรุณาขยับศีรษะเล็กน้อยแล้วลองใหม่"
+                    if decision.reason == "no_motion"
+                    else "ไม่ผ่านการตรวจว่าเป็นบุคคลจริง"
+                )
+                self.after(0, self._show_result, False, decision.score, detail)
                 return
 
             self.after(
@@ -398,8 +500,8 @@ class GatekeeperDemo(ctk.CTk):
                 CLR["warning"],
                 "กำลังยืนยันตัวตนกับระบบ",
             )
-            verified, detail = self._identify_face(full_frame, score)
-            self.after(0, self._show_identity_result, verified, score, detail)
+            verified, detail = self._identify_face(identity_frame, decision.score)
+            self.after(0, self._show_identity_result, verified, decision.score, detail)
         except Exception as e:
             print(f"[Gatekeeper] liveness error: {e}")
             self.after(0, self._reset_state)
@@ -486,7 +588,7 @@ class GatekeeperDemo(ctk.CTk):
     # RESULT
     # ──────────────────────────────────────────────────────────────────────
 
-    def _show_result(self, is_real: bool, score: float):
+    def _show_result(self, is_real: bool, score: float, detail: str = None):
         self.score_bar.set(score)
         self.score_pct_label.configure(text=f"{score*100:.0f}%")
 
@@ -497,7 +599,7 @@ class GatekeeperDemo(ctk.CTk):
             threading.Thread(target=lambda: [winsound.Beep(1000,120), winsound.Beep(1200,120)], daemon=True).start()
             self.after(CONFIG["RESET_DELAY_MS"], self._reset_state)
         else:
-            self._set_status("ACCESS DENIED ✗", CLR["denied"], "ตรวจพบการหลอกลวง")
+            self._set_status("ACCESS DENIED ✗", CLR["denied"], detail or "ตรวจพบการหลอกลวง")
             self.score_badge.configure(text=f"  Score: {score:.2f}  ", fg_color="#dc2626", text_color="white")
             self.score_bar.configure(progress_color=CLR["denied"])
             threading.Thread(target=lambda: winsound.Beep(400, 600), daemon=True).start()

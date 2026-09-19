@@ -16,10 +16,16 @@ function readStoredUser() {
     if (typeof decoded.sub !== 'string' || !decoded.sub.includes('@')) {
       throw new Error('Token subject is missing.');
     }
+    if (decoded.exp && Number(decoded.exp) * 1000 <= Date.now()) {
+      throw new Error('Token has expired.');
+    }
+
+    const roleName = typeof decoded.role === "string" ? decoded.role : "guest";
 
     return {
       name: decoded.sub.split('@')[0],
-      role: decoded.role === 'student' ? 'Student' : 'Guest',
+      roleName,
+      role: roleName === "admin" ? "Admin" : roleName === "student" ? "Student" : "Guest",
       email: decoded.sub,
       initial: decoded.sub.charAt(0).toUpperCase(),
     };

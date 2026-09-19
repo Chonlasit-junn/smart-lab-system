@@ -136,13 +136,11 @@ export default function Booking() {
   // Fetch labs on component mount
   useEffect(() => {
     // This effect intentionally loads remote data and updates state asynchronously.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLabs();
   }, [fetchLabs]);
 
   useEffect(() => {
     if (!currentUser?.email) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPointStatus(null);
       setPointsError("");
       return undefined;

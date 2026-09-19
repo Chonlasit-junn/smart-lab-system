@@ -20,6 +20,7 @@ ADMIN_TEST_RESET_POINTS = MAX_POINTS
 TEST_BAN_MARKER = "[admin_test]"
 NO_SHOW_GRACE = timedelta(minutes=15)
 MAX_EVENT_ID_LENGTH = 256
+BUSINESS_TIMEZONE = timezone(timedelta(hours=7))
 
 # ── กฎการเปลี่ยนคะแนน ────────────────────────────────────────────────────────
 POINT_RULES = {
@@ -83,6 +84,18 @@ class PointPolicyUpdate(BaseModel):
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _business_today() -> date:
+    return _now_utc().astimezone(BUSINESS_TIMEZONE).date()
+
+
+def _business_date(value: datetime) -> date:
+    return _as_aware(value).astimezone(BUSINESS_TIMEZONE).date()
+
+
+def _business_now_naive() -> datetime:
+    return _now_utc().astimezone(BUSINESS_TIMEZONE).replace(tzinfo=None)
 
 
 def _as_aware(value: Optional[datetime]) -> Optional[datetime]:
@@ -447,7 +460,7 @@ def apply_point_event(
     record.updated_at = _now_utc()
 
     event_time = _as_aware(effective_at) or _now_utc()
-    score_date = event_time.date()
+    score_date = _business_date(event_time)
     daily_record = get_or_create_daily_score(user_id, score_date, db)
     daily_before = _clamp_score(daily_record.score)
     daily_after = _clamp_score(daily_before + change)
@@ -522,7 +535,7 @@ def ensure_daily_bonus(
         return {"skipped": True, "reason": "zero_points"}
 
     event_time = _as_aware(effective_at) or _now_utc()
-    score_date = event_time.date().isoformat()
+    score_date = _business_date(event_time).isoformat()
     return apply_point_event(
         user_id,
         "daily_bonus",
@@ -559,7 +572,7 @@ def mark_due_no_shows(
     admin reconcile endpoint if no traffic occurs after a slot ends.
     """
     policy = policy or get_or_create_point_policy(db)
-    now_naive = _as_naive(now or datetime.now())
+    now_naive = _as_naive(now) if now is not None else _business_now_naive()
     candidates = db.query(models.Booking).filter(
         models.Booking.status == "reserved",
         models.Booking.booking_date <= now_naive.date(),
@@ -628,7 +641,7 @@ def _get_daily_score(user_id: int, score_date: date, db: Session) -> int:
 
 def _points_response(user_id: int, db: Session) -> dict:
     restriction = get_booking_restriction(user_id, db)
-    today = _now_utc().date()
+    today = _business_today()
     latest_request = _get_latest_point_request(user_id, db)
     pending_request = latest_request and latest_request.status == "pending"
     return {
@@ -810,7 +823,7 @@ def get_all_user_points(
     policy = get_or_create_point_policy(db)
     mark_due_no_shows(db, policy=policy)
 
-    today = _now_utc().date()
+    today = _business_today()
     rows = db.query(models.User, models.UserPoints).outerjoin(
         models.UserPoints,
         models.UserPoints.user_id == models.User.id,
@@ -1275,7 +1288,7 @@ def get_admin_user_details(
         models.UserPoints.user_id == user.id,
     ).first()
     points = _clamp_score(points_record.points if points_record else MAX_POINTS)
-    today = _now_utc().date()
+    today = _business_today()
     daily_score = _get_daily_score(user.id, today, db)
     ban_until = is_user_banned(user.id, db)
     latest_request = _get_latest_point_request(user.id, db)

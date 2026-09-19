@@ -39,6 +39,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { authConfig } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -119,7 +120,7 @@ export default function VerifyUsers() {
     try {
       setLoading(true);
       setError("");
-      const response = await axios.get(`${API_URL}/admin/users/pending`);
+      const response = await axios.get(`${API_URL}/admin/users/pending`, authConfig());
       setPendingUsers(response.data?.data || []);
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
@@ -149,7 +150,7 @@ export default function VerifyUsers() {
     try {
       setProcessingId(userId);
       setError("");
-      await axios.put(`${API_URL}/admin/users/${userId}/verify`, { action });
+      await axios.put(`${API_URL}/admin/users/${userId}/verify`, { action }, authConfig());
       await fetchPendingUsers();
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
@@ -536,8 +537,13 @@ export default function VerifyUsers() {
                 <Box
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                    gap: 3,
+                    gridTemplateColumns: {
+                      xs: "minmax(0, 1fr)",
+                      sm: "repeat(auto-fill, minmax(280px, 300px))",
+                    },
+                    justifyContent: { xs: "center", sm: "start" },
+                    alignItems: "start",
+                    gap: 2.5,
                   }}
                 >
                   {filteredUsers.map((user) => {
@@ -548,9 +554,16 @@ export default function VerifyUsers() {
                         key={user.id}
                         elevation={0}
                         sx={{
+                          width: "100%",
+                          maxWidth: 300,
+                          justifySelf: { xs: "center", sm: "start" },
+                          height: 380,
+                          display: "flex",
+                          flexDirection: "column",
                           borderRadius: 5,
                           overflow: "hidden",
                           border: "1px solid #e2e8f0",
+                          boxShadow: "0 14px 30px rgba(15,23,42,0.06)",
                           transition: "0.3s",
                           "&:hover": {
                             transform: "translateY(-4px)",
@@ -560,7 +573,8 @@ export default function VerifyUsers() {
                       >
                         <Box
                           sx={{
-                            height: 220,
+                            height: 160,
+                            minHeight: 160,
                             width: "100%",
                             bgcolor: "#e2e8f0",
                             backgroundImage: imageUrl
@@ -590,14 +604,22 @@ export default function VerifyUsers() {
                           )}
                         </Box>
 
-                        <Box sx={{ p: 3 }}>
+                        <Box
+                          sx={{
+                            p: 2,
+                            flex: 1,
+                            minHeight: 0,
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
                           <Box
                             sx={{
                               display: "flex",
                               justifyContent: "space-between",
                               alignItems: "flex-start",
                               gap: 1,
-                              mb: 1,
+                              mb: 0.75,
                             }}
                           >
                             <Box sx={{ minWidth: 0 }}>
@@ -663,13 +685,13 @@ export default function VerifyUsers() {
                                 fontSize="small"
                                 sx={{ color: "#94a3b8" }}
                               />
-                              <Typography variant="body2">
+                              <Typography variant="body2" noWrap>
                                 {user.phone || "No phone provided"}
                               </Typography>
                             </Box>
                           </Box>
 
-                          <Divider sx={{ mb: 2 }} />
+                          <Divider sx={{ mb: 2, mt: "auto" }} />
 
                           <Box sx={{ display: "flex", gap: 1 }}>
                             <Button

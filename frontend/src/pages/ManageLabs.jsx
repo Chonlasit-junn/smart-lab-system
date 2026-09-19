@@ -56,6 +56,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { authConfig } from "../utils/auth";
 
 // นำเข้า MUI DatePicker
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -218,7 +219,7 @@ export default function ManageLabs() {
   // ============================================================================
   const handleCreateLab = async () => {
     try {
-      await axios.post(`${API_URL}/admin/labs`, newLab);
+      await axios.post(`${API_URL}/admin/labs`, newLab, authConfig());
       setOpenCreateDialog(false);
       setNewLab({ name: "", code: "", capacity: 40, location: "" });
       fetchLabs();
@@ -229,7 +230,7 @@ export default function ManageLabs() {
 
   const handleUpdateLab = async () => {
     try {
-      await axios.put(`${API_URL}/admin/labs/${activeLab.id}`, editFormData);
+      await axios.put(`${API_URL}/admin/labs/${activeLab.id}`, editFormData, authConfig());
       alert("Updated successfully!");
       fetchLabs();
     } catch (error) {
@@ -246,7 +247,7 @@ export default function ManageLabs() {
       return;
 
     try {
-      await axios.delete(`${API_URL}/admin/labs/${activeLab.id}`);
+      await axios.delete(`${API_URL}/admin/labs/${activeLab.id}`, authConfig());
       alert("Lab deleted successfully!");
       handleGoBack();
       fetchLabs();
@@ -260,7 +261,7 @@ export default function ManageLabs() {
     try {
       await axios.put(`${API_URL}/admin/labs/${activeLab.id}/status`, {
         status: newStatus,
-      });
+      }, authConfig());
       fetchLabs();
     } catch (error) {
       console.error("Status toggle failed:", error);
@@ -349,15 +350,20 @@ export default function ManageLabs() {
       return alert("Missing required fields");
     }
 
+    if (scheduleFormData.valid_from > scheduleFormData.valid_until) {
+      return alert("The schedule end date must be on or after the start date.");
+    }
+
     try {
       const payload = { ...scheduleFormData, lab_id: activeLab.id };
       if (isEditingSchedule) {
         await axios.put(
           `${API_URL}/admin/schedules/${currentScheduleId}`,
           payload,
+          authConfig(),
         );
       } else {
-        await axios.post(`${API_URL}/admin/schedules`, payload);
+        await axios.post(`${API_URL}/admin/schedules`, payload, authConfig());
       }
       setOpenScheduleDialog(false);
       fetchSchedules(activeLab.id);
@@ -370,7 +376,7 @@ export default function ManageLabs() {
     if (!window.confirm("Are you sure you want to delete this schedule?"))
       return;
     try {
-      await axios.delete(`${API_URL}/admin/schedules/${scheduleId}`);
+      await axios.delete(`${API_URL}/admin/schedules/${scheduleId}`, authConfig());
       fetchSchedules(activeLab.id);
     } catch {
       alert("Delete failed");

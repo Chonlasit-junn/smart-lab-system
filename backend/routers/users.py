@@ -26,11 +26,47 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     return user
 
+
+def is_admin_user(user_id: int, db: Session) -> bool:
+    return db.query(models.Role.id).join(
+        models.UserRole,
+        models.UserRole.role_id == models.Role.id,
+    ).filter(
+        models.UserRole.user_id == user_id,
+        models.Role.name == "admin",
+    ).first() is not None
+
+
+def require_admin_user(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> models.User:
+    if not is_admin_user(current_user.id, db):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return current_user
+
+
 router = APIRouter(tags=["Users"])
 
 @router.get("/users")
-def get_all_users(db: Session = Depends(get_db)):
-    return {"data": db.query(models.User).all()}
+def get_all_users(
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    users = db.query(models.User).order_by(models.User.id.asc()).all()
+    return {
+        "data": [
+            {
+                "id": user.id,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "email": user.email,
+                "profile_pic": user.profile_pic,
+                "created_at": user.created_at,
+            }
+            for user in users
+        ]
+    }
 
 @router.get("/users/me")
 def get_my_profile(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
