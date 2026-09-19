@@ -31,6 +31,7 @@ import {
   Assignment,
   History,
   SupportAgent,
+  ConfirmationNumber,
   Logout,
   Computer,
   Person,
@@ -43,12 +44,14 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 export default function Reserved() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
+  const { t } = useLanguage();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [bookings, setBookings] = useState([]);
@@ -105,7 +108,7 @@ export default function Reserved() {
       setBookingToCancel(null);
       fetchMyBookings();
     } catch {
-      alert("Failed to cancel booking.");
+      alert(t("user.cancelReservation"));
     }
   };
 
@@ -161,16 +164,19 @@ export default function Reserved() {
 
         <div className="sidebar-menu">
           <div className="menu-item" onClick={() => navigate("/booking")}>
-            <EventNote /> Lab Reserve
+            <EventNote /> {t("common.labReserve")}
           </div>
           <div
             className="menu-item active"
             onClick={() => setIsSidebarOpen(false)}
           >
-            <Assignment /> Reserved
+            <Assignment /> {t("common.reserved")}
           </div>
           <div className="menu-item" onClick={() => navigate("/history")}>
-            <History /> History
+            <History /> {t("common.history")}
+          </div>
+          <div className="menu-item" onClick={() => navigate("/my-tickets")}>
+            <ConfirmationNumber /> {t("common.myTickets")}
           </div>
         </div>
 
@@ -179,7 +185,7 @@ export default function Reserved() {
           style={{ flex: "none", paddingBottom: "24px" }}
         >
           <div className="menu-item">
-            <SupportAgent /> Support
+            <SupportAgent /> {t("common.support")}
           </div>
         </div>
       </div>
@@ -199,7 +205,7 @@ export default function Reserved() {
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
-              My Reservations
+              {t("user.reservedTitle")}
             </Typography>
           </Box>
 
@@ -210,7 +216,7 @@ export default function Reserved() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton>
+            <IconButton className="header-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#111827" }} />
             </IconButton>
             {currentUser ? (
@@ -344,7 +350,7 @@ export default function Reserved() {
                         },
                       }}
                     >
-                      Manage your Account
+                      {t("common.manageAccount")}
                     </Button>
                   </Box>
 
@@ -374,7 +380,7 @@ export default function Reserved() {
                         fontWeight="700"
                         color="#1e293b"
                       >
-                        Setting
+                        {t("common.settings")}
                       </Typography>
                     </Box>
                     <Box
@@ -396,7 +402,7 @@ export default function Reserved() {
                         fontWeight="700"
                         color="#ef4444"
                       >
-                        Log out
+                        {t("common.logout")}
                       </Typography>
                     </Box>
                   </Box>
@@ -427,10 +433,10 @@ export default function Reserved() {
                     lineHeight={1.2}
                     color="textSecondary"
                   >
-                    Guest User
+                    {t("common.guestUser")}
                   </Typography>
                   <Typography variant="caption" color="primary.main">
-                    Click to Log in
+                    {t("common.login")}
                   </Typography>
                 </Box>
                 <Avatar sx={{ bgcolor: "#cbd5e1", width: 36, height: 36 }}>
@@ -441,13 +447,14 @@ export default function Reserved() {
           </Box>
         </div>
 
-        <div className="content-area">
+        <div className="content-area page-content">
           {loading ? (
             <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
               <CircularProgress />
             </Box>
           ) : (
             <Paper
+              className="surface-card data-table-shell"
               elevation={0}
               sx={{
                 p: { xs: 2, sm: 4 },
@@ -465,7 +472,7 @@ export default function Reserved() {
                 color="#0f172a"
                 sx={{ mb: 3 }}
               >
-                Reserved Status
+                {t("user.reservedStatus")}
               </Typography>
 
               {bookings.length > 0 ? (
@@ -489,7 +496,7 @@ export default function Reserved() {
                             color: "#0f172a",
                           }}
                         >
-                          Room
+                          {t("user.room")}
                         </TableCell>
                         <TableCell
                           sx={{
@@ -498,7 +505,7 @@ export default function Reserved() {
                             color: "#0f172a",
                           }}
                         >
-                          Date
+                          {t("common.date")}
                         </TableCell>
                         <TableCell
                           sx={{
@@ -507,7 +514,7 @@ export default function Reserved() {
                             color: "#0f172a",
                           }}
                         >
-                          Time
+                          {t("common.time")}
                         </TableCell>
                         <TableCell
                           sx={{ borderBottom: "1px solid #e2e8f0" }}
@@ -539,14 +546,14 @@ export default function Reserved() {
                               color="#94a3b8"
                             >
                               {!row.status || row.status === "reserved"
-                                ? "รอยืนยันการเข้าใช้งาน"
+                                ? t("user.pendingCheckIn")
                                 : row.status === "attended"
-                                  ? "กำลังใช้งาน"
+                                  ? t("user.inUse")
                                   : row.status === "completed"
-                                    ? "ใช้งานเสร็จแล้ว"
+                                    ? t("user.sessionCompleted")
                                     : row.status === "no_show"
-                                      ? "ไม่มาตามการจอง"
-                                      : "ยกเลิกแล้ว"}
+                                      ? t("user.noShow")
+                                      : t("user.cancelled")}
                             </Typography>
                           </TableCell>
                           <TableCell align="right">
@@ -569,8 +576,8 @@ export default function Reserved() {
                               <Chip
                                 label={
                                   row.status === "no_show"
-                                    ? "No-show"
-                                    : "Closed"
+                                    ? t("user.noShow")
+                                    : t("user.sessionCompleted")
                                 }
                                 size="small"
                                 variant="outlined"
@@ -592,7 +599,7 @@ export default function Reserved() {
                   }}
                 >
                   <Typography variant="body1" color="textSecondary">
-                    No upcoming reservations found.
+                    {t("user.noUpcomingReservations")}
                   </Typography>
                 </Box>
               )}
@@ -607,12 +614,11 @@ export default function Reserved() {
         PaperProps={{ sx: { borderRadius: 3, p: 1, minWidth: "350px" } }}
       >
         <DialogTitle sx={{ fontWeight: "bold", color: "#0f172a" }}>
-          Cancel Reservation
+          {t("user.cancelReservation")}
         </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: "#475569" }}>
-            Are you sure you want to cancel this booking? This action cannot be
-            undone.
+            {t("user.cancelReservationConfirm")}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -620,7 +626,7 @@ export default function Reserved() {
             onClick={handleCloseCancelDialog}
             sx={{ color: "#64748b", fontWeight: "bold", textTransform: "none" }}
           >
-            Keep it
+            {t("user.keepReservation")}
           </Button>
           <Button
             onClick={handleConfirmCancel}
@@ -634,7 +640,7 @@ export default function Reserved() {
               "&:hover": { bgcolor: "#dc2626", boxShadow: "none" },
             }}
           >
-            Yes, Cancel
+            {t("user.yesCancel")}
           </Button>
         </DialogActions>
       </Dialog>

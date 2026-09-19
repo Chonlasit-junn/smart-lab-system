@@ -41,52 +41,53 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { authConfig } from "../utils/auth";
+import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const SIDE_MENU_ITEMS = [
   {
-    text: "Dashboard",
+    key: "dashboard",
     icon: <DashIcon sx={{ fontSize: 20 }} />,
     path: "/admin",
   },
   {
-    text: "Manage Labs",
+    key: "manageLabs",
     icon: <MeetingRoom sx={{ fontSize: 20 }} />,
     path: "/manage-labs",
   },
   {
-    text: "Lab Devices",
+    key: "labDevices",
     icon: <Computer sx={{ fontSize: 20 }} />,
     path: "/admin/devices",
   },
   {
-    text: "Verify Users",
+    key: "verifyUsers",
     icon: <HowToReg sx={{ fontSize: 20 }} />,
     path: "/verify-users",
   },
   {
-    text: "User Points",
+    key: "userPoints",
     icon: <Assessment sx={{ fontSize: 20 }} />,
     path: "/admin/points",
   },
   {
-    text: "Point Criteria",
+    key: "pointCriteria",
     icon: <Settings sx={{ fontSize: 20 }} />,
     path: "/admin/points/policy",
   },
   {
-    text: "Role Management",
+    key: "roleManagement",
     icon: <ManageAccounts sx={{ fontSize: 20 }} />,
     path: "/admin/roles",
   },
   {
-    text: "Blacklist",
+    key: "blacklist",
     icon: <Block sx={{ fontSize: 20 }} />,
     path: "/blacklist",
   },
   {
-    text: "Ticket",
+    key: "ticket",
     icon: <ConfirmationNumber sx={{ fontSize: 20 }} />,
     path: "/ticket",
   },
@@ -119,6 +120,7 @@ export default function VerifyUsers() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
+  const { t } = useLanguage();
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -146,9 +148,9 @@ export default function VerifyUsers() {
   }, []);
 
   useEffect(() => {
-    document.title = "Verify Users | Smart Lab Admin";
+    document.title = `${t("admin.verifyTitle")} | Smart Lab Admin`;
     fetchPendingUsers();
-  }, [fetchPendingUsers]);
+  }, [fetchPendingUsers, t]);
 
   const handleVerify = async (userId, action) => {
     if (
@@ -192,6 +194,7 @@ export default function VerifyUsers() {
 
   return (
     <Box
+      className="app-layout admin-layout"
       sx={{
         display: "flex",
         minHeight: "100vh",
@@ -201,6 +204,7 @@ export default function VerifyUsers() {
     >
       {/* SIDEBAR */}
       <Box
+        className="sidebar admin-sidebar"
         sx={{
           width: "var(--sidebar-width)",
           bgcolor: "#f0f7ff",
@@ -214,8 +218,9 @@ export default function VerifyUsers() {
           zIndex: 10,
         }}
       >
-        <Box sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
+        <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
           <Box
+            className="admin-brand-mark"
             sx={{
               bgcolor: "#000",
               p: 1,
@@ -248,12 +253,13 @@ export default function VerifyUsers() {
           </Box>
         </Box>
 
-        <Box sx={{ px: 2, mt: 4 }}>
+        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
           {SIDE_MENU_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Button
-                key={item.text}
+                key={item.key}
+                className={isActive ? "active" : ""}
                 fullWidth
                 onClick={() => navigate(item.path)}
                 startIcon={item.icon}
@@ -277,7 +283,7 @@ export default function VerifyUsers() {
                   },
                 }}
               >
-                {item.text}
+                {t(`admin.${item.key}`)}
               </Button>
             );
           })}
@@ -286,6 +292,7 @@ export default function VerifyUsers() {
 
       {/* MAIN AREA */}
       <Box
+        className="main-area admin-main-area"
         sx={{
           flex: 1,
           display: "flex",
@@ -296,6 +303,7 @@ export default function VerifyUsers() {
       >
         {/* HEADER */}
         <Box
+          className="top-header admin-top-header"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -315,7 +323,7 @@ export default function VerifyUsers() {
                 display: { xs: "inline-flex", md: "none" },
                 color: "#64748b",
               }}
-              aria-label="Back to dashboard"
+              aria-label={t("common.back")}
             >
               <ArrowBack />
             </IconButton>
@@ -324,7 +332,7 @@ export default function VerifyUsers() {
               fontWeight="800"
               sx={{ color: "#1e293b", letterSpacing: "-1px" }}
             >
-              Verify Users
+              {t("admin.verifyTitle")}
             </Typography>
           </Box>
 
@@ -344,15 +352,15 @@ export default function VerifyUsers() {
             >
               <Search sx={{ color: "#94a3b8", mr: 1.5 }} />
               <InputBase
-                placeholder="Search pending users..."
+                placeholder={t("admin.searchPendingUsers")}
                 fullWidth
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 sx={{ fontSize: "14px", fontWeight: "500" }}
-                inputProps={{ "aria-label": "Search pending users" }}
+                inputProps={{ "aria-label": t("admin.searchPendingUsers") }}
               />
             </Paper>
-            <IconButton sx={{ bgcolor: "#f8fafc" }} aria-label="Notifications">
+            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#64748b" }} />
             </IconButton>
             <Divider
@@ -372,15 +380,15 @@ export default function VerifyUsers() {
                   fontWeight="800"
                   color="#1e293b"
                 >
-                  System Admin
+                  {t("common.systemAdmin")}
                 </Typography>
                 <Typography variant="caption" fontWeight="600" color="#94a3b8">
-                  Administrator
+                  {t("common.administrator")}
                 </Typography>
               </Box>
               <IconButton
                 onClick={(event) => setAnchorEl(event.currentTarget)}
-                aria-label="Open admin menu"
+                aria-label={t("common.openMenu")}
                 sx={{ p: 0.8, "&:hover": { bgcolor: "#f1f5f9" } }}
               >
                 <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}>
@@ -418,7 +426,7 @@ export default function VerifyUsers() {
                   <IconButton
                     size="small"
                     onClick={() => setAnchorEl(null)}
-                    aria-label="Close menu"
+                    aria-label={t("common.closeMenu")}
                   >
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />
                   </IconButton>
@@ -436,7 +444,7 @@ export default function VerifyUsers() {
                       borderRadius: 2,
                     }}
                   >
-                    Log out
+                    {t("common.logout")}
                   </Button>
                 </Box>
               </Popover>
@@ -445,10 +453,11 @@ export default function VerifyUsers() {
         </Box>
 
         {/* CONTENT */}
-        <Box sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
+        <Box className="content-area admin-content-area page-content" sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
           <Fade in timeout={400}>
             <Box>
               <Box
+                className="page-header"
                 sx={{
                   display: "flex",
                   justifyContent: "space-between",
@@ -465,10 +474,10 @@ export default function VerifyUsers() {
                     color="#1e293b"
                     sx={{ letterSpacing: "-1px" }}
                   >
-                    Verify Guest Users
+                    {t("admin.verifyHeading")}
                   </Typography>
                   <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
-                    Review and approve external users before they can book labs.
+                    {t("admin.verifySubtitle")}
                   </Typography>
                 </Box>
                 <Chip
@@ -492,6 +501,7 @@ export default function VerifyUsers() {
 
               {loading ? (
                 <Paper
+                  className="surface-card"
                   elevation={0}
                   sx={{
                     minHeight: 320,
@@ -506,6 +516,7 @@ export default function VerifyUsers() {
                 </Paper>
               ) : pendingUsers.length === 0 ? (
                 <Paper
+                  className="surface-card empty-state"
                   elevation={0}
                   sx={{
                     p: { xs: 5, md: 8 },
@@ -519,14 +530,15 @@ export default function VerifyUsers() {
                     sx={{ fontSize: 64, color: "#94a3b8", mb: 2 }}
                   />
                   <Typography variant="h6" color="#64748b" fontWeight="700">
-                    No Pending Verifications
+                    {t("admin.noPendingVerifications")}
                   </Typography>
                   <Typography variant="body2" color="#94a3b8">
-                    All guest accounts are up to date.
+                    {t("admin.allGuestsUpToDate")}
                   </Typography>
                 </Paper>
               ) : filteredUsers.length === 0 ? (
                 <Paper
+                  className="surface-card empty-state"
                   elevation={0}
                   sx={{
                     p: { xs: 5, md: 8 },
@@ -538,10 +550,10 @@ export default function VerifyUsers() {
                 >
                   <Search sx={{ fontSize: 56, color: "#94a3b8", mb: 2 }} />
                   <Typography variant="h6" color="#64748b" fontWeight="700">
-                    No Matching Users
+                    {t("admin.noMatchingGuestUsers")}
                   </Typography>
                   <Typography variant="body2" color="#94a3b8">
-                    Try a different name, email, or phone number.
+                    {t("admin.adjustGuestSearch")}
                   </Typography>
                 </Paper>
               ) : (
@@ -563,6 +575,7 @@ export default function VerifyUsers() {
                     return (
                       <Paper
                         key={user.id}
+                        className="surface-card"
                         elevation={0}
                         sx={{
                           width: "100%",
@@ -647,7 +660,7 @@ export default function VerifyUsers() {
                               </Typography>
                             </Box>
                             <Chip
-                              label="Guest User"
+                              label={t("admin.guestUser")}
                               size="small"
                               sx={{
                                 bgcolor: "#f1f5f9",
@@ -718,7 +731,7 @@ export default function VerifyUsers() {
                                 textTransform: "none",
                               }}
                             >
-                              Reject
+                              {t("admin.reject")}
                             </Button>
                             <Button
                               fullWidth
@@ -734,7 +747,7 @@ export default function VerifyUsers() {
                                 boxShadow: "none",
                               }}
                             >
-                              {isProcessing ? "Saving..." : "Approve"}
+                              {isProcessing ? t("admin.saving") : t("admin.approve")}
                             </Button>
                           </Box>
                         </Box>

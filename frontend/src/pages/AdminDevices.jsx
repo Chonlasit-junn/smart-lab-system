@@ -46,30 +46,31 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { authConfig } from "../utils/auth";
+import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const SIDE_MENU_ITEMS = [
-  { text: "Dashboard", icon: <DashIcon sx={{ fontSize: 20 }} />, path: "/admin" },
-  { text: "Manage Labs", icon: <MeetingRoom sx={{ fontSize: 20 }} />, path: "/manage-labs" },
-  { text: "Lab Devices", icon: <Computer sx={{ fontSize: 20 }} />, path: "/admin/devices" },
-  { text: "Verify Users", icon: <HowToReg sx={{ fontSize: 20 }} />, path: "/verify-users" },
-  { text: "User Points", icon: <Assessment sx={{ fontSize: 20 }} />, path: "/admin/points" },
-  { text: "Point Criteria", icon: <Settings sx={{ fontSize: 20 }} />, path: "/admin/points/policy" },
-  { text: "Role Management", icon: <ManageAccounts sx={{ fontSize: 20 }} />, path: "/admin/roles" },
-  { text: "Blacklist", icon: <Block sx={{ fontSize: 20 }} />, path: "/blacklist" },
-  { text: "Ticket", icon: <ConfirmationNumber sx={{ fontSize: 20 }} />, path: "/ticket" },
+  { key: "dashboard", icon: <DashIcon sx={{ fontSize: 20 }} />, path: "/admin" },
+  { key: "manageLabs", icon: <MeetingRoom sx={{ fontSize: 20 }} />, path: "/manage-labs" },
+  { key: "labDevices", icon: <Computer sx={{ fontSize: 20 }} />, path: "/admin/devices" },
+  { key: "verifyUsers", icon: <HowToReg sx={{ fontSize: 20 }} />, path: "/verify-users" },
+  { key: "userPoints", icon: <Assessment sx={{ fontSize: 20 }} />, path: "/admin/points" },
+  { key: "pointCriteria", icon: <Settings sx={{ fontSize: 20 }} />, path: "/admin/points/policy" },
+  { key: "roleManagement", icon: <ManageAccounts sx={{ fontSize: 20 }} />, path: "/admin/roles" },
+  { key: "blacklist", icon: <Block sx={{ fontSize: 20 }} />, path: "/blacklist" },
+  { key: "ticket", icon: <ConfirmationNumber sx={{ fontSize: 20 }} />, path: "/ticket" },
 ];
 
 const STATUS_LABELS = {
-  active: "ใช้งานได้",
-  maintenance: "บำรุงรักษา",
-  revoked: "ยกเลิกสิทธิ์",
+  active: "active",
+  maintenance: "maintenance",
+  revoked: "revoked",
 };
 
-function formatDate(value) {
-  if (!value) return "ยังไม่พบสัญญาณ";
-  return new Date(value).toLocaleString("th-TH", {
+function formatDate(value, locale = "th-TH") {
+  if (!value) return "";
+  return new Date(value).toLocaleString(locale, {
     dateStyle: "short",
     timeStyle: "short",
   });
@@ -79,6 +80,7 @@ export default function AdminDevices() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
+  const { t } = useLanguage();
   const [anchorEl, setAnchorEl] = useState(null);
   const [devices, setDevices] = useState([]);
   const [labs, setLabs] = useState([]);
@@ -113,13 +115,13 @@ export default function AdminDevices() {
   }, []);
 
   useEffect(() => {
-    document.title = "Lab Devices | Smart Lab Admin";
+    document.title = `${t("admin.devicesTitle")} | Smart Lab Admin`;
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, t]);
 
   const handleCreateEnrollment = async () => {
     if (!selectedLabId) {
-      showNotice("กรุณาเลือก Lab ก่อนสร้างรหัส", "warning");
+      showNotice(t("admin.chooseLabFirst"), "warning");
       return;
     }
     try {
@@ -138,9 +140,9 @@ export default function AdminDevices() {
     if (!enrollmentCode?.enrollment_code) return;
     try {
       await navigator.clipboard.writeText(enrollmentCode.enrollment_code);
-      showNotice("คัดลอกรหัสแล้ว");
+      showNotice(t("admin.copied"));
     } catch {
-      showNotice("คัดลอกรหัสไม่สำเร็จ กรุณาคัดลอกด้วยตนเอง", "warning");
+      showNotice(t("admin.copyFailed"), "warning");
     }
   };
 
@@ -162,10 +164,10 @@ export default function AdminDevices() {
         },
         authConfig(),
       );
-      showNotice("บันทึกการตั้งค่าเครื่องแล้ว");
+      showNotice(t("admin.deviceRegistered"));
       await fetchData();
     } catch (requestError) {
-      showNotice(requestError.response?.data?.detail || "บันทึกข้อมูลไม่สำเร็จ", "error");
+      showNotice(requestError.response?.data?.detail || t("admin.deviceSaveFailed"), "error");
     } finally {
       setSavingDeviceId(null);
     }
@@ -189,10 +191,10 @@ export default function AdminDevices() {
   };
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#fcfdfe", fontFamily: "'Inter', sans-serif" }}>
-      <Box sx={{ width: "var(--sidebar-width)", bgcolor: "#f0f7ff", borderRight: "1px solid #e2efff", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", zIndex: 10 }}>
-        <Box sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
-          <Box sx={{ bgcolor: "#000", p: 1, borderRadius: 2.5, display: "flex", boxShadow: "0 4px 10px rgba(0,0,0,0.2)" }}>
+    <Box className="app-layout admin-layout" sx={{ display: "flex", minHeight: "100vh", bgcolor: "#fcfdfe", fontFamily: "'Inter', sans-serif" }}>
+      <Box className="sidebar admin-sidebar" sx={{ width: "var(--sidebar-width)", bgcolor: "#f0f7ff", borderRight: "1px solid #e2efff", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", zIndex: 10 }}>
+        <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
+          <Box className="admin-brand-mark" sx={{ bgcolor: "#000", p: 1, borderRadius: 2.5, display: "flex", boxShadow: "0 4px 10px rgba(0,0,0,0.2)" }}>
             <Computer sx={{ color: "white", fontSize: 28 }} />
           </Box>
           <Box>
@@ -200,30 +202,31 @@ export default function AdminDevices() {
             <Typography variant="caption" sx={{ color: "#64748b", fontWeight: "500", display: "block", mt: -0.5 }}>Admin Dashboard</Typography>
           </Box>
         </Box>
-        <Box sx={{ px: 2, mt: 4 }}>
+        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
           {SIDE_MENU_ITEMS.map((item) => (
             <Button
-              key={item.text}
+              key={item.key}
+              className={location.pathname === item.path ? "active" : ""}
               fullWidth
               onClick={() => navigate(item.path)}
               startIcon={item.icon}
               sx={{ justifyContent: "flex-start", py: 1, px: 2.5, mb: 0.5, bgcolor: location.pathname === item.path ? "white" : "transparent", color: location.pathname === item.path ? "#3b82f6" : "#94a3b8", fontWeight: location.pathname === item.path ? "700" : "600", fontSize: "var(--sidebar-font-size)", boxShadow: location.pathname === item.path ? "0 10px 25px rgba(0,0,0,0.03)" : "none", borderRadius: "var(--sidebar-active-radius)", textTransform: "none", "&:hover": { bgcolor: "white", color: "#3b82f6" } }}
             >
-              {item.text}
+              {t(`admin.${item.key}`)}
             </Button>
           ))}
         </Box>
       </Box>
 
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden" }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 6, py: 1, bgcolor: "white", borderBottom: "1px solid #e2e8f0" }}>
-          <Typography variant="h5" fontWeight="800" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>Lab Devices</Typography>
+      <Box className="main-area admin-main-area" sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden" }}>
+        <Box className="top-header admin-top-header" sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 6, py: 1, bgcolor: "white", borderBottom: "1px solid #e2e8f0" }}>
+          <Typography variant="h5" fontWeight="800" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>{t("admin.devicesTitle")}</Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton sx={{ bgcolor: "#f8fafc" }}><Notifications sx={{ color: "#64748b" }} /></IconButton>
+            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}><Notifications sx={{ color: "#64748b" }} /></IconButton>
             <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
             <Box sx={{ textAlign: "right" }}>
-              <Typography variant="subtitle2" fontWeight="800" color="#1e293b">System Admin</Typography>
-              <Typography variant="caption" fontWeight="600" color="#94a3b8">Administrator</Typography>
+              <Typography variant="subtitle2" fontWeight="800" color="#1e293b">{t("common.systemAdmin")}</Typography>
+              <Typography variant="caption" fontWeight="600" color="#94a3b8">{t("common.administrator")}</Typography>
             </Box>
             <IconButton onClick={(event) => setAnchorEl(event.currentTarget)} sx={{ p: 0.8 }}>
               <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}><Person sx={{ fontSize: 20 }} /></Avatar>
@@ -231,40 +234,40 @@ export default function AdminDevices() {
           </Box>
         </Box>
 
-        <Box sx={{ p: { xs: 2, md: 5 }, flex: 1 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" }, gap: 2, mb: 3, flexDirection: { xs: "column", md: "row" } }}>
+        <Box className="content-area admin-content-area page-content" sx={{ p: { xs: 2, md: 5 }, flex: 1 }}>
+          <Box className="page-header" sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" }, gap: 2, mb: 3, flexDirection: { xs: "column", md: "row" } }}>
             <Box>
-              <Typography variant="h4" fontWeight="800" color="#0f172a">เครื่องประจำ Lab</Typography>
-              <Typography color="#64748b" sx={{ mt: 0.5 }}>ลงทะเบียนและควบคุมว่าเครื่องใดอยู่ใน Lab ใด</Typography>
+              <Typography variant="h4" fontWeight="800" color="#0f172a">{t("admin.deviceHeading")}</Typography>
+              <Typography color="#64748b" sx={{ mt: 0.5 }}>{t("admin.deviceSubtitle")}</Typography>
             </Box>
-            <Button variant="contained" startIcon={<Computer />} onClick={() => setOpenEnrollment(true)} sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700, px: 2.5 }}>สร้างรหัสลงทะเบียน</Button>
+            <Button variant="contained" startIcon={<Computer />} onClick={() => setOpenEnrollment(true)} sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700, px: 2.5 }}>{t("admin.createEnrollment")}</Button>
           </Box>
 
           {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
-          <Paper elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, overflow: "hidden" }}>
+          <Paper className="surface-card data-table-shell" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, overflow: "hidden" }}>
             <TableContainer sx={{ overflowX: "auto" }}>
               <Table sx={{ minWidth: 980 }}>
                 <TableHead sx={{ bgcolor: "#f8fafc" }}>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 800 }}>เครื่อง</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>Lab</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>สถานะ</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>Agent</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>สัญญาณล่าสุด</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 800 }}>การจัดการ</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>{t("admin.machine")}</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>{t("user.lab")}</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>{t("common.status")}</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>{t("admin.agent")}</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>{t("admin.lastSignal")}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>{t("admin.manage")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {loading ? (
                     <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7 }}><CircularProgress size={28} /></TableCell></TableRow>
                   ) : devices.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7, color: "#94a3b8" }}>ยังไม่มีเครื่องที่ลงทะเบียน</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7, color: "#94a3b8" }}>{t("admin.noDevices")}</TableCell></TableRow>
                   ) : devices.map((device) => (
                     <TableRow key={device.id} hover>
                       <TableCell>
                         <Typography fontWeight={700} color="#1e293b">{device.device_name}</Typography>
                         <Typography variant="caption" color="#94a3b8">{device.device_id}</Typography>
-                        <Typography variant="caption" display="block" color="#94a3b8">{device.device_mac || "ไม่มี MAC"}</Typography>
+                        <Typography variant="caption" display="block" color="#94a3b8">{device.device_mac || t("common.noMac")}</Typography>
                       </TableCell>
                       <TableCell sx={{ minWidth: 210 }}>
                         <FormControl size="small" fullWidth>
@@ -275,14 +278,14 @@ export default function AdminDevices() {
                       </TableCell>
                       <TableCell sx={{ minWidth: 155 }}>
                         <Select size="small" value={device.status} onChange={(event) => updateDevice(device.id, "status", event.target.value)}>
-                          {Object.entries(STATUS_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+                          {Object.keys(STATUS_LABELS).map((value) => <MenuItem key={value} value={value}>{t(`common.${value}`)}</MenuItem>)}
                         </Select>
                       </TableCell>
-                      <TableCell>{device.agent_version || "source"}</TableCell>
-                      <TableCell>{formatDate(device.last_seen_at)}</TableCell>
+                      <TableCell>{device.agent_version || t("common.source")}</TableCell>
+                      <TableCell>{formatDate(device.last_seen_at, t("common.locale")) || t("common.noSignal")}</TableCell>
                       <TableCell align="right">
                         <Button size="small" variant="outlined" disabled={savingDeviceId === device.id} onClick={() => handleSaveDevice(device)} sx={{ textTransform: "none", borderRadius: 2 }}>
-                          {savingDeviceId === device.id ? "กำลังบันทึก" : "บันทึก"}
+                          {savingDeviceId === device.id ? t("admin.savingDevice") : t("admin.saveDevice")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -295,7 +298,7 @@ export default function AdminDevices() {
       </Box>
 
       <Dialog open={openEnrollment} onClose={handleCloseEnrollment} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800 }}>สร้างรหัสลงทะเบียนเครื่อง</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800 }}>{t("admin.enrollmentTitle")}</DialogTitle>
         <DialogContent>
           {!enrollmentCode ? (
             <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
@@ -305,25 +308,25 @@ export default function AdminDevices() {
                   {labs.filter((lab) => lab.status === "active").map((lab) => <MenuItem key={lab.id} value={lab.id}>{lab.code} — {lab.name}</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField select label="อายุรหัส" value={expiresInMinutes} onChange={(event) => setExpiresInMinutes(event.target.value)}>
-                <MenuItem value={10}>10 นาที</MenuItem>
-                <MenuItem value={30}>30 นาที</MenuItem>
-                <MenuItem value={60}>60 นาที</MenuItem>
+                <TextField select label={t("admin.enrollmentAge")} value={expiresInMinutes} onChange={(event) => setExpiresInMinutes(event.target.value)}>
+                <MenuItem value={10}>10 {t("common.minutes")}</MenuItem>
+                <MenuItem value={30}>30 {t("common.minutes")}</MenuItem>
+                <MenuItem value={60}>60 {t("common.minutes")}</MenuItem>
               </TextField>
-              <Alert severity="info">รหัสนี้ใช้ได้ครั้งเดียว ใช้สำหรับลงทะเบียนเครื่องหนึ่งเครื่องเท่านั้น</Alert>
+              <Alert severity="info">{t("admin.oneTimeCode")}</Alert>
             </Box>
           ) : (
             <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
-              <Alert severity="success">สร้างรหัสสำหรับ {enrollmentCode.lab?.code} — {enrollmentCode.lab?.name} แล้ว</Alert>
+              <Alert severity="success">{t("admin.generatedFor")} {enrollmentCode.lab?.code} — {enrollmentCode.lab?.name}</Alert>
               <TextField label="Enrollment Code" value={enrollmentCode.enrollment_code} InputProps={{ readOnly: true }} fullWidth />
-              <Button variant="outlined" startIcon={<ContentCopy />} onClick={handleCopyCode} sx={{ textTransform: "none" }}>คัดลอกรหัส</Button>
-              <Typography variant="body2" color="#64748b">หมดอายุ: {formatDate(enrollmentCode.expires_at)} จากนั้นให้รัน `python provision_device.py --enrollment-code รหัสนี้` บนเครื่องเป้าหมาย</Typography>
+              <Button variant="outlined" startIcon={<ContentCopy />} onClick={handleCopyCode} sx={{ textTransform: "none" }}>{t("admin.copyCode")}</Button>
+              <Typography variant="body2" color="#64748b">{t("admin.expiresAt")}: {formatDate(enrollmentCode.expires_at, t("common.locale"))} · {t("admin.setupCommand")}</Typography>
             </Box>
           )}
         </DialogContent>
         <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={handleCloseEnrollment} sx={{ textTransform: "none" }}>{enrollmentCode ? "ปิด" : "ยกเลิก"}</Button>
-          {!enrollmentCode && <Button variant="contained" onClick={handleCreateEnrollment} sx={{ textTransform: "none" }}>สร้างรหัส</Button>}
+          <Button onClick={handleCloseEnrollment} sx={{ textTransform: "none" }}>{enrollmentCode ? t("common.close") : t("common.cancel")}</Button>
+          {!enrollmentCode && <Button variant="contained" onClick={handleCreateEnrollment} sx={{ textTransform: "none" }}>{t("admin.createCode")}</Button>}
         </DialogActions>
       </Dialog>
 
@@ -332,8 +335,8 @@ export default function AdminDevices() {
       </Snackbar>
 
       {Boolean(anchorEl) && (
-        <Paper sx={{ position: "fixed", right: 28, top: 68, zIndex: 20, p: 1, width: 190, border: "1px solid #e2e8f0" }}>
-          <Button fullWidth startIcon={<Logout />} onClick={handleLogout} sx={{ justifyContent: "flex-start", textTransform: "none", color: "#ef4444" }}>ออกจากระบบ</Button>
+        <Paper className="surface-card" sx={{ position: "fixed", right: 28, top: 68, zIndex: 20, p: 1, width: 190, border: "1px solid #e2e8f0" }}>
+          <Button fullWidth startIcon={<Logout />} onClick={handleLogout} sx={{ justifyContent: "flex-start", textTransform: "none", color: "#ef4444" }}>{t("common.logout")}</Button>
           <IconButton size="small" onClick={() => setAnchorEl(null)} sx={{ position: "absolute", top: 3, right: 3 }}><Close fontSize="small" /></IconButton>
         </Paper>
       )}

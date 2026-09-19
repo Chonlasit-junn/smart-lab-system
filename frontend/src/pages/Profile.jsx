@@ -8,7 +8,7 @@ import {
   CircularProgress,
   Divider,
   Chip,
-  Grid,
+  GridLegacy as Grid,
   LinearProgress,
   Popover,
   Button,
@@ -20,6 +20,7 @@ import {
   Assignment,
   History,
   SupportAgent,
+  ConfirmationNumber,
   Logout,
   Computer,
   Menu as MenuIcon,
@@ -36,6 +37,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -64,6 +66,7 @@ const POINT_REASON_LABELS = {
 export default function Profile() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
+  const { t } = useLanguage();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -163,7 +166,7 @@ export default function Profile() {
 
   const formatDate = (d) =>
     d
-      ? new Date(d).toLocaleDateString("en-GB", {
+      ? new Date(d).toLocaleDateString(t("common.locale"), {
           day: "numeric",
           month: "short",
           year: "numeric",
@@ -222,13 +225,16 @@ export default function Profile() {
         </div>
         <div className="sidebar-menu">
           <div className="menu-item" onClick={() => navigate("/booking")}>
-            <EventNote /> Lab Reserve
+            <EventNote /> {t("common.labReserve")}
           </div>
           <div className="menu-item" onClick={() => navigate("/reserved")}>
-            <Assignment /> Reserved
+            <Assignment /> {t("common.reserved")}
           </div>
           <div className="menu-item" onClick={() => navigate("/history")}>
-            <History /> History
+            <History /> {t("common.history")}
+          </div>
+          <div className="menu-item" onClick={() => navigate("/my-tickets")}>
+            <ConfirmationNumber /> {t("common.myTickets")}
           </div>
         </div>
         <div
@@ -236,7 +242,7 @@ export default function Profile() {
           style={{ flex: "none", paddingBottom: "24px" }}
         >
           <div className="menu-item">
-            <SupportAgent /> Support
+            <SupportAgent /> {t("common.support")}
           </div>
         </div>
       </div>
@@ -257,7 +263,7 @@ export default function Profile() {
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
-              My Profile
+              {t("user.profileTitle")}
             </Typography>
           </Box>
           <Box
@@ -267,7 +273,7 @@ export default function Profile() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton>
+            <IconButton className="header-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#111827" }} />
             </IconButton>
             {currentUser ? (
@@ -398,7 +404,7 @@ export default function Profile() {
                         },
                       }}
                     >
-                      Manage your Account
+                      {t("common.manageAccount")}
                     </Button>
                   </Box>
 
@@ -428,7 +434,7 @@ export default function Profile() {
                         fontWeight="700"
                         color="#1e293b"
                       >
-                        Setting
+                        {t("common.settings")}
                       </Typography>
                     </Box>
                     <Box
@@ -450,7 +456,7 @@ export default function Profile() {
                         fontWeight="700"
                         color="#ef4444"
                       >
-                        Log out
+                        {t("common.logout")}
                       </Typography>
                     </Box>
                   </Box>
@@ -493,7 +499,7 @@ export default function Profile() {
         </div>
 
         {/* content */}
-        <div className="content-area">
+        <div className="content-area page-content">
           {loading ? (
             <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
               <CircularProgress />
@@ -518,11 +524,11 @@ export default function Profile() {
                     {numericPoints === 0 ? (
                       <Box>
                         <Typography fontWeight="700">
-                          คะแนนของคุณเหลือ 0 คะแนน กรุณาติดต่อ Admin เพื่อขอความช่วยเหลือ
+                          {t("common.zeroPointsMessage")}
                         </Typography>
                         {pointRequest?.status === "pending" ? (
                           <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            ส่งคำขอเพิ่ม {pointRequest.requested_points || pointRequestAmount} คะแนนแล้ว กรุณารอ Admin พิจารณา
+                            {t("common.contactAdmin")} {pointRequest.requested_points || pointRequestAmount} {t("common.requestSubmitted")}
                           </Typography>
                         ) : (
                           <Button
@@ -533,14 +539,14 @@ export default function Profile() {
                             disabled={pointRequestLoading || profile.can_request_points === false}
                             sx={{ mt: 1.25, borderColor: "currentColor", color: "inherit", textTransform: "none", fontWeight: "700" }}
                           >
-                            {pointRequestLoading ? "กำลังส่งคำขอ..." : `ติดต่อ Admin เพื่อขอเพิ่ม ${pointRequestAmount} คะแนน`}
+                            {pointRequestLoading ? t("common.sendingRequest") : `${t("common.contactAdmin")} ${pointRequestAmount} ${t("common.points")}`}
                           </Button>
                         )}
                       </Box>
                     ) : profile.is_banned ? (
-                      `บัญชีถูกระงับการจองถึง ${new Date(profile.ban_until).toLocaleString("th-TH")}`
+                            `${t("common.bannedUntil")} ${new Date(profile.ban_until).toLocaleString(t("common.locale"))}`
                     ) : numericPoints <= pointWarningThreshold ? (
-                      `คำเตือน: คะแนนเหลือ ${numericPoints} คะแนน ใกล้ถึง 0 โปรดระมัดระวังการทำผิดกฎ`
+                      `${t("common.lowPointsWarning")} (${numericPoints} ${t("common.points")})`
                     ) : null}
                   </Alert>
                 ) : null}
@@ -549,6 +555,7 @@ export default function Profile() {
                   <Grid item xs={12} md={4}>
                     {/* avatar card */}
                     <Paper
+                      className="surface-card"
                       elevation={0}
                       sx={{
                         borderRadius: 4,
@@ -617,7 +624,7 @@ export default function Profile() {
                         >
                           <CalendarMonth sx={{ fontSize: 14 }} />
                           <Typography variant="caption">
-                            เข้าร่วมเมื่อ {formatDate(profile.created_at)}
+                            {t("common.joinedAt")} {formatDate(profile.created_at)}
                           </Typography>
                         </Box>
                       </Box>
@@ -625,6 +632,7 @@ export default function Profile() {
 
                     {/* stats card */}
                     <Paper
+                      className="surface-card"
                       elevation={0}
                       sx={{
                         mt: 3,
@@ -640,7 +648,7 @@ export default function Profile() {
                         color="#94a3b8"
                         sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                       >
-                        สถิติการใช้งาน
+                        {t("common.usageStats")}
                       </Typography>
                       <Box
                         sx={{
@@ -664,7 +672,7 @@ export default function Profile() {
                             color="#94a3b8"
                             sx={{ mt: 0.5, display: "block" }}
                           >
-                            การจอง
+                            {t("common.bookings")}
                           </Typography>
                         </Box>
                         <Divider
@@ -686,7 +694,7 @@ export default function Profile() {
                             color="#94a3b8"
                             sx={{ mt: 0.5, display: "block" }}
                           >
-                            คะแนน
+                            {t("common.points")}
                           </Typography>
                         </Box>
                       </Box>
@@ -696,6 +704,7 @@ export default function Profile() {
                   {/* ── RIGHT COLUMN ── */}
                   <Grid item xs={12} md={8}>
                     <Paper
+                      className="surface-card"
                       elevation={0}
                       sx={{
                         p: 4,
@@ -711,7 +720,7 @@ export default function Profile() {
                         color="#94a3b8"
                         sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                       >
-                        ข้อมูลส่วนตัว
+                        {t("common.personalInfo")}
                       </Typography>
 
                       <Box
@@ -728,7 +737,7 @@ export default function Profile() {
                             <Email sx={{ color: "#3b82f6", fontSize: 18 }} />
                           }
                           iconBg="#eff6ff"
-                          label="อีเมล"
+                              label={t("common.email")}
                           value={profile.email}
                         />
 
@@ -742,7 +751,7 @@ export default function Profile() {
                                 />
                               }
                               iconBg="#eff6ff"
-                              label="รหัสนักศึกษา"
+                              label={t("common.studentId")}
                               value={profile.student_id || "—"}
                             />
                             <InfoRow
@@ -752,7 +761,7 @@ export default function Profile() {
                                 />
                               }
                               iconBg="#eff6ff"
-                              label="คณะ / สาขา"
+                              label={t("common.facultyDepartment")}
                               value={
                                 FACULTY_NAMES[profile.faculty] ||
                                 profile.faculty ||
@@ -770,7 +779,7 @@ export default function Profile() {
                               <Phone sx={{ color: "#f59e0b", fontSize: 18 }} />
                             }
                             iconBg="#fff7ed"
-                            label="เบอร์โทรศัพท์"
+                            label={t("common.phone")}
                             value={profile.phone || "—"}
                           />
                         )}
@@ -779,6 +788,7 @@ export default function Profile() {
 
                     {/* point card */}
                     <Paper
+                      className="surface-card"
                       elevation={0}
                       sx={{
                         p: 4,
@@ -802,7 +812,7 @@ export default function Profile() {
                           color="#94a3b8"
                           sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                         >
-                          คะแนนของฉัน
+                          {t("common.myPoints")}
                         </Typography>
                       </Box>
 
@@ -815,7 +825,7 @@ export default function Profile() {
                         }}
                       >
                         <Typography variant="body2" color="#64748b">
-                          คะแนนปัจจุบัน
+                          {t("common.currentPoints")}
                         </Typography>
                         <Typography
                           variant="h6"
@@ -857,7 +867,7 @@ export default function Profile() {
                         }}
                       >
                         <Typography variant="body2" color="#64748b">
-                          คะแนนวันนี้
+                          {t("user.todayPoints")}
                         </Typography>
                         <Typography variant="body2" fontWeight="bold" color="#334155">
                           {profile.daily_score ?? "—"} / 100
@@ -866,7 +876,7 @@ export default function Profile() {
 
                       {pointsError ? (
                         <Chip
-                          label="ยังตรวจสอบสถานะไม่ได้"
+                          label={t("common.pointsStatusUnavailable")}
                           size="small"
                           sx={{
                             bgcolor: "#f1f5f9",
@@ -876,7 +886,7 @@ export default function Profile() {
                         />
                       ) : pointRequest?.status === "pending" ? (
                         <Chip
-                          label="ส่งคำขอเพิ่มคะแนนแล้ว — รอ Admin พิจารณา"
+                          label={t("common.pointRequestPending")}
                           size="small"
                           sx={{
                             bgcolor: "#fff7ed",
@@ -896,7 +906,7 @@ export default function Profile() {
                         />
                       ) : numericPoints !== null && numericPoints <= pointWarningThreshold ? (
                         <Chip
-                          label="คะแนนต่ำ — โปรดระวังการทำผิดกฎ"
+                          label={t("common.lowPointsWarning")}
                           size="small"
                           sx={{
                             bgcolor: "#fff7ed",
@@ -906,7 +916,7 @@ export default function Profile() {
                         />
                       ) : (
                         <Chip
-                          label="สถานะปกติ"
+                          label={t("common.statusNormal")}
                           size="small"
                           sx={{
                             bgcolor: "#f0fdf4",
@@ -918,11 +928,11 @@ export default function Profile() {
 
                       <Divider sx={{ my: 3 }} />
                       <Typography variant="subtitle2" fontWeight="bold" color="#334155" sx={{ mb: 1.5 }}>
-                        ประวัติการเปลี่ยนคะแนน
+                        {t("common.scoreHistory")}
                       </Typography>
                       {pointLogs.length === 0 ? (
                         <Typography variant="body2" color="#94a3b8">
-                          ยังไม่มีประวัติการเปลี่ยนคะแนน
+                          {t("common.noScoreHistory")}
                         </Typography>
                       ) : (
                         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>

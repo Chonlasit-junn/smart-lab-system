@@ -342,7 +342,7 @@ function UserPointHistory({ pointLogs, dailyScores }) {
                       <Typography variant="caption" color="#94a3b8">{log.note || "ไม่มีรายละเอียด"}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography fontWeight="800" color={log.change < 0 ? "#ef4444" : "#10b981"}>
+                      <Typography className="theme-colored" fontWeight="800" color={log.change < 0 ? "#ef4444" : "#10b981"}>
                         {log.change > 0 ? "+" : ""}{log.change}
                       </Typography>
                     </TableCell>
@@ -354,7 +354,7 @@ function UserPointHistory({ pointLogs, dailyScores }) {
           </TableContainer>
         )}
       </Box>
-      <Paper elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, alignSelf: "start", overflow: "hidden" }}>
+      <Paper className="surface-card" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, alignSelf: "start", overflow: "hidden" }}>
         <Box sx={{ p: 2.5, borderBottom: "1px solid #f1f5f9" }}>
           <Typography fontWeight="800" color="#334155">คะแนนรายวัน</Typography>
           <Typography variant="caption" color="#94a3b8">ย้อนหลังไม่เกิน 100 รายการ</Typography>
@@ -369,7 +369,7 @@ function UserPointHistory({ pointLogs, dailyScores }) {
                 <Box key={String(row.score_date)}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: 0.6 }}>
                     <Typography variant="body2" color="#64748b">{formatDate(row.score_date)}</Typography>
-                    <Typography variant="body2" fontWeight="800" color={getScoreColor(score)}>{score}/100</Typography>
+                    <Typography className="theme-colored" variant="body2" fontWeight="800" color={getScoreColor(score)}>{score}/100</Typography>
                   </Box>
                   <LinearProgress variant="determinate" value={score} sx={{ height: 6, borderRadius: 4, bgcolor: "#f1f5f9", "& .MuiLinearProgress-bar": { bgcolor: getScoreColor(score), borderRadius: 4 } }} />
                 </Box>
@@ -416,6 +416,7 @@ export default function AdminUserDetailsDialog({
       fullWidth
       maxWidth="xl"
       scroll="paper"
+      className="admin-user-details-dialog"
       PaperProps={{ sx: { borderRadius: { xs: 0, sm: 4 }, minHeight: { sm: "min(760px, calc(100vh - 32px))" }, maxHeight: "calc(100vh - 16px)" } }}
     >
       <DialogTitle sx={{ p: { xs: 2.5, md: 4 }, pb: 2 }}>
@@ -443,7 +444,7 @@ export default function AdminUserDetailsDialog({
         </Box>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ p: { xs: 2.5, md: 4 }, bgcolor: "#fcfdfe" }}>
+      <DialogContent className="page-content" dividers sx={{ p: { xs: 2.5, md: 4 }, bgcolor: "#fcfdfe" }}>
         {error && <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>{error}</Alert>}
 
         {loading && !detail ? (
@@ -453,7 +454,7 @@ export default function AdminUserDetailsDialog({
         ) : detail ? (
           <>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) minmax(0, 1fr)" }, gap: 2.5, mb: 3 }}>
-              <Paper elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
+              <Paper className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
                 <Typography variant="subtitle2" fontWeight="800" color="#64748b" sx={{ mb: 2 }}>ข้อมูลบัญชี</Typography>
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 2 }}>
                   <ProfileField label="Student ID" value={profile.student_id} />
@@ -464,18 +465,18 @@ export default function AdminUserDetailsDialog({
                   <ProfileField label="อัปเดตล่าสุด" value={formatDateTime(profile.updated_at)} />
                 </Box>
               </Paper>
-              <Paper elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
+              <Paper className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
                 <Typography variant="subtitle2" fontWeight="800" color="#64748b" sx={{ mb: 2 }}>สถานะคะแนนและการใช้งาน</Typography>
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 2 }}>
-                  <Box><Typography variant="caption" color="#94a3b8">คะแนนสะสม</Typography><Typography variant="h5" fontWeight="800" color={getScoreColor(pointValue)}>{pointValue}/100</Typography></Box>
-                  <Box><Typography variant="caption" color="#94a3b8">คะแนนวันนี้</Typography><Typography variant="h5" fontWeight="800" color="#2563eb">{dailyValue}/100</Typography></Box>
+                  <Box><Typography variant="caption" color="#94a3b8">คะแนนสะสม</Typography><Typography className="theme-colored" variant="h5" fontWeight="800" color={getScoreColor(pointValue)}>{pointValue}/100</Typography></Box>
+                  <Box><Typography variant="caption" color="#94a3b8">คะแนนวันนี้</Typography><Typography className="theme-colored" variant="h5" fontWeight="800" color="#2563eb">{dailyValue}/100</Typography></Box>
                   <Box><Typography variant="caption" color="#94a3b8">สิทธิ์การจอง</Typography><Box sx={{ mt: 0.6 }}><Chip icon={points.booking_allowed ? <CheckCircle /> : <Block />} label={points.booking_allowed ? "จองได้" : "จองไม่ได้"} size="small" sx={{ bgcolor: points.booking_allowed ? "#ecfdf5" : "#fef2f2", color: points.booking_allowed ? "#047857" : "#b91c1c", fontWeight: "800", "& .MuiChip-icon": { color: "inherit" } }} /></Box></Box>
                   <Box><Typography variant="caption" color="#94a3b8">ข้อมูลประวัติ</Typography><Typography variant="body2" color="#334155" fontWeight="700" sx={{ mt: 0.7 }}>{summary.total_sessions || 0} Session · {summary.total_bookings || 0} การจอง</Typography></Box>
                 </Box>
               </Paper>
             </Box>
 
-            <Paper elevation={0} sx={{ borderRadius: 3, border: "1px solid #e2e8f0", overflow: "hidden", bgcolor: "white" }}>
+            <Paper className="surface-card data-table-shell" elevation={0} sx={{ borderRadius: 3, border: "1px solid #e2e8f0", overflow: "hidden", bgcolor: "white" }}>
               <Tabs value={tab} onChange={onTabChange} variant="scrollable" scrollButtons="auto" sx={{ px: { xs: 1, md: 2 }, borderBottom: "1px solid #e2e8f0", "& .MuiTab-root": { textTransform: "none", fontWeight: "800", minHeight: 58 } }}>
                 {tabs.map((item) => <Tab key={item.label} label={`${item.label} (${item.count})`} />)}
               </Tabs>

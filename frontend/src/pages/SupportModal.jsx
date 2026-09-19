@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, IconButton } from '@mui/material';
 import { SupportAgent, Close } from '@mui/icons-material';
 import axios from 'axios';
+import { useLanguage } from '../context/language-context.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -9,12 +10,13 @@ export default function SupportModal({ open, onClose }) {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const { t } = useLanguage();
 
   const handleSubmit = async () => {
-    if (!subject || !message) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+    if (!subject || !message) return alert(t('common.requiredFields'));
 
     const token = localStorage.getItem('access_token');
-    if (!token) return alert('กรุณาเข้าสู่ระบบก่อนส่งคำร้อง');
+    if (!token) return alert(t('common.loginBeforeSupport'));
 
     try {
       setLoading(true);
@@ -24,7 +26,7 @@ export default function SupportModal({ open, onClose }) {
         { subject, message },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      alert('ส่ง Ticket ให้แอดมินเรียบร้อยแล้ว');
+      alert(t('common.ticketSent'));
       setSubject('');
       setMessage('');
       onClose(); // ปิด Modal
@@ -32,7 +34,7 @@ export default function SupportModal({ open, onClose }) {
       // เอา Error จาก Backend มาแสดงที่หน้าจอเลย
       const errorMsg = error.response?.data?.detail || error.message;
       console.error('Failed to send ticket:', errorMsg);
-      alert(`เกิดข้อผิดพลาด: ${JSON.stringify(errorMsg)}`);
+      alert(`${t('common.error')}: ${JSON.stringify(errorMsg)}`);
     } finally {
       setLoading(false);
     }
@@ -42,24 +44,24 @@ export default function SupportModal({ open, onClose }) {
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <SupportAgent color="primary" /> ส่งแจ้งปัญหาถึงผู้ดูแลระบบ
+          <SupportAgent color="primary" /> {t('common.contactSupport')}
         </div>
         <IconButton onClick={onClose}><Close /></IconButton>
       </DialogTitle>
       <DialogContent dividers>
         <TextField
-          autoFocus margin="dense" label="หัวข้อปัญหา" fullWidth variant="outlined"
+          autoFocus margin="dense" label={t('common.subject')} fullWidth variant="outlined"
           value={subject} onChange={(e) => setSubject(e.target.value)}
         />
         <TextField
-          margin="dense" label="รายละเอียด" fullWidth multiline rows={4} variant="outlined"
+          margin="dense" label={t('common.message')} fullWidth multiline rows={4} variant="outlined"
           value={message} onChange={(e) => setMessage(e.target.value)} sx={{ mt: 2 }}
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} color="inherit">ยกเลิก</Button>
+        <Button onClick={onClose} color="inherit">{t('common.cancel')}</Button>
         <Button onClick={handleSubmit} variant="contained" disabled={loading}>
-          {loading ? 'กำลังส่ง...' : 'ส่ง Ticket'}
+          {loading ? t('common.sending') : t('common.sendTicket')}
         </Button>
       </DialogActions>
     </Dialog>

@@ -3,7 +3,7 @@ import {
   Box,
   Typography,
   Paper,
-  Grid,
+  GridLegacy as Grid,
   InputBase,
   IconButton,
   Avatar,
@@ -41,53 +41,54 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { useLanguage } from "../context/language-context.js";
 import { authConfig } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const SIDE_MENU_ITEMS = [
   {
-    text: "Dashboard",
+    key: "dashboard",
     icon: <DashIcon sx={{ fontSize: 20 }} />,
     path: "/admin",
   },
   {
-    text: "Manage Labs",
+    key: "manageLabs",
     icon: <MeetingRoom sx={{ fontSize: 20 }} />,
     path: "/manage-labs",
   },
   {
-    text: "Lab Devices",
+    key: "labDevices",
     icon: <Computer sx={{ fontSize: 20 }} />,
     path: "/admin/devices",
   },
   {
-    text: "Verify Users",
+    key: "verifyUsers",
     icon: <HowToReg sx={{ fontSize: 20 }} />,
     path: "/verify-users",
   },
   {
-    text: "User Points",
+    key: "userPoints",
     icon: <Assessment sx={{ fontSize: 20 }} />,
     path: "/admin/points",
   },
   {
-    text: "Point Criteria",
+    key: "pointCriteria",
     icon: <Settings sx={{ fontSize: 20 }} />,
     path: "/admin/points/policy",
   },
   {
-    text: "Role Management",
+    key: "roleManagement",
     icon: <ManageAccounts sx={{ fontSize: 20 }} />,
     path: "/admin/roles",
   },
   {
-    text: "Blacklist",
+    key: "blacklist",
     icon: <Block sx={{ fontSize: 20 }} />,
     path: "/blacklist",
   },
   {
-    text: "Ticket",
+    key: "ticket",
     icon: <ConfirmationNumber sx={{ fontSize: 20 }} />,
     path: "/ticket",
   },
@@ -109,6 +110,7 @@ export default function Admin() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
+  const { t } = useLanguage();
 
   // --- User menu (avatar dropdown) ---
   const [anchorEl, setAnchorEl] = useState(null);
@@ -131,8 +133,8 @@ export default function Admin() {
 
   // set tab title once on mount
   useEffect(() => {
-    document.title = "Dashboard | Smart Lab Admin";
-  }, []);
+    document.title = `${t("admin.dashboard")} | Smart Lab Admin`;
+  }, [t]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -172,24 +174,25 @@ export default function Admin() {
 
   const STATS_DATA = [
     {
-      label: "Total Requests",
+      label: t("admin.totalRequests"),
       v: stats.totalRequests,
       c: "#3b82f6",
       i: <Person />,
     },
-    { label: "Active Users", v: stats.activeUsers, c: "#10b981", i: <Group /> },
+    { label: t("admin.activeUsers"), v: stats.activeUsers, c: "#10b981", i: <Group /> },
     {
-      label: "Pending Users",
+      label: t("admin.pendingUsersCard"),
       v: stats.pendingApprovals,
       c: "#f59e0b",
       i: <PendingActions />,
       path: "/verify-users",
     },
-    { label: "Support Tickets", v: 0, c: "#ef4444", i: <SupportAgent /> },
+    { label: t("admin.supportTickets"), v: 0, c: "#ef4444", i: <SupportAgent /> },
   ];
 
   return (
     <Box
+      className="app-layout admin-layout"
       sx={{
         display: "flex",
         minHeight: "100vh",
@@ -199,6 +202,7 @@ export default function Admin() {
     >
       {/* sidebar */}
       <Box
+        className="sidebar admin-sidebar"
         sx={{
           width: "var(--sidebar-width)",
           bgcolor: "#f0f7ff",
@@ -211,8 +215,9 @@ export default function Admin() {
           zIndex: 10,
         }}
       >
-        <Box sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
+        <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
           <Box
+            className="admin-brand-mark"
             sx={{
               bgcolor: "#000",
               p: 1,
@@ -245,12 +250,13 @@ export default function Admin() {
           </Box>
         </Box>
 
-        <Box sx={{ px: 2, mt: 4 }}>
+        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
           {SIDE_MENU_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Button
-                key={item.text}
+                key={item.key}
+                className={isActive ? "active" : ""}
                 fullWidth
                 onClick={() => navigate(item.path)}
                 startIcon={item.icon}
@@ -274,7 +280,7 @@ export default function Admin() {
                   },
                 }}
               >
-                {item.text}
+                {t(`admin.${item.key}`)}
               </Button>
             );
           })}
@@ -283,6 +289,7 @@ export default function Admin() {
 
       {/* main content */}
       <Box
+        className="main-area admin-main-area"
         sx={{
           flex: 1,
           display: "flex",
@@ -292,6 +299,7 @@ export default function Admin() {
       >
         {/* top header */}
         <Box
+          className="top-header admin-top-header"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -308,7 +316,7 @@ export default function Admin() {
             fontWeight="800"
             sx={{ color: "#1e293b", letterSpacing: "-1px" }}
           >
-            Dashboard
+            {t("admin.dashboard")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Paper
@@ -325,9 +333,9 @@ export default function Admin() {
               }}
             >
               <Search sx={{ color: "#94a3b8", mr: 1.5 }} />
-              <InputBase placeholder="Search..." fullWidth />
+              <InputBase placeholder={t("common.search")} fullWidth />
             </Paper>
-            <IconButton sx={{ bgcolor: "#f8fafc" }}>
+            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#64748b" }} />
             </IconButton>
             <Divider
@@ -342,10 +350,10 @@ export default function Admin() {
                   fontWeight="800"
                   color="#1e293b"
                 >
-                  System Admin
+                  {t("common.systemAdmin")}
                 </Typography>
                 <Typography variant="caption" fontWeight="600" color="#94a3b8">
-                  Administrator
+                  {t("common.administrator")}
                 </Typography>
               </Box>
               <IconButton
@@ -429,7 +437,7 @@ export default function Admin() {
                     fontWeight="700"
                     fontSize="18px"
                   >
-                    Hi, System Admin
+                    {t("common.systemAdmin")}
                   </Typography>
 
                   <Button
@@ -451,7 +459,7 @@ export default function Admin() {
                       },
                     }}
                   >
-                    Manage your Account
+                    {t("common.manageAccount")}
                   </Button>
                 </Box>
 
@@ -478,7 +486,7 @@ export default function Admin() {
                       fontWeight="700"
                       color="#1e293b"
                     >
-                      Setting
+                      {t("common.settings")}
                     </Typography>
                   </Box>
                   <Box
@@ -500,7 +508,7 @@ export default function Admin() {
                       fontWeight="700"
                       color="#ef4444"
                     >
-                      Log out
+                      {t("common.logout")}
                     </Typography>
                   </Box>
                 </Box>
@@ -509,7 +517,7 @@ export default function Admin() {
           </Box>
         </Box>
 
-        <Box sx={{ p: 6, overflowY: "auto" }}>
+        <Box className="content-area admin-content-area page-content" sx={{ p: 6, overflowY: "auto" }}>
           {loading ? (
             <Box
               sx={{
@@ -528,6 +536,7 @@ export default function Admin() {
                 {STATS_DATA.map((s, idx) => (
                   <Grid item xs={12} sm={6} md={3} key={idx}>
                     <Paper
+                      className="surface-card"
                       elevation={0}
                       onClick={() => s.path && navigate(s.path)}
                       sx={{
@@ -581,6 +590,7 @@ export default function Admin() {
               <Grid container spacing={5}>
                 <Grid item xs={12}>
                   <Paper
+                    className="surface-card data-table-shell"
                     elevation={0}
                     sx={{
                       p: 5,
@@ -595,13 +605,13 @@ export default function Admin() {
                       color="#1e293b"
                       sx={{ mb: 4 }}
                     >
-                      Recent Reservations
+                      {t("admin.recentReservations")}
                     </Typography>
                     <TableContainer>
                       <Table>
                         <TableHead>
                           <TableRow sx={{ bgcolor: "#f8fafc" }}>
-                            {["User", "Room", "Date", "Time"].map((h) => (
+                            {[t("common.user"), t("user.room"), t("common.date"), t("common.time")].map((h) => (
                               <TableCell
                                 key={h}
                                 sx={{
@@ -687,7 +697,7 @@ export default function Admin() {
                                 align="center"
                                 sx={{ py: 4, color: "#94a3b8" }}
                               >
-                                No recent reservations found.
+                                {t("admin.noRecentReservations")}
                               </TableCell>
                             </TableRow>
                           )}

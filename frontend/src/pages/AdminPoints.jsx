@@ -52,6 +52,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import AdminUserDetailsDialog from "../components/AdminUserDetailsDialog";
+import { useLanguage } from "../context/language-context.js";
 import {
   buildTestPointEndpoint,
   canRunTestPointAction,
@@ -62,47 +63,47 @@ const DEFAULT_WARNING_THRESHOLD = 20;
 
 const SIDE_MENU_ITEMS = [
   {
-    text: "Dashboard",
+    key: "dashboard",
     icon: <DashIcon sx={{ fontSize: 20 }} />,
     path: "/admin",
   },
   {
-    text: "Manage Labs",
+    key: "manageLabs",
     icon: <MeetingRoom sx={{ fontSize: 20 }} />,
     path: "/manage-labs",
   },
   {
-    text: "Lab Devices",
+    key: "labDevices",
     icon: <Computer sx={{ fontSize: 20 }} />,
     path: "/admin/devices",
   },
   {
-    text: "Verify Users",
+    key: "verifyUsers",
     icon: <HowToReg sx={{ fontSize: 20 }} />,
     path: "/verify-users",
   },
   {
-    text: "User Points",
+    key: "userPoints",
     icon: <Assessment sx={{ fontSize: 20 }} />,
     path: "/admin/points",
   },
   {
-    text: "Point Criteria",
+    key: "pointCriteria",
     icon: <Settings sx={{ fontSize: 20 }} />,
     path: "/admin/points/policy",
   },
   {
-    text: "Role Management",
+    key: "roleManagement",
     icon: <ManageAccounts sx={{ fontSize: 20 }} />,
     path: "/admin/roles",
   },
   {
-    text: "Blacklist",
+    key: "blacklist",
     icon: <Block sx={{ fontSize: 20 }} />,
     path: "/blacklist",
   },
   {
-    text: "Ticket",
+    key: "ticket",
     icon: <ConfirmationNumber sx={{ fontSize: 20 }} />,
     path: "/ticket",
   },
@@ -175,10 +176,10 @@ const getRoleLabel = (role) =>
 
 const getRoleColor = (role) =>
   ({
-    admin: { bgcolor: "#f3e8ff", color: "#7e22ce" },
-    student: { bgcolor: "#eff6ff", color: "#2563eb" },
-    guest: { bgcolor: "#f1f5f9", color: "#64748b" },
-  })[role] || { bgcolor: "#f1f5f9", color: "#64748b" };
+    admin: { bgcolor: "var(--role-admin-bg)", color: "var(--role-admin-text)" },
+    student: { bgcolor: "var(--role-student-bg)", color: "var(--role-student-text)" },
+    guest: { bgcolor: "var(--role-guest-bg)", color: "var(--role-guest-text)" },
+  })[role] || { bgcolor: "var(--role-guest-bg)", color: "var(--role-guest-text)" };
 
 const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
   const scores = userRows.map((user) => Math.max(0, Math.min(100, Number(user.points) || 0)));
@@ -198,6 +199,7 @@ export default function AdminPoints() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
+  const { t } = useLanguage();
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [rows, setRows] = useState([]);
@@ -256,9 +258,9 @@ export default function AdminPoints() {
   }, []);
 
   useEffect(() => {
-    document.title = "User Points | Smart Lab Admin";
+    document.title = `${t("admin.pointsTitle")} | Smart Lab Admin`;
     fetchPoints();
-  }, [fetchPoints]);
+  }, [fetchPoints, t]);
 
   const handleLogout = () => {
     setAnchorEl(null);
@@ -444,37 +446,37 @@ export default function AdminPoints() {
 
   const statCards = [
     {
-      label: "ผู้ใช้ทั้งหมด",
+      label: t("admin.allUsers"),
       value: summary.total_users,
       helper: "บัญชีในระบบ",
-      color: "#3b82f6",
+      color: "var(--brand-color)",
       icon: <Group />,
     },
     {
-      label: "คะแนนเฉลี่ย",
+      label: t("admin.averagePoints"),
       value: `${summary.average_points}/100`,
-      helper: "คะแนนสะสมปัจจุบัน",
+      helper: t("admin.accumulatedPoints"),
       color: "#10b981",
       icon: <Assessment />,
     },
     {
-      label: "คะแนนต่ำ",
+      label: t("admin.belowThreshold"),
       value: summary.low_point_users,
-      helper: `ไม่เกิน ${warningThreshold} คะแนน`,
+      helper: `${t("admin.belowThreshold")} ${warningThreshold} ${t("common.points")}`,
       color: "#f59e0b",
       icon: <WarningAmber />,
     },
     {
-      label: "ถูกระงับการจอง",
+      label: t("admin.bannedUsers"),
       value: summary.banned_users,
       helper: "มี Ban ที่ยังใช้งาน",
       color: "#ef4444",
       icon: <Lock />,
     },
     {
-      label: "คำขอเพิ่มแต้ม",
+      label: t("admin.pointRequests"),
       value: summary.pending_point_requests,
-      helper: "รอ Admin พิจารณา",
+      helper: t("admin.pendingUsers"),
       color: "#8b5cf6",
       icon: <Notifications />,
     },
@@ -482,18 +484,20 @@ export default function AdminPoints() {
 
   return (
     <Box
+      className="app-layout admin-layout"
       sx={{
         display: "flex",
         minHeight: "100vh",
-        bgcolor: "#fcfdfe",
+        bgcolor: "var(--bg-color)",
         fontFamily: "'Inter', sans-serif",
       }}
     >
       <Box
+        className="sidebar admin-sidebar"
         sx={{
           width: "var(--sidebar-width)",
-          bgcolor: "#f0f7ff",
-          borderRight: "1px solid #e2efff",
+          bgcolor: "var(--surface-subtle)",
+          borderRight: "1px solid var(--border-light)",
           display: { xs: "none", md: "flex" },
           flexDirection: "column",
           position: "sticky",
@@ -503,10 +507,11 @@ export default function AdminPoints() {
           zIndex: 10,
         }}
       >
-        <Box sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
+        <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
           <Box
+            className="admin-brand-mark"
             sx={{
-              bgcolor: "#000",
+              bgcolor: "var(--brand-color)",
               p: 1,
               borderRadius: 2.5,
               display: "flex",
@@ -519,14 +524,14 @@ export default function AdminPoints() {
             <Typography
               variant="h6"
               fontWeight="800"
-              sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}
+              sx={{ color: "var(--text-dark)", letterSpacing: "-0.5px" }}
             >
               Smart Lab
             </Typography>
             <Typography
               variant="caption"
               sx={{
-                color: "#64748b",
+                color: "var(--text-muted)",
                 fontWeight: "500",
                 display: "block",
                 mt: -0.5,
@@ -537,12 +542,13 @@ export default function AdminPoints() {
           </Box>
         </Box>
 
-        <Box sx={{ px: 2, mt: 4 }}>
+        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
           {SIDE_MENU_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Button
-                key={item.text}
+                key={item.key}
+                className={isActive ? "active" : ""}
                 fullWidth
                 onClick={() => navigate(item.path)}
                 startIcon={item.icon}
@@ -551,8 +557,8 @@ export default function AdminPoints() {
                   py: 1,
                   px: 2.5,
                   mb: 0.5,
-                  bgcolor: isActive ? "white" : "transparent",
-                  color: isActive ? "#3b82f6" : "#94a3b8",
+                  bgcolor: isActive ? "var(--card-bg)" : "transparent",
+                  color: isActive ? "var(--brand-color)" : "var(--text-muted)",
                   fontWeight: isActive ? "700" : "600",
                   fontSize: "var(--sidebar-font-size)",
                   boxShadow: isActive ? "0 10px 25px rgba(0,0,0,0.03)" : "none",
@@ -560,13 +566,13 @@ export default function AdminPoints() {
                   textTransform: "none",
                   transition: "0.3s",
                   "&:hover": {
-                    bgcolor: isActive ? "white" : "transparent",
-                    color: "#3b82f6",
+                    bgcolor: isActive ? "var(--card-bg)" : "var(--brand-soft)",
+                    color: "var(--brand-color)",
                     transform: "translateX(5px)",
                   },
                 }}
               >
-                {item.text}
+                {t(`admin.${item.key}`)}
               </Button>
             );
           })}
@@ -574,6 +580,7 @@ export default function AdminPoints() {
       </Box>
 
       <Box
+        className="main-area admin-main-area"
         sx={{
           flex: 1,
           display: "flex",
@@ -583,6 +590,7 @@ export default function AdminPoints() {
         }}
       >
         <Box
+          className="top-header admin-top-header"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -590,26 +598,26 @@ export default function AdminPoints() {
             gap: 2,
             px: { xs: 3, md: 6 },
             py: 1.5,
-            bgcolor: "white",
-            borderBottom: "1px solid #e2e8f0",
+            bgcolor: "var(--surface-elevated)",
+            borderBottom: "1px solid var(--border-light)",
             zIndex: 5,
           }}
         >
           <Typography
             variant="h5"
             fontWeight="800"
-            sx={{ color: "#1e293b", letterSpacing: "-1px" }}
+            sx={{ color: "var(--text-dark)", letterSpacing: "-1px" }}
           >
-            User Points
+            {t("admin.pointsTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton sx={{ bgcolor: "#f8fafc" }} aria-label="Notifications">
-              <Notifications sx={{ color: "#64748b" }} />
+            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
+              <Notifications sx={{ color: "var(--text-muted)" }} />
             </IconButton>
             <Divider
               orientation="vertical"
               flexItem
-              sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
+              sx={{ height: 30, my: "auto", bgcolor: "var(--border-light)" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <Box
@@ -621,20 +629,20 @@ export default function AdminPoints() {
                 <Typography
                   variant="subtitle2"
                   fontWeight="800"
-                  color="#1e293b"
+                  color="var(--text-dark)"
                 >
-                  System Admin
+                  {t("common.systemAdmin")}
                 </Typography>
-                <Typography variant="caption" fontWeight="600" color="#94a3b8">
-                  Administrator
+                <Typography variant="caption" fontWeight="600" color="var(--text-muted)">
+                  {t("common.administrator")}
                 </Typography>
               </Box>
               <IconButton
                 onClick={(event) => setAnchorEl(event.currentTarget)}
-                aria-label="Open admin menu"
-                sx={{ p: 0.8, "&:hover": { bgcolor: "#f1f5f9" } }}
+                aria-label={t("common.openMenu")}
+                sx={{ p: 0.8, "&:hover": { bgcolor: "var(--surface-subtle)" } }}
               >
-                <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}>
+                <Avatar sx={{ bgcolor: "var(--text-dark)", color: "var(--brand-contrast)", width: 36, height: 36 }}>
                   <Person sx={{ fontSize: 20 }} />
                 </Avatar>
               </IconButton>
@@ -650,7 +658,7 @@ export default function AdminPoints() {
                     width: 280,
                     borderRadius: 4,
                     boxShadow: "0 20px 45px rgba(15,23,42,0.16)",
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid var(--border-light)",
                   },
                 }}
               >
@@ -663,15 +671,15 @@ export default function AdminPoints() {
                     pt: 1.5,
                   }}
                 >
-                  <Typography fontSize="13px" fontWeight="600" color="#64748b">
+                  <Typography fontSize="13px" fontWeight="600" color="var(--text-muted)">
                     admin@smartlab.ac.th
                   </Typography>
                   <IconButton
                     size="small"
                     onClick={() => setAnchorEl(null)}
-                    aria-label="Close menu"
+                    aria-label={t("common.closeMenu")}
                   >
-                    <Close sx={{ fontSize: 18, color: "#64748b" }} />
+                    <Close sx={{ fontSize: 18, color: "var(--text-muted)" }} />
                   </IconButton>
                 </Box>
                 <Box sx={{ px: 2, py: 1.5 }}>
@@ -681,13 +689,13 @@ export default function AdminPoints() {
                     startIcon={<Logout />}
                     sx={{
                       justifyContent: "flex-start",
-                      color: "#ef4444",
+                      color: "var(--danger-color)",
                       fontWeight: "700",
                       textTransform: "none",
                       borderRadius: 2,
                     }}
                   >
-                    Log out
+                    {t("common.logout")}
                   </Button>
                 </Box>
               </Popover>
@@ -695,8 +703,9 @@ export default function AdminPoints() {
           </Box>
         </Box>
 
-        <Box sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
+        <Box className="content-area admin-content-area page-content" sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
           <Box
+            className="page-header"
             sx={{
               display: "flex",
               justifyContent: "space-between",
@@ -706,20 +715,20 @@ export default function AdminPoints() {
               flexWrap: "wrap",
             }}
           >
-            <Box>
+            <Box className="page-header__copy">
               <Typography
                 variant="h4"
                 fontWeight="800"
-                color="#1e293b"
+                color="var(--text-dark)"
                 sx={{ letterSpacing: "-1px" }}
               >
-                คะแนนของผู้ใช้ทั้งหมด
+                {t("admin.userPointsHeading")}
               </Typography>
-              <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
-                ตรวจสอบคะแนนสะสม คะแนนรายวัน และสิทธิ์การจองของทุกบัญชี
+              <Typography variant="body2" color="var(--text-gray)" sx={{ mt: 0.75 }}>
+                ตรวจสอบ{t("admin.accumulatedPoints")} {t("admin.dailyPoints")} และ{t("admin.bookingRights")}ของทุกบัญชี
               </Typography>
-              <Typography variant="caption" color="#94a3b8" sx={{ display: "block", mt: 0.5 }}>
-                คะแนนรายวัน ณ {formatDate(scoreDate)} · การจองขึ้นกับสถานะ Ban เท่านั้น
+              <Typography variant="caption" color="var(--text-muted)" sx={{ display: "block", mt: 0.5 }}>
+                {t("admin.pointSummaryDate")} {formatDate(scoreDate)} · การจองขึ้นกับสถานะ Ban เท่านั้น
               </Typography>
             </Box>
             <Button
@@ -731,11 +740,11 @@ export default function AdminPoints() {
                 borderRadius: 3,
                 textTransform: "none",
                 fontWeight: "700",
-                borderColor: "#cbd5e1",
-                color: "#475569",
+                borderColor: "var(--border-light)",
+                color: "var(--brand-color)",
               }}
             >
-              รีเฟรชข้อมูล
+              {t("admin.refreshData")}
             </Button>
           </Box>
 
@@ -752,8 +761,8 @@ export default function AdminPoints() {
               sx={{ mb: 3, borderRadius: 3, alignItems: "flex-start" }}
             >
               <Box sx={{ width: "100%" }}>
-                <Typography fontWeight="800" color="#92400e" sx={{ mb: 1 }}>
-                  มีคำขอเพิ่มคะแนนรอพิจารณา {pointRequests.length} รายการ
+                <Typography fontWeight="800" color="var(--warning-color)" sx={{ mb: 1 }}>
+                  {t("admin.pointRequests")} {pointRequests.length} รายการ
                 </Typography>
                 <Box
                   sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}
@@ -768,7 +777,7 @@ export default function AdminPoints() {
                         gap: 2,
                         flexWrap: "wrap",
                         p: 1.5,
-                        bgcolor: "rgba(255,255,255,0.72)",
+                        bgcolor: "var(--surface-subtle)",
                         borderRadius: 2.5,
                       }}
                     >
@@ -776,14 +785,14 @@ export default function AdminPoints() {
                         <Typography
                           variant="body2"
                           fontWeight="800"
-                          color="#334155"
+                          color="var(--text-dark)"
                         >
                           {request.name || `User #${request.user_id}`} · ขอเพิ่ม{" "}
                           {request.requested_points || 10} คะแนน
                         </Typography>
                         <Typography
                           variant="caption"
-                          color="#64748b"
+                          color="var(--text-gray)"
                           sx={{ overflowWrap: "anywhere" }}
                         >
                           {request.email || `User ID #${request.user_id}`} ·
@@ -807,7 +816,7 @@ export default function AdminPoints() {
                             boxShadow: "none",
                           }}
                         >
-                          อนุมัติ +{request.requested_points || 10}
+                          {t("common.approved")} +{request.requested_points || 10}
                         </Button>
                         <Button
                           size="small"
@@ -824,7 +833,7 @@ export default function AdminPoints() {
                             fontWeight: "800",
                           }}
                         >
-                          ไม่อนุมัติ
+                          {t("common.failed")}
                         </Button>
                       </Box>
                     </Box>
@@ -845,11 +854,12 @@ export default function AdminPoints() {
             {statCards.map((card) => (
               <Paper
                 key={card.label}
+                className="surface-card"
                 elevation={0}
                 sx={{
                   p: 3,
                   borderRadius: 4,
-                  border: "1px solid #e2e8f0",
+                  border: "1px solid var(--border-light)",
                   display: "flex",
                   alignItems: "center",
                   gap: 2,
@@ -869,14 +879,14 @@ export default function AdminPoints() {
                   <Typography
                     variant="caption"
                     fontWeight="700"
-                    color="#64748b"
+                    color="var(--text-gray)"
                   >
                     {card.label}
                   </Typography>
-                  <Typography variant="h5" fontWeight="800" color="#1e293b">
+                  <Typography variant="h5" fontWeight="800" color="var(--text-dark)">
                     {card.value}
                   </Typography>
-                  <Typography variant="caption" color="#94a3b8" noWrap>
+                  <Typography variant="caption" color="var(--text-muted)" noWrap>
                     {card.helper}
                   </Typography>
                 </Box>
@@ -885,70 +895,73 @@ export default function AdminPoints() {
           </Box>
 
           <Paper
+            className="surface-card data-table-shell"
             elevation={0}
             sx={{
               borderRadius: 4,
-              border: "1px solid #e2e8f0",
+              border: "1px solid var(--border-light)",
               overflow: "hidden",
             }}
           >
             <Box
+              className="filter-bar"
               sx={{
                 p: { xs: 2.5, md: 3 },
                 display: "flex",
                 alignItems: { xs: "stretch", md: "center" },
                 gap: 2,
                 flexWrap: "wrap",
-                borderBottom: "1px solid #f1f5f9",
+                borderBottom: "1px solid var(--border-light)",
               }}
             >
               <Box
+                className="search-control"
                 sx={{
                   flex: 1,
                   minWidth: 240,
                   display: "flex",
                   alignItems: "center",
-                  bgcolor: "#f8fafc",
+                  bgcolor: "var(--surface-subtle)",
                   borderRadius: 3,
                   px: 1.5,
                   py: 0.5,
                 }}
               >
-                <Search sx={{ color: "#94a3b8", mr: 1 }} />
+                <Search sx={{ color: "var(--text-muted)", mr: 1 }} />
                 <InputBase
                   fullWidth
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="ค้นหาชื่อ อีเมล หรือ User ID..."
+                  placeholder={t("admin.searchUsers")}
                   sx={{ fontSize: "14px", fontWeight: "500" }}
-                  inputProps={{ "aria-label": "ค้นหาผู้ใช้" }}
+                  inputProps={{ "aria-label": t("admin.searchUsers") }}
                 />
               </Box>
               <FormControl size="small" sx={{ minWidth: 170 }}>
-                <InputLabel id="points-filter-label">ตัวกรอง</InputLabel>
+                <InputLabel id="points-filter-label">{t("admin.pointFilter")}</InputLabel>
                 <Select
                   labelId="points-filter-label"
                   value={filter}
-                  label="ตัวกรอง"
+                  label={t("admin.pointFilter")}
                   onChange={(event) => setFilter(event.target.value)}
                 >
-                  <MenuItem value="all">ผู้ใช้ทั้งหมด</MenuItem>
-                  <MenuItem value="low">คะแนนต่ำ</MenuItem>
-                  <MenuItem value="banned">ถูกระงับการจอง</MenuItem>
-                  <MenuItem value="allowed">จองได้</MenuItem>
+                  <MenuItem value="all">{t("admin.allUsersFilter")}</MenuItem>
+                  <MenuItem value="low">{t("admin.lowPoints")}</MenuItem>
+                  <MenuItem value="banned">{t("admin.bookingBanned")}</MenuItem>
+                  <MenuItem value="allowed">{t("admin.bookingAllowed")}</MenuItem>
                 </Select>
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 170 }}>
-                <InputLabel id="points-sort-label">เรียงตาม</InputLabel>
+                <InputLabel id="points-sort-label">{t("admin.pointSort")}</InputLabel>
                 <Select
                   labelId="points-sort-label"
                   value={sortBy}
-                  label="เรียงตาม"
+                  label={t("admin.pointSort")}
                   onChange={(event) => setSortBy(event.target.value)}
                 >
-                  <MenuItem value="pointsAsc">คะแนนน้อยไปมาก</MenuItem>
-                  <MenuItem value="pointsDesc">คะแนนมากไปน้อย</MenuItem>
-                  <MenuItem value="name">ชื่อผู้ใช้</MenuItem>
+                  <MenuItem value="pointsAsc">{t("admin.pointsAscending")}</MenuItem>
+                  <MenuItem value="pointsDesc">{t("admin.pointsDescending")}</MenuItem>
+                  <MenuItem value="name">{t("admin.userNameSort")}</MenuItem>
                 </Select>
               </FormControl>
             </Box>
@@ -968,50 +981,50 @@ export default function AdminPoints() {
               <TableContainer sx={{ overflowX: "auto" }}>
                 <Table sx={{ minWidth: 980 }}>
                   <TableHead>
-                    <TableRow sx={{ bgcolor: "#f8fafc" }}>
+                    <TableRow sx={{ bgcolor: "var(--surface-subtle)" }}>
                       <TableCell
-                        sx={{ color: "#64748b", fontWeight: "800", py: 2 }}
+                        sx={{ color: "var(--text-gray)", fontWeight: "800", py: 2 }}
                       >
-                        User
+                        {t("common.user")}
                       </TableCell>
                       <TableCell
-                        sx={{ color: "#64748b", fontWeight: "800", py: 2 }}
+                        sx={{ color: "var(--text-gray)", fontWeight: "800", py: 2 }}
                       >
                         Role
                       </TableCell>
                       <TableCell
                         sx={{
-                          color: "#64748b",
+                          color: "var(--text-gray)",
                           fontWeight: "800",
                           py: 2,
                           minWidth: 190,
                         }}
                       >
-                        คะแนนสะสม
+                        {t("admin.accumulatedPoints")}
                       </TableCell>
                       <TableCell
                         sx={{
-                          color: "#64748b",
+                          color: "var(--text-gray)",
                           fontWeight: "800",
                           py: 2,
                           minWidth: 140,
                         }}
                       >
-                        คะแนนวันนี้
+                        {t("admin.dailyPoints")}
                       </TableCell>
                       <TableCell
-                        sx={{ color: "#64748b", fontWeight: "800", py: 2 }}
+                        sx={{ color: "var(--text-gray)", fontWeight: "800", py: 2 }}
                       >
-                        สิทธิ์การจอง
+                        {t("admin.bookingRights")}
                       </TableCell>
                       <TableCell
-                        sx={{ color: "#64748b", fontWeight: "800", py: 2 }}
+                        sx={{ color: "var(--text-gray)", fontWeight: "800", py: 2 }}
                       >
-                        อัปเดตล่าสุด
+                        {t("admin.lastUpdated")}
                       </TableCell>
                       <TableCell
                         sx={{
-                          color: "#64748b",
+                          color: "var(--text-gray)",
                           fontWeight: "800",
                           py: 2,
                           whiteSpace: "nowrap",
@@ -1027,7 +1040,7 @@ export default function AdminPoints() {
                         <TableCell
                           colSpan={7}
                           align="center"
-                          sx={{ py: 8, color: "#94a3b8" }}
+                          sx={{ py: 8, color: "var(--text-muted)" }}
                         >
                           ไม่พบข้อมูลผู้ใช้ตามเงื่อนไขที่เลือก
                         </TableCell>
@@ -1046,8 +1059,8 @@ export default function AdminPoints() {
                             key={user.user_id}
                             hover
                             sx={{
-                              "& td": { borderBottom: "1px solid #f1f5f9" },
-                              "&:hover": { bgcolor: "#fafafa" },
+                              "& td": { borderBottom: "1px solid var(--border-light)" },
+                              "&:hover": { bgcolor: "var(--surface-subtle)" },
                             }}
                           >
                             <TableCell>
@@ -1074,20 +1087,20 @@ export default function AdminPoints() {
                                   <Typography
                                     variant="subtitle2"
                                     fontWeight="800"
-                                    color="#1e293b"
+                                    color="var(--text-dark)"
                                     noWrap
                                   >
                                     {user.name || "ไม่ระบุชื่อ"}
                                   </Typography>
                                   <Typography
                                     variant="caption"
-                                    color="#64748b"
+                                    color="var(--text-gray)"
                                     display="block"
                                     noWrap
                                   >
                                     {user.email}
                                   </Typography>
-                                  <Typography variant="caption" color="#94a3b8">
+                                  <Typography variant="caption" color="var(--text-muted)">
                                     ID #{user.user_id}
                                   </Typography>
                                 </Box>
@@ -1117,10 +1130,11 @@ export default function AdminPoints() {
                                   <Typography
                                     fontWeight="800"
                                     color={scoreColor}
+                                    className="theme-colored"
                                   >
                                     {points}/100
                                   </Typography>
-                                  <Typography variant="caption" color="#94a3b8">
+                                  <Typography variant="caption" color="var(--text-muted)">
                                     เตือนเมื่อ ≤ {warningThreshold}
                                   </Typography>
                                 </Box>
@@ -1131,7 +1145,7 @@ export default function AdminPoints() {
                                   sx={{
                                     height: 7,
                                     borderRadius: 4,
-                                    bgcolor: "#f1f5f9",
+                                    bgcolor: "var(--surface-subtle)",
                                     "& .MuiLinearProgress-bar": {
                                       bgcolor: scoreColor,
                                       borderRadius: 4,
@@ -1142,7 +1156,7 @@ export default function AdminPoints() {
                             </TableCell>
                             <TableCell>
                               <Box sx={{ minWidth: 115 }}>
-                                <Typography fontWeight="800" color="#334155">
+                                <Typography fontWeight="800" color="var(--text-dark)">
                                   {dailyScore}/100
                                 </Typography>
                                 <LinearProgress
@@ -1153,9 +1167,9 @@ export default function AdminPoints() {
                                     mt: 0.75,
                                     height: 6,
                                     borderRadius: 4,
-                                    bgcolor: "#f1f5f9",
+                                    bgcolor: "var(--surface-subtle)",
                                     "& .MuiLinearProgress-bar": {
-                                      bgcolor: "#60a5fa",
+                                      bgcolor: "var(--brand-color)",
                                       borderRadius: 4,
                                     },
                                   }}
@@ -1202,8 +1216,9 @@ export default function AdminPoints() {
                                 {user.is_banned && (
                                   <Typography
                                     variant="caption"
-                                    color="#ef4444"
+                                    color="var(--danger-color)"
                                     fontWeight="700"
+                                    className="theme-colored"
                                   >
                                     Ban ถึง {formatDate(user.ban_until)}
                                   </Typography>
@@ -1212,7 +1227,7 @@ export default function AdminPoints() {
                             </TableCell>
                             <TableCell
                               sx={{
-                                color: "#64748b",
+                                color: "var(--text-gray)",
                                 fontSize: "13px",
                                 whiteSpace: "nowrap",
                               }}
@@ -1314,17 +1329,17 @@ export default function AdminPoints() {
                 sx={{
                   px: 3,
                   py: 2,
-                  borderTop: "1px solid #f1f5f9",
+                  borderTop: "1px solid var(--border-light)",
                   display: "flex",
                   justifyContent: "space-between",
                   gap: 2,
                   flexWrap: "wrap",
                 }}
               >
-                <Typography variant="caption" color="#64748b" fontWeight="600">
+                <Typography variant="caption" color="var(--text-gray)" fontWeight="600">
                   แสดง {filteredRows.length} จาก {rows.length} ผู้ใช้
                 </Typography>
-                <Typography variant="caption" color="#94a3b8">
+                <Typography variant="caption" color="var(--text-muted)">
                   คะแนนสูงสุด 100 คะแนน
                 </Typography>
               </Box>

@@ -34,6 +34,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { useLanguage } from "../context/language-context.js";
 import {
   DEFAULT_POINT_POLICY,
   normalizePointPolicy,
@@ -45,47 +46,47 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 const SIDE_MENU_ITEMS = [
   {
-    text: "Dashboard",
+    key: "dashboard",
     icon: <DashIcon sx={{ fontSize: 20 }} />,
     path: "/admin",
   },
   {
-    text: "Manage Labs",
+    key: "manageLabs",
     icon: <MeetingRoom sx={{ fontSize: 20 }} />,
     path: "/manage-labs",
   },
   {
-    text: "Lab Devices",
+    key: "labDevices",
     icon: <Computer sx={{ fontSize: 20 }} />,
     path: "/admin/devices",
   },
   {
-    text: "Verify Users",
+    key: "verifyUsers",
     icon: <HowToReg sx={{ fontSize: 20 }} />,
     path: "/verify-users",
   },
   {
-    text: "User Points",
+    key: "userPoints",
     icon: <Assessment sx={{ fontSize: 20 }} />,
     path: "/admin/points",
   },
   {
-    text: "Point Criteria",
+    key: "pointCriteria",
     icon: <Settings sx={{ fontSize: 20 }} />,
     path: "/admin/points/policy",
   },
   {
-    text: "Role Management",
+    key: "roleManagement",
     icon: <ManageAccounts sx={{ fontSize: 20 }} />,
     path: "/admin/roles",
   },
   {
-    text: "Blacklist",
+    key: "blacklist",
     icon: <Block sx={{ fontSize: 20 }} />,
     path: "/blacklist",
   },
   {
-    text: "Ticket",
+    key: "ticket",
     icon: <ConfirmationNumber sx={{ fontSize: 20 }} />,
     path: "/ticket",
   },
@@ -237,6 +238,7 @@ export default function AdminPointPolicy() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
+  const { t } = useLanguage();
   const [anchorEl, setAnchorEl] = useState(null);
   const [policy, setPolicy] = useState(() =>
     normalizePointPolicy(DEFAULT_POINT_POLICY),
@@ -272,9 +274,9 @@ export default function AdminPointPolicy() {
   }, []);
 
   useEffect(() => {
-    document.title = "Point Criteria | Smart Lab Admin";
+    document.title = `${t("admin.policyTitle")} | Smart Lab Admin`;
     fetchPolicy();
-  }, [fetchPolicy]);
+  }, [fetchPolicy, t]);
 
   const handleFieldChange = (fieldName, value) => {
     setPolicy((currentPolicy) => ({ ...currentPolicy, [fieldName]: value }));
@@ -332,6 +334,7 @@ export default function AdminPointPolicy() {
 
   return (
     <Box
+      className="app-layout admin-layout"
       sx={{
         display: "flex",
         minHeight: "100vh",
@@ -340,6 +343,7 @@ export default function AdminPointPolicy() {
       }}
     >
       <Box
+        className="sidebar admin-sidebar"
         sx={{
           width: "var(--sidebar-width)",
           bgcolor: "#f0f7ff",
@@ -353,8 +357,9 @@ export default function AdminPointPolicy() {
           zIndex: 10,
         }}
       >
-        <Box sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
+        <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
           <Box
+            className="admin-brand-mark"
             sx={{
               bgcolor: "#000",
               p: 1,
@@ -387,12 +392,13 @@ export default function AdminPointPolicy() {
           </Box>
         </Box>
 
-        <Box sx={{ px: 2, mt: 4 }}>
+        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
           {SIDE_MENU_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Button
-                key={item.text}
+                key={item.key}
+                className={isActive ? "active" : ""}
                 fullWidth
                 onClick={() => navigate(item.path)}
                 startIcon={item.icon}
@@ -416,7 +422,7 @@ export default function AdminPointPolicy() {
                   },
                 }}
               >
-                {item.text}
+                {t(`admin.${item.key}`)}
               </Button>
             );
           })}
@@ -424,6 +430,7 @@ export default function AdminPointPolicy() {
       </Box>
 
       <Box
+        className="main-area admin-main-area"
         sx={{
           flex: 1,
           display: "flex",
@@ -433,6 +440,7 @@ export default function AdminPointPolicy() {
         }}
       >
         <Box
+          className="top-header admin-top-header"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -450,10 +458,10 @@ export default function AdminPointPolicy() {
             fontWeight="800"
             sx={{ color: "#1e293b", letterSpacing: "-1px" }}
           >
-            Point Criteria
+            {t("admin.policyTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton sx={{ bgcolor: "#f8fafc" }} aria-label="Notifications">
+            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#64748b" }} />
             </IconButton>
             <Divider
@@ -473,15 +481,15 @@ export default function AdminPointPolicy() {
                   fontWeight="800"
                   color="#1e293b"
                 >
-                  System Admin
+                  {t("common.systemAdmin")}
                 </Typography>
                 <Typography variant="caption" fontWeight="600" color="#94a3b8">
-                  Administrator
+                  {t("common.administrator")}
                 </Typography>
               </Box>
               <IconButton
                 onClick={(event) => setAnchorEl(event.currentTarget)}
-                aria-label="Open admin menu"
+                aria-label={t("common.openMenu")}
                 sx={{ p: 0.8, "&:hover": { bgcolor: "#f1f5f9" } }}
               >
                 <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}>
@@ -521,7 +529,7 @@ export default function AdminPointPolicy() {
                   <IconButton
                     size="small"
                     onClick={() => setAnchorEl(null)}
-                    aria-label="Close menu"
+                    aria-label={t("common.closeMenu")}
                   >
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />
                   </IconButton>
@@ -539,7 +547,7 @@ export default function AdminPointPolicy() {
                       borderRadius: 2,
                     }}
                   >
-                    Log out
+                    {t("common.logout")}
                   </Button>
                 </Box>
               </Popover>
@@ -547,8 +555,9 @@ export default function AdminPointPolicy() {
           </Box>
         </Box>
 
-        <Box sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
+        <Box className="content-area admin-content-area page-content" sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
           <Box
+            className="page-header"
             sx={{
               display: "flex",
               justifyContent: "space-between",
@@ -558,26 +567,24 @@ export default function AdminPointPolicy() {
               flexWrap: "wrap",
             }}
           >
-            <Box>
+            <Box className="page-header__copy">
               <Typography
                 variant="h4"
                 fontWeight="800"
                 color="#1e293b"
                 sx={{ letterSpacing: "-1px" }}
               >
-                ปรับเกณฑ์คะแนน
+                {t("admin.pointPolicyHeading")}
               </Typography>
               <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
-                ตั้งค่าคะแนนที่ใช้กับการตรวจจับ การจบ Session การแจ้งเตือน
-                และสิทธิ์การจองของผู้ใช้
+                {t("admin.pointPolicySubtitle")}
               </Typography>
               <Typography
                 variant="caption"
                 color="#94a3b8"
                 sx={{ display: "block", mt: 0.5 }}
               >
-                แก้ไขล่าสุด {formatDateTime(lastUpdated)} · คะแนนสูงสุดยังคงที่
-                100 คะแนน
+                {t("admin.lastUpdated")} {formatDateTime(lastUpdated)} · 100 {t("common.points")}
               </Typography>
             </Box>
             <Button
@@ -593,13 +600,12 @@ export default function AdminPointPolicy() {
                 color: "#475569",
               }}
             >
-              รีเฟรชข้อมูล
+              {t("admin.refreshData")}
             </Button>
           </Box>
 
           <Alert severity="info" sx={{ mb: 3, borderRadius: 3 }}>
-            ค่าใหม่จะมีผลกับเหตุการณ์คะแนนและการตรวจสอบสิทธิ์การจองในครั้งถัดไป
-            ประวัติคะแนนเดิมจะไม่ถูกแก้ไข
+            {t("admin.pointPolicyInfo")}
           </Alert>
 
           {error && (
@@ -629,6 +635,7 @@ export default function AdminPointPolicy() {
               {POINT_SECTIONS.map((section) => (
                 <Paper
                   key={section.title}
+                  className="surface-card"
                   elevation={0}
                   sx={{
                     p: { xs: 2.5, md: 3.5 },
@@ -677,6 +684,7 @@ export default function AdminPointPolicy() {
               ))}
 
               <Paper
+                className="surface-card"
                 elevation={0}
                 sx={{
                   p: { xs: 2.5, md: 3.5 },
@@ -697,7 +705,7 @@ export default function AdminPointPolicy() {
                   </Avatar>
                   <Box>
                     <Typography variant="h6" fontWeight="800" color="#1e293b">
-                      เกณฑ์การระงับการจอง
+                      {t("admin.bookingBanCriteria")}
                     </Typography>
                     <Typography variant="body2" color="#64748b">
                       คะแนนต่ำกว่าแต่ละระดับจะถูกระงับตามจำนวนวันที่กำหนด หากใส่
@@ -719,6 +727,7 @@ export default function AdminPointPolicy() {
                   {BAN_LEVELS.map((level) => (
                     <Paper
                       key={level.label}
+                      className="surface-card surface-card--subtle"
                       elevation={0}
                       sx={{
                         p: 2.5,
@@ -774,6 +783,7 @@ export default function AdminPointPolicy() {
               </Paper>
 
               <Paper
+                className="surface-card surface-card--info"
                 elevation={0}
                 sx={{
                   p: 2.5,
@@ -792,7 +802,7 @@ export default function AdminPointPolicy() {
                       fontWeight="800"
                       color="#1e3a8a"
                     >
-                      ขอบเขตของการตั้งค่า
+                      {t("admin.policyScope")}
                     </Typography>
                     <Typography variant="body2" color="#1e40af">
                       ปุ่มลดคะแนน/Reset สำหรับ Test ยังคงใช้ค่า -10 และ 100
@@ -820,7 +830,7 @@ export default function AdminPointPolicy() {
                     fontWeight: "700",
                   }}
                 >
-                  คืนค่าเริ่มต้นในฟอร์ม
+                  {t("admin.restoreDefaults")}
                 </Button>
                 <Button
                   variant="contained"
@@ -841,7 +851,7 @@ export default function AdminPointPolicy() {
                     boxShadow: "none",
                   }}
                 >
-                  {saving ? "กำลังบันทึก..." : "บันทึกเกณฑ์คะแนน"}
+                  {saving ? t("admin.saving") : t("admin.savePolicy")}
                 </Button>
               </Box>
             </Box>

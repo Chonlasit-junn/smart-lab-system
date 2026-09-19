@@ -15,9 +15,9 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AppRegistrationIcon from '@mui/icons-material/AppRegistration';
-import LanguageIcon from '@mui/icons-material/Language';
 import { registerLocales } from '../utils/locales';
 import { BU_FACULTIES } from '../utils/buFaculties';
+import { useLanguage } from '../context/language-context.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
 const videoConstraints = { width: 400, height: 400, facingMode: 'user' };
@@ -25,8 +25,7 @@ const videoConstraints = { width: 400, height: 400, facingMode: 'user' };
 export default function Register() {
   const navigate = useNavigate();
 
-  // default ภาษาไทย
-  const [lang, setLang] = useState('th');
+  const { language: lang } = useLanguage();
   const t = registerLocales[lang];
 
   const [step, setStep]           = useState(1);
@@ -60,12 +59,6 @@ export default function Register() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     if (error) setError('');
     if (success) setSuccess('');
-  };
-
-  const toggleLanguage = () => {
-    setLang(prev => prev === 'th' ? 'en' : 'th');
-    setError('');
-    setSuccess('');
   };
 
   // step 1 — ส่งอีเมลขอ OTP
@@ -437,23 +430,6 @@ export default function Register() {
 
   return (
     <div className="login-wrapper" style={{ position: 'relative' }}>
-
-      {/* ปุ่มสลับภาษา มุมขวาบน */}
-      <Box sx={{ position: 'absolute', top: 24, right: 24, zIndex: 10 }}>
-        <Button
-          onClick={toggleLanguage}
-          startIcon={<LanguageIcon />}
-          variant="outlined"
-          size="small"
-          sx={{
-            color: '#64748b', borderColor: '#e2e8f0', bgcolor: 'white',
-            fontWeight: 'bold', borderRadius: 2, textTransform: 'none',
-            '&:hover': { bgcolor: '#f8fafc', borderColor: '#cbd5e1' },
-          }}
-        >
-          {lang === 'th' ? 'English' : 'ภาษาไทย'}
-        </Button>
-      </Box>
 
       <div className="login-container">
 

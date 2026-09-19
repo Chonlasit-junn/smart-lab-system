@@ -47,52 +47,53 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { authConfig } from "../utils/auth";
+import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const SIDE_MENU_ITEMS = [
   {
-    text: "Dashboard",
+    key: "dashboard",
     icon: <DashIcon sx={{ fontSize: 20 }} />,
     path: "/admin",
   },
   {
-    text: "Manage Labs",
+    key: "manageLabs",
     icon: <MeetingRoom sx={{ fontSize: 20 }} />,
     path: "/manage-labs",
   },
   {
-    text: "Lab Devices",
+    key: "labDevices",
     icon: <Computer sx={{ fontSize: 20 }} />,
     path: "/admin/devices",
   },
   {
-    text: "Verify Users",
+    key: "verifyUsers",
     icon: <HowToReg sx={{ fontSize: 20 }} />,
     path: "/verify-users",
   },
   {
-    text: "User Points",
+    key: "userPoints",
     icon: <Assessment sx={{ fontSize: 20 }} />,
     path: "/admin/points",
   },
   {
-    text: "Point Criteria",
+    key: "pointCriteria",
     icon: <Settings sx={{ fontSize: 20 }} />,
     path: "/admin/points/policy",
   },
   {
-    text: "Role Management",
+    key: "roleManagement",
     icon: <ManageAccounts sx={{ fontSize: 20 }} />,
     path: "/admin/roles",
   },
   {
-    text: "Blacklist",
+    key: "blacklist",
     icon: <Block sx={{ fontSize: 20 }} />,
     path: "/blacklist",
   },
   {
-    text: "Ticket",
+    key: "ticket",
     icon: <ConfirmationNumber sx={{ fontSize: 20 }} />,
     path: "/ticket",
   },
@@ -104,6 +105,7 @@ export default function BlacklistManager() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout } = useAuth();
+  const { t } = useLanguage();
 
   // --- User menu (avatar dropdown) ---
   const [anchorEl, setAnchorEl] = useState(null);
@@ -127,8 +129,9 @@ export default function BlacklistManager() {
   const [formError, setFormError] = useState("");
 
   useEffect(() => {
+    document.title = `${t("admin.blacklistTitle")} | Smart Lab Admin`;
     fetchBlacklist();
-  }, []);
+  }, [t]);
 
   // --- API ---
 
@@ -206,6 +209,7 @@ export default function BlacklistManager() {
   // ============================================================================
   return (
     <Box
+      className="app-layout admin-layout"
       sx={{
         display: "flex",
         minHeight: "100vh",
@@ -215,6 +219,7 @@ export default function BlacklistManager() {
     >
       {/* SIDEBAR */}
       <Box
+        className="sidebar admin-sidebar"
         sx={{
           width: "var(--sidebar-width)",
           bgcolor: "#f0f7ff",
@@ -227,8 +232,9 @@ export default function BlacklistManager() {
           zIndex: 10,
         }}
       >
-        <Box sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
+        <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
           <Box
+            className="admin-brand-mark"
             sx={{
               bgcolor: "#000",
               p: 1,
@@ -261,12 +267,13 @@ export default function BlacklistManager() {
           </Box>
         </Box>
 
-        <Box sx={{ px: 2, mt: 4 }}>
+        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
           {SIDE_MENU_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Button
-                key={item.text}
+                key={item.key}
+                className={isActive ? "active" : ""}
                 fullWidth
                 onClick={() => navigate(item.path)}
                 startIcon={item.icon}
@@ -290,7 +297,7 @@ export default function BlacklistManager() {
                   },
                 }}
               >
-                {item.text}
+                {t(`admin.${item.key}`)}
               </Button>
             );
           })}
@@ -299,6 +306,7 @@ export default function BlacklistManager() {
 
       {/* MAIN AREA */}
       <Box
+        className="main-area admin-main-area"
         sx={{
           flex: 1,
           display: "flex",
@@ -308,6 +316,7 @@ export default function BlacklistManager() {
       >
         {/* HEADER */}
         <Box
+          className="top-header admin-top-header"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -324,7 +333,7 @@ export default function BlacklistManager() {
             fontWeight="800"
             sx={{ color: "#1e293b", letterSpacing: "-1px" }}
           >
-            Blacklist Manager
+            {t("admin.blacklistTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Paper
@@ -342,14 +351,14 @@ export default function BlacklistManager() {
             >
               <Search sx={{ color: "#94a3b8", mr: 1.5 }} />
               <InputBase
-                placeholder="Search blacklisted apps..."
+                placeholder={t("admin.searchLabs")}
                 fullWidth
                 sx={{ fontSize: "15px", fontWeight: "500" }}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </Paper>
-            <IconButton sx={{ bgcolor: "#f8fafc" }}>
+            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#64748b" }} />
             </IconButton>
             <Divider
@@ -364,10 +373,10 @@ export default function BlacklistManager() {
                   fontWeight="800"
                   color="#1e293b"
                 >
-                  System Admin
+                  {t("common.systemAdmin")}
                 </Typography>
                 <Typography variant="caption" fontWeight="600" color="#94a3b8">
-                  Administrator
+                  {t("common.administrator")}
                 </Typography>
               </Box>
               <IconButton
@@ -451,7 +460,7 @@ export default function BlacklistManager() {
                     fontWeight="700"
                     fontSize="18px"
                   >
-                    Hi, System Admin
+                    {t("common.systemAdmin")}
                   </Typography>
 
                   <Button
@@ -473,7 +482,7 @@ export default function BlacklistManager() {
                       },
                     }}
                   >
-                    Manage your Account
+                    {t("common.manageAccount")}
                   </Button>
                 </Box>
 
@@ -500,7 +509,7 @@ export default function BlacklistManager() {
                       fontWeight="700"
                       color="#1e293b"
                     >
-                      Setting
+                      {t("common.settings")}
                     </Typography>
                   </Box>
                   <Box
@@ -522,7 +531,7 @@ export default function BlacklistManager() {
                       fontWeight="700"
                       color="#ef4444"
                     >
-                      Log out
+                      {t("common.logout")}
                     </Typography>
                   </Box>
                 </Box>
@@ -532,7 +541,7 @@ export default function BlacklistManager() {
         </Box>
 
         {/* CONTENT */}
-        <Box sx={{ p: 6, flex: 1 }}>
+        <Box className="content-area admin-content-area page-content" sx={{ p: 6, flex: 1 }}>
           <Fade in timeout={400}>
             <Box>
               {/* Add button row */}
@@ -545,8 +554,7 @@ export default function BlacklistManager() {
                 }}
               >
                 <Typography variant="h6" fontWeight="700" color="#64748b">
-                  {blacklist.length} app{blacklist.length !== 1 ? "s" : ""}{" "}
-                  blocked
+                  {blacklist.length} {t("admin.blockedProgramHeading")}
                 </Typography>
                 <Button
                   variant="contained"
@@ -565,12 +573,13 @@ export default function BlacklistManager() {
                     "&:hover": { bgcolor: "#dc2626", transform: "scale(1.05)" },
                   }}
                 >
-                  Add App
+                  {t("admin.addBlockedProgram")}
                 </Button>
               </Box>
 
               {/* Blacklist Table */}
               <Paper
+                className="surface-card data-table-shell"
                 elevation={0}
                 sx={{
                   borderRadius: 6,
@@ -591,7 +600,7 @@ export default function BlacklistManager() {
                 >
                   <Block sx={{ color: "#ef4444", fontSize: 22 }} />
                   <Typography variant="h6" fontWeight="800" color="#1e293b">
-                    Blacklisted Applications
+                    {t("admin.blockedProgramHeading")}
                   </Typography>
                 </Box>
 
@@ -601,10 +610,10 @@ export default function BlacklistManager() {
                       <TableRow sx={{ bgcolor: "#f8fafc" }}>
                         {[
                           "#",
-                          "App Name",
-                          "Reason / Description",
-                          "Added On",
-                          "Actions",
+                          t("admin.programName"),
+                          t("admin.description"),
+                          t("common.date"),
+                          t("common.actions"),
                         ].map((h, i) => (
                           <TableCell
                             key={h}
@@ -629,7 +638,7 @@ export default function BlacklistManager() {
                             align="center"
                             sx={{ py: 6, color: "#94a3b8", fontWeight: "600" }}
                           >
-                            Loading...
+                            {t("common.loading")}
                           </TableCell>
                         </TableRow>
                       ) : filtered.length === 0 ? (
@@ -640,8 +649,8 @@ export default function BlacklistManager() {
                             sx={{ py: 6, color: "#94a3b8", fontWeight: "600" }}
                           >
                             {searchQuery
-                              ? `No results for "${searchQuery}"`
-                              : "No blacklisted apps yet."}
+                              ? `${t("admin.noMatchingUsers")}: "${searchQuery}"`
+                              : t("admin.noBlockedPrograms")}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -694,7 +703,7 @@ export default function BlacklistManager() {
                                     {item.app_name}
                                   </Typography>
                                   <Chip
-                                    label="Blocked"
+                                    label={t("common.inactive")}
                                     size="small"
                                     sx={{
                                       bgcolor: "#fef2f2",
@@ -724,7 +733,7 @@ export default function BlacklistManager() {
                                     fontStyle: "italic",
                                   }}
                                 >
-                                  No reason provided
+                                  {t("admin.description")}
                                 </span>
                               )}
                             </TableCell>
@@ -807,14 +816,14 @@ export default function BlacklistManager() {
           }}
         >
           <Block sx={{ color: "#ef4444" }} />
-          {isEditing ? "Edit Blacklisted App" : "Add App to Blacklist"}
+          {isEditing ? t("admin.editProgram") : t("admin.addProgram")}
         </DialogTitle>
 
         <DialogContent
           sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 2 }}
         >
           <TextField
-            label="App Name"
+            label={t("admin.programName")}
             fullWidth
             size="small"
             value={formData.app_name}
@@ -824,12 +833,12 @@ export default function BlacklistManager() {
             }}
             disabled={isEditing} // app_name is the unique key — edit description only
             helperText={
-              isEditing ? "App name cannot be changed after creation." : ""
+                isEditing ? t("admin.programName") : ""
             }
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           <TextField
-            label="Reason / Description"
+            label={t("admin.description")}
             fullWidth
             multiline
             rows={3}
@@ -853,7 +862,7 @@ export default function BlacklistManager() {
             onClick={() => setOpenDialog(false)}
             sx={{ color: "#64748b", fontWeight: "700", textTransform: "none" }}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleSave}
@@ -868,7 +877,7 @@ export default function BlacklistManager() {
               "&:hover": { bgcolor: "#dc2626" },
             }}
           >
-            {isEditing ? "Save Changes" : "Add to Blacklist"}
+            {isEditing ? t("common.save") : t("admin.addProgram")}
           </Button>
         </DialogActions>
       </Dialog>

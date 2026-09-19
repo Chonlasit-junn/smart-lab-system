@@ -25,6 +25,7 @@ import {
   Assignment,
   History as HistoryIcon,
   SupportAgent,
+  ConfirmationNumber,
   Logout,
   Computer,
   Menu as MenuIcon,
@@ -36,12 +37,14 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 export default function History() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
+  const { t } = useLanguage();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pastBookings, setPastBookings] = useState([]);
@@ -125,16 +128,19 @@ export default function History() {
 
         <div className="sidebar-menu">
           <div className="menu-item" onClick={() => navigate("/booking")}>
-            <EventNote /> Lab Reserve
+            <EventNote /> {t("common.labReserve")}
           </div>
           <div className="menu-item" onClick={() => navigate("/reserved")}>
-            <Assignment /> Reserved
+            <Assignment /> {t("common.reserved")}
           </div>
           <div
             className="menu-item active"
             onClick={() => setIsSidebarOpen(false)}
           >
-            <HistoryIcon /> History
+            <HistoryIcon /> {t("common.history")}
+          </div>
+          <div className="menu-item" onClick={() => navigate("/my-tickets")}>
+            <ConfirmationNumber /> {t("common.myTickets")}
           </div>
         </div>
 
@@ -143,7 +149,7 @@ export default function History() {
           style={{ flex: "none", paddingBottom: "24px" }}
         >
           <div className="menu-item">
-            <SupportAgent /> Support
+            <SupportAgent /> {t("common.support")}
           </div>
         </div>
       </div>
@@ -163,7 +169,7 @@ export default function History() {
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
-              Booking History
+              {t("user.bookingHistory")}
             </Typography>
           </Box>
 
@@ -174,7 +180,7 @@ export default function History() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton>
+            <IconButton className="header-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#111827" }} />
             </IconButton>
             {currentUser ? (
@@ -308,7 +314,7 @@ export default function History() {
                         },
                       }}
                     >
-                      Manage your Account
+                      {t("common.manageAccount")}
                     </Button>
                   </Box>
 
@@ -338,7 +344,7 @@ export default function History() {
                         fontWeight="700"
                         color="#1e293b"
                       >
-                        Setting
+                        {t("common.settings")}
                       </Typography>
                     </Box>
                     <Box
@@ -360,7 +366,7 @@ export default function History() {
                         fontWeight="700"
                         color="#ef4444"
                       >
-                        Log out
+                        {t("common.logout")}
                       </Typography>
                     </Box>
                   </Box>
@@ -391,10 +397,10 @@ export default function History() {
                     lineHeight={1.2}
                     color="textSecondary"
                   >
-                    Guest User
+                    {t("common.guestUser")}
                   </Typography>
                   <Typography variant="caption" color="primary.main">
-                    Click to Log in
+                    {t("common.login")}
                   </Typography>
                 </Box>
                 <Avatar sx={{ bgcolor: "#cbd5e1", width: 36, height: 36 }}>
@@ -405,13 +411,14 @@ export default function History() {
           </Box>
         </div>
 
-        <div className="content-area">
+        <div className="content-area page-content">
           {loading ? (
             <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
               <CircularProgress />
             </Box>
           ) : (
             <Paper
+              className="surface-card data-table-shell"
               elevation={0}
               sx={{
                 p: { xs: 2, sm: 4 },
@@ -428,7 +435,7 @@ export default function History() {
                 color="#64748b"
                 sx={{ mb: 3 }}
               >
-                Past Reservations
+                {t("user.pastReservations")}
               </Typography>
 
               {pastBookings.length > 0 ? (
@@ -452,7 +459,7 @@ export default function History() {
                             color: "#64748b",
                           }}
                         >
-                          Room
+                          {t("user.room")}
                         </TableCell>
                         <TableCell
                           sx={{
@@ -461,7 +468,7 @@ export default function History() {
                             color: "#64748b",
                           }}
                         >
-                          Date
+                          {t("common.date")}
                         </TableCell>
                         <TableCell
                           sx={{
@@ -470,7 +477,7 @@ export default function History() {
                             color: "#64748b",
                           }}
                         >
-                          Time
+                          {t("common.time")}
                         </TableCell>
                       </TableRow>
                     </TableHead>
@@ -510,7 +517,7 @@ export default function History() {
                   }}
                 >
                   <Typography variant="body1" color="textSecondary">
-                    No past history found.
+                    {t("user.noHistory")}
                   </Typography>
                 </Box>
               )}

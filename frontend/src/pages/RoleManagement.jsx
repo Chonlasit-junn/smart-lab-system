@@ -52,19 +52,20 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { authConfig } from "../utils/auth";
+import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const SIDE_MENU_ITEMS = [
-  { text: "Dashboard", icon: <DashIcon sx={{ fontSize: 20 }} />, path: "/admin" },
-  { text: "Manage Labs", icon: <MeetingRoom sx={{ fontSize: 20 }} />, path: "/manage-labs" },
-  { text: "Lab Devices", icon: <Computer sx={{ fontSize: 20 }} />, path: "/admin/devices" },
-  { text: "Verify Users", icon: <HowToReg sx={{ fontSize: 20 }} />, path: "/verify-users" },
-  { text: "User Points", icon: <Assessment sx={{ fontSize: 20 }} />, path: "/admin/points" },
-  { text: "Point Criteria", icon: <Settings sx={{ fontSize: 20 }} />, path: "/admin/points/policy" },
-  { text: "Role Management", icon: <ManageAccounts sx={{ fontSize: 20 }} />, path: "/admin/roles" },
-  { text: "Blacklist", icon: <Block sx={{ fontSize: 20 }} />, path: "/blacklist" },
-  { text: "Ticket", icon: <ConfirmationNumber sx={{ fontSize: 20 }} />, path: "/ticket" },
+  { key: "dashboard", icon: <DashIcon sx={{ fontSize: 20 }} />, path: "/admin" },
+  { key: "manageLabs", icon: <MeetingRoom sx={{ fontSize: 20 }} />, path: "/manage-labs" },
+  { key: "labDevices", icon: <Computer sx={{ fontSize: 20 }} />, path: "/admin/devices" },
+  { key: "verifyUsers", icon: <HowToReg sx={{ fontSize: 20 }} />, path: "/verify-users" },
+  { key: "userPoints", icon: <Assessment sx={{ fontSize: 20 }} />, path: "/admin/points" },
+  { key: "pointCriteria", icon: <Settings sx={{ fontSize: 20 }} />, path: "/admin/points/policy" },
+  { key: "roleManagement", icon: <ManageAccounts sx={{ fontSize: 20 }} />, path: "/admin/roles" },
+  { key: "blacklist", icon: <Block sx={{ fontSize: 20 }} />, path: "/blacklist" },
+  { key: "ticket", icon: <ConfirmationNumber sx={{ fontSize: 20 }} />, path: "/ticket" },
 ];
 
 const ROLE_COLORS = {
@@ -115,6 +116,7 @@ export default function RoleManagement() {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser, logout } = useAuth();
+  const { t } = useLanguage();
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [roles, setRoles] = useState([]);
@@ -148,9 +150,9 @@ export default function RoleManagement() {
   }, []);
 
   useEffect(() => {
-    document.title = "Role Management | Smart Lab Admin";
+    document.title = `${t("admin.rolesTitle")} | Smart Lab Admin`;
     fetchRoleData();
-  }, [fetchRoleData]);
+  }, [fetchRoleData, t]);
 
   const filteredUsers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -258,6 +260,7 @@ export default function RoleManagement() {
 
   return (
     <Box
+      className="app-layout admin-layout"
       sx={{
         display: "flex",
         minHeight: "100vh",
@@ -266,6 +269,7 @@ export default function RoleManagement() {
       }}
     >
       <Box
+        className="sidebar admin-sidebar"
         sx={{
           width: "var(--sidebar-width)",
           bgcolor: "#f0f7ff",
@@ -279,8 +283,9 @@ export default function RoleManagement() {
           zIndex: 10,
         }}
       >
-        <Box sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
+        <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
           <Box
+            className="admin-brand-mark"
             sx={{
               bgcolor: "#000",
               p: 1,
@@ -301,12 +306,13 @@ export default function RoleManagement() {
           </Box>
         </Box>
 
-        <Box sx={{ px: 2, mt: 4 }}>
+        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
           {SIDE_MENU_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Button
-                key={item.text}
+                key={item.key}
+                className={isActive ? "active" : ""}
                 fullWidth
                 onClick={() => navigate(item.path)}
                 startIcon={item.icon}
@@ -330,15 +336,16 @@ export default function RoleManagement() {
                   },
                 }}
               >
-                {item.text}
+                {t(`admin.${item.key}`)}
               </Button>
             );
           })}
         </Box>
       </Box>
 
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", minWidth: 0 }}>
+      <Box className="main-area admin-main-area" sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", minWidth: 0 }}>
         <Box
+          className="top-header admin-top-header"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -352,25 +359,25 @@ export default function RoleManagement() {
           }}
         >
           <Typography variant="h5" fontWeight="800" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>
-            Role Management
+            {t("admin.rolesTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton sx={{ bgcolor: "#f8fafc" }} aria-label="Notifications">
+            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#64748b" }} />
             </IconButton>
             <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <Box sx={{ textAlign: "right", display: { xs: "none", sm: "block" } }}>
                 <Typography variant="subtitle2" fontWeight="800" color="#1e293b">
-                  System Admin
+                  {t("common.systemAdmin")}
                 </Typography>
                 <Typography variant="caption" fontWeight="600" color="#94a3b8">
-                  Administrator
+                  {t("common.administrator")}
                 </Typography>
               </Box>
               <IconButton
                 onClick={(event) => setAnchorEl(event.currentTarget)}
-                aria-label="Open admin menu"
+                aria-label={t("common.openMenu")}
                 sx={{ p: 0.8, "&:hover": { bgcolor: "#f1f5f9" } }}
               >
                 <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}>
@@ -399,7 +406,7 @@ export default function RoleManagement() {
                   <Typography fontSize="13px" fontWeight="600" color="#64748b">
                     {currentUser?.email || "admin@smartlab.ac.th"}
                   </Typography>
-                  <IconButton size="small" onClick={() => setAnchorEl(null)} aria-label="Close menu">
+                  <IconButton size="small" onClick={() => setAnchorEl(null)} aria-label={t("common.closeMenu")}>
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />
                   </IconButton>
                 </Box>
@@ -410,7 +417,7 @@ export default function RoleManagement() {
                     startIcon={<Logout />}
                     sx={{ justifyContent: "flex-start", color: "#ef4444", fontWeight: "700", textTransform: "none", borderRadius: 2 }}
                   >
-                    Log out
+                    {t("common.logout")}
                   </Button>
                 </Box>
               </Popover>
@@ -418,14 +425,14 @@ export default function RoleManagement() {
           </Box>
         </Box>
 
-        <Box sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 2, mb: 3, flexWrap: "wrap" }}>
+        <Box className="content-area admin-content-area page-content" sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
+          <Box className="page-header" sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 2, mb: 3, flexWrap: "wrap" }}>
             <Box>
               <Typography variant="h4" fontWeight="800" color="#1e293b" sx={{ letterSpacing: "-1px" }}>
-                จัดการบทบาทผู้ใช้งาน
+                {t("admin.rolesHeading")}
               </Typography>
               <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
-                ตรวจสอบ Role และกำหนดสิทธิ์พื้นฐานให้ผู้ใช้ในระบบ
+                {t("admin.rolesSubtitle")}
               </Typography>
             </Box>
             <Button
@@ -435,7 +442,7 @@ export default function RoleManagement() {
               disabled={loading}
               sx={{ borderRadius: 3, textTransform: "none", fontWeight: "700", borderColor: "#cbd5e1", color: "#475569" }}
             >
-              รีเฟรชข้อมูล
+              {t("admin.refreshData")}
             </Button>
           </Box>
 
@@ -453,7 +460,7 @@ export default function RoleManagement() {
               { label: "ผู้ใช้ที่มี Role", value: assignedUsers, color: "#10b981", icon: <Person /> },
               { label: "System Roles", value: systemRoles, color: "#8b5cf6", icon: <Settings /> },
             ].map((card) => (
-              <Paper key={card.label} elevation={0} sx={{ p: 2.5, borderRadius: 4, border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 2 }}>
+              <Paper key={card.label} className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 4, border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 2 }}>
                 <Box sx={{ width: 46, height: 46, borderRadius: 3, bgcolor: `${card.color}15`, color: card.color, display: "grid", placeItems: "center" }}>
                   {card.icon}
                 </Box>
@@ -469,9 +476,9 @@ export default function RoleManagement() {
             <Box sx={{ minHeight: 360, display: "grid", placeItems: "center" }}><CircularProgress /></Box>
           ) : (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              <Paper elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+              <Paper className="surface-card data-table-shell" elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0", overflow: "hidden" }}>
                 <Box sx={{ p: { xs: 2.5, md: 3 }, borderBottom: "1px solid #e2e8f0" }}>
-                  <Typography variant="h6" fontWeight="800" color="#1e293b">Roles ในระบบ</Typography>
+                  <Typography variant="h6" fontWeight="800" color="#1e293b">{t("admin.rolesInSystem")}</Typography>
                   <Typography variant="body2" color="#64748b" sx={{ mt: 0.5 }}>
                     ชื่อ Role ใช้เป็น key ภายในระบบ ส่วนชื่อแสดงผลสามารถปรับให้เหมาะกับหน่วยงานได้
                   </Typography>
@@ -481,10 +488,10 @@ export default function RoleManagement() {
                     <TableHead>
                       <TableRow sx={{ bgcolor: "#f8fafc" }}>
                         <TableCell sx={{ fontWeight: 800, color: "#64748b" }}>Role</TableCell>
-                        <TableCell sx={{ fontWeight: 800, color: "#64748b" }}>ชื่อแสดงผล</TableCell>
-                        <TableCell sx={{ fontWeight: 800, color: "#64748b" }}>ผู้ใช้งาน</TableCell>
-                        <TableCell sx={{ fontWeight: 800, color: "#64748b" }}>ประเภท</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, color: "#64748b" }}>จัดการ</TableCell>
+                        <TableCell sx={{ fontWeight: 800, color: "#64748b" }}>{t("admin.roleDisplayName")}</TableCell>
+                        <TableCell sx={{ fontWeight: 800, color: "#64748b" }}>{t("admin.roleUsers")}</TableCell>
+                        <TableCell sx={{ fontWeight: 800, color: "#64748b" }}>{t("admin.roleType")}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, color: "#64748b" }}>{t("admin.manage")}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -498,34 +505,34 @@ export default function RoleManagement() {
                           </TableCell>
                           <TableCell align="right">
                             <Button startIcon={<Edit />} size="small" onClick={() => openEditDialog(role)} sx={{ textTransform: "none", fontWeight: 700, borderRadius: 2 }}>
-                              แก้ชื่อแสดงผล
+                              {t("common.edit")}
                             </Button>
                           </TableCell>
                         </TableRow>
                       ))}
                       {!roles.length && (
-                        <TableRow><TableCell colSpan={5} align="center" sx={{ py: 5, color: "#94a3b8" }}>ยังไม่มีข้อมูล Role</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={5} align="center" sx={{ py: 5, color: "#94a3b8" }}>{t("admin.noRoles")}</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
                 </TableContainer>
               </Paper>
 
-              <Paper elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+              <Paper className="surface-card data-table-shell" elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0", overflow: "hidden" }}>
                 <Box sx={{ p: { xs: 2.5, md: 3 }, borderBottom: "1px solid #e2e8f0" }}>
-                  <Typography variant="h6" fontWeight="800" color="#1e293b">กำหนด Role ให้ User</Typography>
+                  <Typography variant="h6" fontWeight="800" color="#1e293b">{t("admin.assignRole")}</Typography>
                   <Typography variant="body2" color="#64748b" sx={{ mt: 0.5 }}>
                     การเปลี่ยน Role จะมีผลกับการเข้าใช้งานครั้งถัดไป ผู้ดูแลระบบจะไม่สามารถเปลี่ยน Role ของตัวเองได้
                   </Typography>
                   <Box sx={{ display: "flex", gap: 1.5, mt: 2, flexWrap: "wrap" }}>
                     <Box sx={{ flex: "1 1 280px", minWidth: 220, bgcolor: "#f8fafc", borderRadius: 2.5, px: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
                       <Search sx={{ color: "#94a3b8" }} />
-                      <InputBase value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="ค้นหาชื่อหรืออีเมล" sx={{ flex: 1, py: 0.75 }} />
+                      <InputBase value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t("admin.searchUsers")} sx={{ flex: 1, py: 0.75 }} />
                     </Box>
                     <FormControl size="small" sx={{ minWidth: 180 }}>
-                      <InputLabel id="role-filter-label">กรองตาม Role</InputLabel>
-                      <Select labelId="role-filter-label" value={roleFilter} label="กรองตาม Role" onChange={(event) => setRoleFilter(event.target.value)}>
-                        <MenuItem value="all">ทุก Role</MenuItem>
+                      <InputLabel id="role-filter-label">{t("common.role")}</InputLabel>
+                      <Select labelId="role-filter-label" value={roleFilter} label={t("common.role")} onChange={(event) => setRoleFilter(event.target.value)}>
+                        <MenuItem value="all">{t("common.allRoles")}</MenuItem>
                         {roles.map((role) => <MenuItem key={role.id} value={role.name}>{getRoleLabel(role)}</MenuItem>)}
                       </Select>
                     </FormControl>
@@ -583,7 +590,7 @@ export default function RoleManagement() {
                         );
                       })}
                       {!filteredUsers.length && (
-                        <TableRow><TableCell colSpan={4} align="center" sx={{ py: 5, color: "#94a3b8" }}>ไม่พบ User ตามเงื่อนไขที่เลือก</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} align="center" sx={{ py: 5, color: "#94a3b8" }}>{t("admin.noMatchingUsers")}</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
@@ -595,15 +602,15 @@ export default function RoleManagement() {
       </Box>
 
       <Dialog open={Boolean(editingRole)} onClose={() => !savingRole && setEditingRole(null)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight: 800 }}>แก้ไขชื่อแสดงผล Role</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800 }}>{t("admin.editRoleTitle")}</DialogTitle>
         <DialogContent>
-          <TextField label="Role key" value={editingRole?.name || ""} fullWidth disabled sx={{ mt: 1, mb: 2 }} />
-          <TextField label="ชื่อแสดงผล" value={displayName} onChange={(event) => setDisplayName(event.target.value)} fullWidth autoFocus inputProps={{ maxLength: 100 }} />
+          <TextField label={t("admin.roleKey")} value={editingRole?.name || ""} fullWidth disabled sx={{ mt: 1, mb: 2 }} />
+          <TextField label={t("admin.roleDisplayName")} value={displayName} onChange={(event) => setDisplayName(event.target.value)} fullWidth autoFocus inputProps={{ maxLength: 100 }} />
         </DialogContent>
         <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={() => setEditingRole(null)} disabled={savingRole} sx={{ textTransform: "none", color: "#64748b" }}>ยกเลิก</Button>
+          <Button onClick={() => setEditingRole(null)} disabled={savingRole} sx={{ textTransform: "none", color: "#64748b" }}>{t("common.cancel")}</Button>
           <Button variant="contained" startIcon={<Save />} onClick={handleSaveRole} disabled={savingRole || !displayName.trim()} sx={{ textTransform: "none", borderRadius: 2.5, boxShadow: "none" }}>
-            {savingRole ? "กำลังบันทึก..." : "บันทึก"}
+            {savingRole ? t("admin.saving") : t("common.save")}
           </Button>
         </DialogActions>
       </Dialog>

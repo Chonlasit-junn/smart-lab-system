@@ -35,22 +35,23 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { useLanguage } from "../context/language-context.js";
 import SupportModal from "./SupportModal";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const STATUS_LABELS = {
-  open: { label: "รอดำเนินการ", color: "warning" },
-  in_progress: { label: "กำลังดำเนินการ", color: "info" },
-  closed: { label: "ดำเนินการเสร็จสิ้น", color: "success" },
+  open: { key: "common.openTicket", color: "warning" },
+  in_progress: { key: "common.inProgressTicket", color: "info" },
+  closed: { key: "common.closedTicket", color: "success" },
 };
 
 const MENU_ITEMS = [
-  { label: "Lab Reserve", icon: <EventNote />, path: "/booking" },
-  { label: "Reserved", icon: <Assignment />, path: "/reserved" },
-  { label: "History", icon: <HistoryIcon />, path: "/history" },
+  { key: "common.labReserve", icon: <EventNote />, path: "/booking" },
+  { key: "common.reserved", icon: <Assignment />, path: "/reserved" },
+  { key: "common.history", icon: <HistoryIcon />, path: "/history" },
   {
-    label: "My Tickets",
+    key: "common.myTickets",
     icon: <ConfirmationNumber />,
     path: "/my-tickets",
   },
@@ -70,6 +71,7 @@ export default function MyTickets() {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser, logout } = useAuth();
+  const { t } = useLanguage();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -150,7 +152,7 @@ export default function MyTickets() {
               }`}
               onClick={() => handleNavigate(item.path)}
             >
-              {item.icon} {item.label}
+              {item.icon} {t(item.key)}
             </div>
           ))}
         </div>
@@ -166,7 +168,7 @@ export default function MyTickets() {
               setIsSupportOpen(true);
             }}
           >
-            <SupportAgent /> Support
+            <SupportAgent /> {t("common.support")}
           </div>
         </div>
       </div>
@@ -187,7 +189,7 @@ export default function MyTickets() {
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
-              My Tickets
+              {t("user.ticketTitle")}
             </Typography>
           </Box>
 
@@ -198,7 +200,7 @@ export default function MyTickets() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton aria-label="Notifications">
+            <IconButton className="header-notification-button" aria-label={t("common.notifications")}>
               <Notifications sx={{ color: "#111827" }} />
             </IconButton>
             {currentUser && (
@@ -329,7 +331,7 @@ export default function MyTickets() {
                         },
                       }}
                     >
-                      Manage your Account
+                      {t("common.manageAccount")}
                     </Button>
                   </Box>
 
@@ -353,7 +355,7 @@ export default function MyTickets() {
                     >
                       <Settings sx={{ fontSize: 20, color: "#64748b" }} />
                       <Typography fontSize="13px" fontWeight="700" color="#1e293b">
-                        Setting
+                        {t("common.settings")}
                       </Typography>
                     </Box>
                     <Box
@@ -371,7 +373,7 @@ export default function MyTickets() {
                     >
                       <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
                       <Typography fontSize="13px" fontWeight="700" color="#ef4444">
-                        Log out
+                        {t("common.logout")}
                       </Typography>
                     </Box>
                   </Box>
@@ -381,7 +383,7 @@ export default function MyTickets() {
           </Box>
         </div>
 
-        <div className="content-area">
+        <div className="content-area page-content">
           <Box sx={{ maxWidth: 1100, mx: "auto" }}>
             <Box
               sx={{
@@ -395,15 +397,15 @@ export default function MyTickets() {
             >
               <Box>
                 <Typography variant="h4" fontWeight="800" color="#1e293b">
-                  คำร้องของฉัน
+                  {t("common.myRequests")}
                 </Typography>
                 <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
-                  ติดตามสถานะคำร้องที่ส่งถึงผู้ดูแลระบบ
+                  {t("common.trackRequests")}
                 </Typography>
               </Box>
               <Chip
                 icon={<ConfirmationNumber />}
-                label={`${tickets.length} คำร้อง`}
+                label={`${tickets.length} ${t("common.requests")}`}
                 sx={{
                   bgcolor: "#eff6ff",
                   color: "#2563eb",
@@ -422,6 +424,7 @@ export default function MyTickets() {
 
             {loading ? (
               <Paper
+                className="surface-card"
                 elevation={0}
                 sx={{
                   minHeight: 320,
@@ -436,6 +439,7 @@ export default function MyTickets() {
               </Paper>
             ) : (
               <Paper
+                className="surface-card data-table-shell"
                 elevation={0}
                 sx={{
                   p: { xs: 2, sm: 3 },
@@ -456,14 +460,14 @@ export default function MyTickets() {
                 >
                   <Box>
                     <Typography variant="h6" fontWeight="800" color="#0f172a">
-                      ประวัติคำร้อง
+                      {t("common.requestHistory")}
                     </Typography>
                     <Typography variant="body2" color="#94a3b8">
-                      รายการสนทนาและการติดตามปัญหาของคุณ
+                      {t("common.requestConversation")}
                     </Typography>
                   </Box>
                   <Chip
-                    label="Support"
+                    label={t("common.support")}
                     size="small"
                     sx={{
                       bgcolor: "#f8fafc",
@@ -486,10 +490,10 @@ export default function MyTickets() {
                       sx={{ fontSize: 52, color: "#cbd5e1", mb: 1 }}
                     />
                     <Typography variant="body1" color="#64748b" fontWeight="700">
-                      คุณยังไม่เคยส่งคำร้อง
+                      {t("common.noTicketsSent")}
                     </Typography>
                     <Typography variant="body2" color="#94a3b8" sx={{ mt: 0.5 }}>
-                      หากพบปัญหา สามารถกด Support จากเมนูด้านซ้ายได้
+                      {t("common.supportHelp")}
                     </Typography>
                   </Box>
                 ) : (
@@ -498,23 +502,23 @@ export default function MyTickets() {
                       <TableHead>
                         <TableRow sx={{ bgcolor: "#f8fafc" }}>
                           <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
-                            หัวข้อ
+                            {t("common.subject")}
                           </TableCell>
                           <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
-                            รายละเอียด
+                            {t("common.message")}
                           </TableCell>
                           <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
-                            วันที่ส่ง
+                            {t("common.submittedAt")}
                           </TableCell>
                           <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
-                            สถานะ
+                            {t("common.status")}
                           </TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {tickets.map((ticket) => {
                           const status = STATUS_LABELS[ticket.status] || {
-                            label: ticket.status || "ไม่ทราบสถานะ",
+                            key: "common.unknownStatus",
                             color: "default",
                           };
 
@@ -553,7 +557,7 @@ export default function MyTickets() {
                               </TableCell>
                               <TableCell sx={{ minWidth: 150 }}>
                                 <Chip
-                                  label={status.label}
+                                  label={t(status.key)}
                                   color={status.color}
                                   size="small"
                                   sx={{ fontWeight: "800" }}

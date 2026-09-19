@@ -9,29 +9,98 @@
    ========================================================================== */
 
 :root {
-  /* --- Colors: Backgrounds & Cards --- */
-  --bg-color: #f4f7fc; /* สีพื้นหลังหลักของเว็บ (เทาอมฟ้าสว่าง) */
-  --card-bg: #ffffff; /* สีพื้นหลังของการ์ดและกล่องข้อมูล */
+  /* --- Accessible Light Theme: Charcoal + Teal --- */
+  --bg-color: #f6f7f5;
+  --card-bg: #ffffff;
+  --surface-subtle: #eef2f0;
+  --surface-elevated: #ffffff;
 
-  /* --- Colors: Brand & Accents --- */
-  --primary-blue: #1877f2; /* 🌟 เปลี่ยนเป็นสีฟ้าหลักสไตล์ Facebook */
-  --primary-blue-hover: #166fe5;
+  --brand-color: #0f766e;
+  --brand-hover: #115e59;
+  --brand-soft: #d9f2ee;
+  --brand-contrast: #ffffff;
+  /* Legacy name kept for feature styles that still reference it. */
+  --primary-blue: var(--brand-color);
+  --primary-blue-hover: var(--brand-hover);
 
-  /* --- Colors: Text --- */
-  --text-dark: #1c1e21; /* สีตัวหนังสือหลัก */
-  --text-gray: #6b7280; /* สีตัวหนังสือรอง (เทา) */
+  --text-dark: #17202a;
+  --text-gray: #52606d;
+  --text-muted: #64748b;
 
-  /* --- Colors: Borders --- */
-  --border-light: #e2e8f0; /* สีเส้นขอบอ่อนๆ สำหรับคั่น Layout */
+  --border-light: #d8ddd8;
+  --focus-ring: #f59e0b;
+  --success-color: #16794a;
+  --warning-color: #b54708;
+  --danger-color: #b42318;
+  --role-admin-bg: #f3e8ff;
+  --role-admin-text: #7e22ce;
+  --role-student-bg: #eff6ff;
+  --role-student-text: #1d4ed8;
+  --role-guest-bg: #f1f5f9;
+  --role-guest-text: #475569;
+  --shadow-color: rgba(23, 32, 42, 0.12);
+  --shadow-sm: 0 2px 8px var(--shadow-color);
+  --shadow-md: 0 8px 24px var(--shadow-color);
+  --surface-info: #eff6ff;
+  --surface-success: #ecfdf5;
+  --surface-warning: #fff7ed;
+  --surface-danger: #fef2f2;
+  --surface-neutral: #f1f5f9;
+  --info-color: #1d4ed8;
+  --neutral-color: #64748b;
 
   /* --- Dimensions & Radius --- */
-  --border-radius-card: 24px; /* ความโค้งของกล่อง/การ์ดใหญ่ */
-  --border-radius-input: 12px; /* ความโค้งของปุ่มและช่องกรอกข้อมูล */
+  /* Shape scale: controls, surfaces, and dialogs share these values. */
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-modal: 20px;
+  --radius-pill: 999px;
+  --border-radius-card: var(--radius-card);
+  --border-radius-input: var(--radius-control);
 
   /* --- Layout --- */
   --sidebar-width: 240px; /* ความกว้าง sidebar กลาง ใช้ร่วมกันทั้งฝั่ง User และ Admin */
   --sidebar-font-size: 14px; /* ขนาดตัวอักษรเมนู sidebar ใช้ร่วมกันทั้งฝั่ง User และ Admin */
-  --sidebar-active-radius: 16px; /* ความโค้งของเมนูที่ถูกเลือก ใช้ร่วมกันทั้งฝั่ง User และ Admin */
+  --sidebar-active-radius: 14px; /* ความโค้งของเมนูที่ถูกเลือก ใช้ร่วมกันทั้งฝั่ง User และ Admin */
+}
+
+:root[data-theme="dark"] {
+  /* --- Accessible Dark Theme --- */
+  --bg-color: #111827;
+  --card-bg: #1f2937;
+  --surface-subtle: #1b2635;
+  --surface-elevated: #273449;
+
+  --brand-color: #5eead4;
+  --brand-hover: #99f6e4;
+  --brand-soft: #123f3c;
+  --brand-contrast: #042f2e;
+  --primary-blue: var(--brand-color);
+  --primary-blue-hover: var(--brand-hover);
+
+  --text-dark: #f8fafc;
+  --text-gray: #cbd5e1;
+  --text-muted: #cbd5e1;
+
+  --border-light: #3a4758;
+  --focus-ring: #fbbf24;
+  --success-color: #86efac;
+  --warning-color: #fbbf24;
+  --danger-color: #fca5a5;
+  --role-admin-bg: #4c1d95;
+  --role-admin-text: #e9d5ff;
+  --role-student-bg: #1e3a8a;
+  --role-student-text: #bfdbfe;
+  --role-guest-bg: #334155;
+  --role-guest-text: #e2e8f0;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --surface-info: #172554;
+  --surface-success: #143b2a;
+  --surface-warning: #452006;
+  --surface-danger: #450a0a;
+  --surface-neutral: #334155;
+  --info-color: #bfdbfe;
+  --neutral-color: #cbd5e1;
 }
 
 /* CSS Reset พื้นฐาน */
@@ -48,7 +117,9 @@ body {
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
   background-color: var(--bg-color);
+  color: var(--text-dark);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* ==========================================================================
@@ -60,7 +131,7 @@ body {
   display: flex;
   height: 100vh;
   width: 100vw;
-  background-color: #ffffff; /* พื้นหลังสีขาวแบบ FB */
+  background-color: var(--bg-color);
   margin: 0;
 }
 
@@ -78,7 +149,7 @@ body {
   justify-content: center;
   align-items: flex-start;
   padding: 5rem 10%;
-  background-color: #ffffff;
+  background-color: var(--bg-color);
 }
 
 .login-banner-title {
@@ -97,8 +168,8 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background-color: #ffffff;
-  border-left: 1px solid #e5e5e5;
+  background-color: var(--surface-elevated);
+  border-left: 1px solid var(--border-light);
   overflow-y: auto;
   padding: 2rem 1rem;
 }
@@ -163,6 +234,7 @@ body {
 
 .main-area {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -171,9 +243,10 @@ body {
 /* --- 3.2 Sidebar Navigation --- */
 .sidebar {
   width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
   display: flex;
   flex-direction: column;
-  background-color: #f0f7ff;
+  background-color: var(--surface-subtle) !important;
   border-right: 1px solid var(--border-light);
 }
 
@@ -212,25 +285,26 @@ body {
 }
 
 .menu-item:hover {
-  background-color: rgba(24, 119, 242, 0.1);
-  color: var(--primary-blue);
+  background-color: var(--brand-soft);
+  color: var(--brand-color);
 }
 
 .menu-item.active {
-  background-color: #fff;
-  color: var(--primary-blue);
+  background-color: var(--card-bg);
+  color: var(--brand-color);
   font-weight: 700;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 /* --- 3.3 Top Header Bar --- */
 .top-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   height: 72px;
   padding: 0 32px;
-  background-color: #fff;
+  background-color: var(--surface-elevated) !important;
   border-bottom: 1px solid var(--border-light);
 }
 
@@ -240,7 +314,7 @@ body {
   width: 400px;
   height: 44px;
   padding: 0 16px;
-  background-color: #f1f5f9;
+  background-color: var(--surface-subtle);
   border-radius: 16px;
 }
 
@@ -251,13 +325,387 @@ body {
   background: transparent;
   outline: none;
   font-size: 14px;
+  color: var(--text-dark);
+}
+
+.search-bar input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   3.4 SHARED SHAPE SYSTEM
+   ========================================================================== */
+
+/* Keep controls consistent across pages, including legacy inline MUI styles. */
+.MuiButton-root,
+.MuiTextField-root .MuiOutlinedInput-root,
+.MuiOutlinedInput-root,
+.MuiAutocomplete-inputRoot,
+.MuiSelect-select,
+.MuiAlert-root {
+  border-radius: var(--radius-control) !important;
+}
+
+.MuiPaper-root,
+.MuiCard-root,
+.admin-table-paper,
+.room-card {
+  border-radius: var(--radius-card) !important;
+}
+
+.MuiDialog-paper,
+.MuiPopover-paper,
+.MuiMenu-paper,
+.admin-account-menu {
+  border-radius: var(--radius-modal) !important;
+}
+
+.MuiChip-root {
+  border-radius: var(--radius-pill) !important;
+}
+
+.MuiLinearProgress-root,
+.MuiLinearProgress-bar {
+  border-radius: var(--radius-control) !important;
+}
+
+.MuiLinearProgress-root {
+  background-color: var(--surface-subtle) !important;
+}
+
+/* ========================================================================
+   SHARED PAGE / SURFACE PRIMITIVES
+   Keep repeated visual decisions in one place. Page-specific `sx` remains
+   available for unique layout behavior, while these classes own the shared
+   surface, table, toolbar, and typography treatment.
+   ======================================================================== */
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-header__copy {
+  min-width: 0;
+}
+
+.page-title {
+  margin: 0;
+  color: var(--text-dark);
+  letter-spacing: -0.5px;
+}
+
+.page-description {
+  margin-top: 6px;
+  color: var(--text-gray);
+}
+
+.page-meta {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+.surface-card {
+  background-color: var(--card-bg) !important;
+  color: var(--text-dark);
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-card) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+.surface-card--flat {
+  box-shadow: none;
+}
+
+.surface-card--subtle {
+  background-color: var(--surface-subtle) !important;
+}
+
+.surface-card--info {
+  background-color: var(--surface-info) !important;
+}
+
+.surface-card--success {
+  background-color: var(--surface-success) !important;
+}
+
+.surface-card--warning {
+  background-color: var(--surface-warning) !important;
+}
+
+.surface-card--danger {
+  background-color: var(--surface-danger) !important;
+}
+
+.surface-card__header {
+  padding: 24px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.search-control {
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+  flex: 1 1 260px;
+  gap: 8px;
+  padding: 4px 12px;
+  color: var(--text-muted);
+  background-color: var(--surface-subtle);
+  border-radius: var(--radius-control);
+}
+
+.search-control .MuiInputBase-input {
+  color: var(--text-dark);
+}
+
+.search-control .MuiInputBase-input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.data-table-shell {
+  overflow: hidden;
+}
+
+.data-table-shell .MuiTableHead-root,
+.data-table-shell .MuiTableHead-root .MuiTableRow-root {
+  background-color: var(--surface-subtle) !important;
+}
+
+.data-table-shell .MuiTableCell-root {
+  color: var(--text-gray);
+  border-color: var(--border-light);
+}
+
+.data-table-shell .MuiTableBody-root .MuiTableCell-root {
+  color: var(--text-dark);
+}
+
+.empty-state {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  padding: 32px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.status-chip {
+  border-radius: var(--radius-pill) !important;
+  font-weight: 700 !important;
+}
+
+.status-chip--info {
+  color: var(--info-color) !important;
+  background-color: var(--surface-info) !important;
+}
+
+.status-chip--success {
+  color: var(--success-color) !important;
+  background-color: var(--surface-success) !important;
+}
+
+.status-chip--warning {
+  color: var(--warning-color) !important;
+  background-color: var(--surface-warning) !important;
+}
+
+.status-chip--danger {
+  color: var(--danger-color) !important;
+  background-color: var(--surface-danger) !important;
+}
+
+.status-chip--neutral {
+  color: var(--neutral-color) !important;
+  background-color: var(--surface-neutral) !important;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.MuiButtonBase-root:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 /* --- 3.4 Main Content Area --- */
 .content-area {
   flex: 1;
+  min-width: 0;
   padding: 32px;
   overflow-y: auto;
+}
+
+/* --- 3.5 Shared Admin Shell --- */
+/*
+ * Admin pages historically rendered the same shell with slightly different
+ * inline values. These classes keep the page frame consistent while allowing
+ * each page to keep its feature-specific content and controls.
+ */
+.admin-layout {
+  height: 100vh;
+  min-height: 0 !important;
+  overflow: hidden;
+  background-color: var(--bg-color) !important;
+  font-family: inherit !important;
+}
+
+.admin-sidebar {
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width) !important;
+  min-width: var(--sidebar-width);
+  height: 100vh !important;
+  position: relative !important;
+  top: auto !important;
+  overflow-y: auto;
+}
+
+.admin-main-area {
+  min-width: 0;
+  overflow: hidden !important;
+}
+
+.admin-top-header {
+  flex: 0 0 72px;
+  min-height: 72px;
+  height: 72px;
+  padding: 0 32px !important;
+}
+
+.admin-content-area {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 32px !important;
+}
+
+.admin-sidebar .MuiButton-root {
+  min-height: 40px;
+  justify-content: flex-start;
+  text-transform: none;
+  font-size: var(--sidebar-font-size);
+  border-radius: var(--sidebar-active-radius);
+  color: var(--text-muted);
+  font-weight: 600;
+  transition: background-color 0.2s, color 0.2s, transform 0.2s;
+}
+
+.admin-sidebar .MuiButton-root:hover,
+.admin-sidebar .MuiButton-root.active {
+  background-color: var(--card-bg) !important;
+  color: var(--brand-color);
+}
+
+.admin-sidebar .MuiButton-root.active {
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.admin-brand-mark {
+  display: flex;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--brand-color) !important;
+  box-shadow: 0 4px 10px var(--shadow-color);
+}
+
+.admin-brand-title {
+  color: var(--text-dark);
+  letter-spacing: -0.5px;
+}
+
+.admin-brand-subtitle,
+.admin-user-summary > :last-child {
+  color: var(--text-muted);
+}
+
+.admin-user-summary {
+  text-align: right;
+}
+
+.admin-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  color: var(--brand-contrast);
+  background-color: var(--text-dark) !important;
+}
+
+.admin-notification-button {
+  color: var(--text-muted) !important;
+  background-color: var(--surface-subtle) !important;
+}
+
+.admin-notification-button:hover {
+  background-color: var(--brand-soft) !important;
+}
+
+.header-notification-button {
+  color: var(--text-muted) !important;
+  background-color: var(--surface-subtle) !important;
+}
+
+.header-notification-button:hover {
+  background-color: var(--brand-soft) !important;
+}
+
+.admin-header-divider {
+  height: 30px !important;
+  margin: auto 0;
+  background-color: var(--border-light);
+}
+
+.admin-menu-toggle {
+  display: none !important;
+}
+
+.admin-account-menu {
+  width: 200px;
+  padding: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px !important;
+}
+
+.admin-account-action {
+  justify-content: flex-start !important;
+  text-transform: none !important;
+  color: var(--text-dark) !important;
+}
+
+.admin-account-action.danger {
+  color: var(--danger-color) !important;
+}
+
+.admin-table-paper {
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius-input);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.admin-page-heading {
+  color: var(--text-dark);
+  letter-spacing: -0.5px;
 }
 
 /* ==========================================================================
@@ -273,8 +721,8 @@ body {
   min-width: 0;
   box-sizing: border-box;
   margin-bottom: 16px;
-  background: #fff;
-  border: 1px solid #f0f5fa;
+  background: var(--card-bg);
+  border: 1px solid var(--border-light);
   border-radius: var(--border-radius-input);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   cursor: pointer;
@@ -306,7 +754,273 @@ body {
 .room-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  border-color: #b5dbff;
+  border-color: var(--brand-color);
+}
+
+.app-layout:not(.admin-layout) .sidebar-logo > .MuiSvgIcon-root {
+  color: var(--brand-color) !important;
+}
+
+.room-card > .MuiBox-root:first-child {
+  background-color: var(--brand-soft) !important;
+}
+
+.room-card > .MuiBox-root:first-child .MuiSvgIcon-root {
+  color: var(--brand-color) !important;
+}
+
+.room-card > .MuiBox-root:not(:first-child) {
+  color: var(--text-gray) !important;
+  background-color: var(--card-bg) !important;
+}
+
+.room-card-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.room-card-meta__capacity {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.room-card-meta__location {
+  flex: 1 1 120px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* ==========================================================================
+   5. ACCESSIBLE THEME ADAPTATIONS
+   ========================================================================== */
+
+/* The switch stays available on login, user pages, and admin pages. */
+.global-theme-toggle {
+  position: fixed !important;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1400;
+  color: var(--text-dark) !important;
+  background-color: var(--card-bg) !important;
+  border: 1px solid var(--border-light) !important;
+  box-shadow: 0 8px 20px var(--shadow-color);
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.global-theme-toggle:hover {
+  background-color: var(--brand-soft) !important;
+  color: var(--brand-color) !important;
+  transform: translateY(-1px);
+}
+
+.global-language-toggle {
+  position: fixed !important;
+  right: 24px;
+  bottom: 76px;
+  z-index: 1400;
+  min-width: 112px !important;
+  min-height: 36px !important;
+  color: var(--text-dark) !important;
+  background-color: var(--card-bg) !important;
+  border-color: var(--border-light) !important;
+  box-shadow: 0 8px 20px var(--shadow-color);
+  text-transform: none !important;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.global-language-toggle:hover {
+  background-color: var(--brand-soft) !important;
+  border-color: var(--brand-color) !important;
+  color: var(--brand-color) !important;
+  transform: translateY(-1px);
+}
+
+/* Keep common MUI surfaces readable when the user enables Dark Theme. */
+:root[data-theme="dark"] .MuiPaper-root,
+:root[data-theme="dark"] .MuiPopover-paper,
+:root[data-theme="dark"] .MuiDialog-paper,
+:root[data-theme="dark"] .MuiMenu-paper,
+:root[data-theme="dark"] .MuiCard-root {
+  background-color: var(--surface-elevated) !important;
+  color: var(--text-dark) !important;
+  border-color: var(--border-light) !important;
+}
+
+:root[data-theme="dark"] .MuiTableCell-root {
+  color: var(--text-dark) !important;
+  border-color: var(--border-light) !important;
+}
+
+:root[data-theme="dark"] .MuiTableHead-root .MuiTableCell-root,
+:root[data-theme="dark"] .MuiTablePagination-root {
+  background-color: var(--surface-subtle) !important;
+}
+
+:root[data-theme="dark"] .MuiOutlinedInput-root,
+:root[data-theme="dark"] .MuiInputBase-root {
+  color: var(--text-dark);
+  background-color: var(--surface-subtle);
+}
+
+:root[data-theme="dark"] .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border-light);
+}
+
+:root[data-theme="dark"] .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline,
+:root[data-theme="dark"] .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: var(--brand-color);
+}
+
+:root[data-theme="dark"] .MuiInputLabel-root,
+:root[data-theme="dark"] .MuiFormHelperText-root {
+  color: var(--text-gray);
+}
+
+:root[data-theme="dark"] .MuiDivider-root {
+  border-color: var(--border-light);
+}
+
+:root[data-theme="dark"] .MuiButton-contained:not(.MuiButton-colorError):not(.MuiButton-colorWarning):not(.MuiButton-colorSuccess) {
+  color: var(--brand-contrast) !important;
+  background-color: var(--brand-color) !important;
+}
+
+:root[data-theme="dark"] .MuiButton-contained:not(.MuiButton-colorError):not(.MuiButton-colorWarning):not(.MuiButton-colorSuccess):hover {
+  background-color: var(--brand-hover) !important;
+}
+
+:root[data-theme="dark"] .MuiButton-outlined {
+  color: var(--brand-color) !important;
+  border-color: var(--brand-color) !important;
+}
+
+:root[data-theme="dark"] .MuiButton-outlined:hover {
+  background-color: var(--brand-soft) !important;
+}
+
+/* Legacy pages still contain inline MUI color props. These shared rules keep
+ * every route readable while `.theme-colored` preserves semantic values such
+ * as score, success, warning, and error colors. */
+:root[data-theme="dark"] .app-layout .MuiTypography-root:not(.theme-colored) {
+  color: var(--text-dark) !important;
+}
+
+:root[data-theme="dark"] .app-layout .MuiTypography-body2:not(.theme-colored),
+:root[data-theme="dark"] .app-layout .MuiTypography-caption:not(.theme-colored) {
+  color: var(--text-gray) !important;
+}
+
+:root[data-theme="dark"] .app-layout .MuiButton-root:not(.MuiButton-contained):not(.MuiButton-colorError):not(.MuiButton-colorWarning):not(.MuiButton-colorSuccess) {
+  color: var(--brand-color) !important;
+}
+
+:root[data-theme="dark"] .app-layout .MuiInputBase-input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+:root[data-theme="dark"] .login-banner-title,
+:root[data-theme="dark"] .login-title,
+:root[data-theme="dark"] .login-subtitle,
+:root[data-theme="dark"] .login-links,
+:root[data-theme="dark"] .login-link {
+  color: var(--text-dark);
+}
+
+:root[data-theme="dark"] .login-banner {
+  border-color: var(--border-light);
+}
+
+:root[data-theme="dark"] .login-form-section {
+  background-color: var(--surface-elevated);
+}
+
+:root[data-theme="dark"] .top-header .MuiSvgIcon-root {
+  color: var(--text-dark) !important;
+}
+
+:root[data-theme="dark"] .top-header .MuiAvatar-root {
+  color: var(--brand-contrast) !important;
+  background-color: var(--brand-color) !important;
+}
+
+/* Dialogs render in a body-level portal, so they are outside `.app-layout`.
+ * Keep the user-history modal aligned with the same dark surfaces, text, and
+ * table treatment as the rest of the application. */
+:root[data-theme="dark"] .admin-user-details-dialog .MuiDialog-paper {
+  color: var(--text-dark) !important;
+  background-color: var(--surface-elevated) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiDialogContent-root {
+  background-color: var(--surface-elevated) !important;
+  border-color: var(--border-light) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiPaper-root {
+  background-color: var(--card-bg) !important;
+  border-color: var(--border-light) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiTypography-root:not(.theme-colored) {
+  color: var(--text-dark) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiTypography-body2:not(.theme-colored),
+:root[data-theme="dark"] .admin-user-details-dialog .MuiTypography-caption:not(.theme-colored) {
+  color: var(--text-gray) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiTableHead-root .MuiTableRow-root {
+  background-color: var(--surface-subtle) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiTableCell-root {
+  color: var(--text-gray) !important;
+  border-color: var(--border-light) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiTab-root {
+  color: var(--text-gray) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiTab-root.Mui-selected {
+  color: var(--brand-color) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiTabs-indicator {
+  background-color: var(--brand-color) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiLinearProgress-root {
+  background-color: var(--surface-subtle) !important;
+}
+
+:root[data-theme="dark"] .admin-user-details-dialog .MuiIconButton-root {
+  color: var(--text-gray) !important;
+}
+
+:root[data-theme="dark"] .app-layout:not(.admin-layout) .sidebar-logo > .MuiSvgIcon-root {
+  color: var(--brand-color) !important;
+}
+
+/* Room cards contain nested Boxes with legacy light backgrounds. Keep the
+ * illustration and content surfaces aligned with the active theme. */
+:root[data-theme="dark"] .room-card > .MuiBox-root:first-child {
+  background-color: var(--brand-soft) !important;
+}
+
+:root[data-theme="dark"] .room-card > .MuiBox-root:first-child .MuiSvgIcon-root {
+  color: var(--brand-color) !important;
+}
+
+:root[data-theme="dark"] .room-card > .MuiBox-root:not(:first-child) {
+  color: var(--text-gray) !important;
+  background-color: var(--card-bg) !important;
 }
 
 /* ==========================================================================
@@ -404,6 +1118,39 @@ body {
   }
   .content-area {
     padding: 16px;
+  }
+
+  .admin-layout {
+    height: 100vh;
+  }
+
+  .admin-sidebar {
+    display: none !important;
+  }
+
+  .admin-sidebar.open {
+    display: flex !important;
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    z-index: 1000;
+    box-shadow: 4px 0 24px rgba(15, 23, 42, 0.14);
+  }
+
+  .admin-menu-toggle {
+    display: inline-flex !important;
+  }
+
+  .admin-user-summary,
+  .admin-header-divider {
+    display: none;
+  }
+
+  .admin-top-header {
+    padding: 0 16px !important;
+  }
+
+  .admin-content-area {
+    padding: 16px !important;
   }
 
   /* 🌟 Login สลับมาเรียงแนวตั้งบน Tablet */

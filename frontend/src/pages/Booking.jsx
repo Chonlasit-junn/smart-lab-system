@@ -9,7 +9,7 @@ import {
   IconButton,
   Paper,
   Button,
-  Grid,
+  GridLegacy as Grid,
   Divider,
   Slide,
   Fade,
@@ -27,6 +27,7 @@ import {
   Assignment,
   History,
   SupportAgent,
+  ConfirmationNumber,
   Logout,
   Computer,
   Person,
@@ -44,6 +45,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import { useLanguage } from "../context/language-context.js";
 import SupportModal from "./SupportModal";
 
 // API Endpoint configuration
@@ -85,6 +87,7 @@ export default function Booking() {
   // Contexts & Hooks
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
+  const { t } = useLanguage();
 
   // ============================================================================
   // 3. STATE MANAGEMENT
@@ -258,8 +261,9 @@ export default function Booking() {
   // Shift Sunday (0) to the end to start the calendar on Monday
   const emptySlots = firstDayOfMonthJS === 0 ? 6 : firstDayOfMonthJS - 1;
 
-  const monthName = currentDateObj.toLocaleString("en-US", { month: "long" });
-  const monthNameShort = currentDateObj.toLocaleString("en-US", {
+  const locale = t("common.locale");
+  const monthName = currentDateObj.toLocaleString(locale, { month: "long" });
+  const monthNameShort = currentDateObj.toLocaleString(locale, {
     month: "short",
   });
 
@@ -519,13 +523,16 @@ export default function Booking() {
             className="menu-item active"
             onClick={() => setIsSidebarOpen(false)}
           >
-            <EventNote /> Lab Reserve
+            <EventNote /> {t("common.labReserve")}
           </div>
           <div className="menu-item" onClick={() => navigate("/reserved")}>
-            <Assignment /> Reserved
+            <Assignment /> {t("common.reserved")}
           </div>
           <div className="menu-item" onClick={() => navigate("/history")}>
-            <History /> History
+            <History /> {t("common.history")}
+          </div>
+          <div className="menu-item" onClick={() => navigate("/my-tickets")}>
+            <ConfirmationNumber /> {t("common.myTickets")}
           </div>
         </div>
 
@@ -534,10 +541,10 @@ export default function Booking() {
           style={{ flex: "none", paddingBottom: "24px" }}
         >
           <div className="menu-item" onClick={() => navigate("/my-tickets")}>
-            <Assignment /> My Tickets
+            <Assignment /> {t("common.myTickets")}
           </div>
           <div className="menu-item" onClick={() => setIsSupportOpen(true)}>
-            <SupportAgent /> Support
+            <SupportAgent /> {t("common.support")}
           </div>
         </div>
       </div>
@@ -559,7 +566,7 @@ export default function Booking() {
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
-              Lab Reserve
+              {t("user.pageTitle")}
             </Typography>
           </Box>
 
@@ -574,7 +581,7 @@ export default function Booking() {
               <Search sx={{ color: "#94a3b8" }} />
               <input
                 type="text"
-                placeholder="Search by code, name, or location..."
+                placeholder={t("user.searchRooms")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 disabled={!!selectedRoom}
@@ -583,7 +590,7 @@ export default function Booking() {
             <IconButton sx={{ display: { xs: "block", md: "none" } }}>
               <Search sx={{ color: "#111827" }} />
             </IconButton>
-            <IconButton onClick={handleNotifClick}>
+            <IconButton className="header-notification-button" onClick={handleNotifClick} aria-label={t("common.notifications")}>
               <Badge
                 variant="dot"
                 color="error"
@@ -629,7 +636,7 @@ export default function Booking() {
                 }}
               >
                 <Typography fontSize="16px" fontWeight="700">
-                  การแจ้งเตือน
+                  {t("common.notifications")}
                 </Typography>
               </Box>
 
@@ -638,7 +645,7 @@ export default function Booking() {
                 {notifications.length === 0 ? (
                   <Box sx={{ py: 4, textAlign: "center" }}>
                     <Typography fontSize="13px" sx={{ color: "#64748b" }}>
-                      ยังไม่มีการแจ้งเตือน
+                      {t("common.noNotifications")}
                     </Typography>
                   </Box>
                 ) : (
@@ -931,10 +938,10 @@ export default function Booking() {
                     lineHeight={1.2}
                     color="textSecondary"
                   >
-                    Guest User
+                    {t("common.guestUser")}
                   </Typography>
                   <Typography variant="caption" color="primary.main">
-                    Click to Log in
+                    {t("common.login")}
                   </Typography>
                 </Box>
                 <Avatar sx={{ bgcolor: "#cbd5e1", width: 36, height: 36 }}>
@@ -947,7 +954,7 @@ export default function Booking() {
 
         {/* CONTENT AREA */}
         <div
-          className="content-area"
+          className="content-area page-content"
           style={{ position: "relative", overflowX: "hidden" }}
         >
           {/* VIEW 1: ROOM SELECTION */}
@@ -961,8 +968,8 @@ export default function Booking() {
                   sx={{ mb: 3 }}
                 >
                   {searchQuery
-                    ? `Search Results for "${searchQuery}"`
-                    : "Select a Lab Room"}
+                    ? `${t("user.searchResults")}: "${searchQuery}"`
+                    : t("user.selectLabRoom")}
                 </Typography>
                 <Grid container spacing={3}>
                   {filteredLabs.length > 0 ? (
@@ -1022,8 +1029,8 @@ export default function Booking() {
                                 <Chip
                                   label={
                                     room.status === "active"
-                                      ? "Available"
-                                      : "Maintenance"
+                                      ? t("user.available")
+                                      : t("user.maintenance")
                                   }
                                   color={
                                     room.status === "active"
@@ -1046,6 +1053,7 @@ export default function Booking() {
                             </Typography>
                             <Divider sx={{ my: 2 }} />
                             <Box
+                              className="room-card-meta"
                               sx={{
                                 display: "flex",
                                 justifyContent: "space-between",
@@ -1054,6 +1062,7 @@ export default function Booking() {
                               }}
                             >
                               <Box
+                                className="room-card-meta__capacity"
                                 sx={{
                                   display: "flex",
                                   alignItems: "center",
@@ -1065,17 +1074,18 @@ export default function Booking() {
                               >
                                 <PeopleAlt fontSize="small" />
                                 <Typography variant="body2" fontWeight="bold">
-                                  {room.capacity} Users
+                                  {room.capacity} {t("user.users")}
                                 </Typography>
                               </Box>
                               <Box
+                                className="room-card-meta__location"
                                 sx={{
                                   display: "flex",
                                   alignItems: "center",
                                   gap: 1,
                                 }}
                               >
-                                Location: {room.location || "-"}
+                                {t("user.location")}: {room.location || "-"}
                               </Box>
                             </Box>
                           </Box>
@@ -1085,6 +1095,7 @@ export default function Booking() {
                   ) : (
                     <Grid item xs={12}>
                       <Paper
+                        className="surface-card empty-state"
                         elevation={0}
                         sx={{
                           p: 5,
@@ -1099,14 +1110,14 @@ export default function Booking() {
                           color="textSecondary"
                           fontWeight="bold"
                         >
-                          No labs found matching "{searchQuery}"
+                          {t("user.noLabsMatching")} "{searchQuery}"
                         </Typography>
                         <Typography
                           variant="body2"
                           color="textSecondary"
                           sx={{ mt: 1 }}
                         >
-                          Try adjusting your search keywords.
+                          {t("user.adjustSearch")}
                         </Typography>
                         <Button
                           variant="outlined"
@@ -1118,7 +1129,7 @@ export default function Booking() {
                             fontWeight: "bold",
                           }}
                         >
-                          Clear Search
+                          {t("user.clearSearch")}
                         </Button>
                       </Paper>
                     </Grid>
@@ -1163,11 +1174,12 @@ export default function Booking() {
                       },
                     }}
                   >
-                    Back to all rooms
+                    {t("user.backToRooms")}
                   </Button>
 
                   <Paper
                     elevation={0}
+                    className="room-card selected-room-card"
                     sx={{
                       border: "2px solid #b5dbff",
                       borderRadius: 4,
@@ -1217,7 +1229,7 @@ export default function Booking() {
                             <PeopleAlt />
                           </Avatar>
                           <Typography fontWeight="bold">
-                            Capacity: {selectedRoom.capacity} Users
+                            {t("user.capacity")}: {selectedRoom.capacity} {t("user.users")}
                           </Typography>
                         </Box>
                         <Box
@@ -1227,7 +1239,7 @@ export default function Booking() {
                             <PcIcon />
                           </Avatar>
                           <Typography fontWeight="bold">
-                            Location: {selectedRoom.location || "-"}
+                            {t("user.location")}: {selectedRoom.location || "-"}
                           </Typography>
                         </Box>
                       </Box>
@@ -1263,10 +1275,10 @@ export default function Booking() {
                       }}
                     >
                       <Typography variant="h6" fontWeight="bold">
-                        1. Select Date
+                          1. {t("user.selectDate")}
                       </Typography>
                       <Chip
-                        label="Advance booking up to 2 days"
+                        label={t("user.advanceBooking")}
                         size="small"
                         sx={{
                           bgcolor: "#eff6ff",
@@ -1276,6 +1288,7 @@ export default function Booking() {
                       />
                     </Box>
                     <Paper
+                      className="surface-card"
                       elevation={0}
                       sx={{
                         p: { xs: 2, sm: 4 },
@@ -1404,10 +1417,10 @@ export default function Booking() {
                         }}
                       >
                         <Typography variant="h6" fontWeight="bold">
-                          2. Select Time
+                          2. {t("user.selectTime")}
                         </Typography>
                         <Chip
-                          label="Requires 2 hours advance notice"
+                          label={t("user.requiresNotice")}
                           size="small"
                           sx={{
                             bgcolor: "#fff7ed",
@@ -1417,6 +1430,7 @@ export default function Booking() {
                         />
                       </Box>
                       <Paper
+                        className="surface-card"
                         elevation={0}
                         sx={{
                           p: 3,
@@ -1493,20 +1507,20 @@ export default function Booking() {
                                       marginTop: "4px",
                                     }}
                                   >
-                                    {isClass && "Reserved for Class"}
-                                    {isFull && "Fully Booked"}
+                                    {isClass && t("user.reservedForClass")}
+                                    {isFull && t("user.fullyBooked")}
                                     {!isTimeValid &&
                                       isAvailable &&
                                       timeStatus === "too_close" &&
-                                      "Too Close (Wait 2 hours)"}
+                                      t("user.tooClose")}
                                     {!isTimeValid &&
                                       isAvailable &&
                                       timeStatus === "passed" &&
-                                      "Time Passed"}
+                                      t("user.timePassed")}
                                     {isAvailable &&
                                     isTimeValid &&
                                     slotInfo?.remaining_seats !== undefined
-                                      ? `${slotInfo.remaining_seats} Seats Left`
+                                      ? `${slotInfo.remaining_seats} ${t("user.seatsLeft")}`
                                       : ""}
                                   </span>
                                 </Button>
@@ -1536,7 +1550,7 @@ export default function Booking() {
                         }}
                       >
                         <Typography variant="h6" fontWeight="bold">
-                          3. Confirm Your Booking
+                          3. {t("user.confirmYourBooking")}
                         </Typography>
                       </Box>
 
@@ -1593,6 +1607,7 @@ export default function Booking() {
                       ) : null}
 
                       <Paper
+                        className="surface-card surface-card--info"
                         elevation={0}
                         sx={{
                           p: { xs: 2, md: 3 },
@@ -1612,7 +1627,7 @@ export default function Booking() {
                             color="textSecondary"
                             fontWeight="bold"
                           >
-                            YOUR SELECTION
+                            {t("user.yourSelection")}
                           </Typography>
                           <Typography
                             variant="h6"
@@ -1653,7 +1668,7 @@ export default function Booking() {
                             },
                           }}
                         >
-                          {currentUser ? "Confirm Booking" : "Log in to Book"}
+                          {currentUser ? t("user.confirmBooking") : t("user.loginToBook")}
                         </Button>
                       </Paper>
                     </Box>
@@ -1706,14 +1721,14 @@ export default function Booking() {
             color="#0f172a"
             gutterBottom
           >
-            Booking Confirmed!
+            {t("user.bookingConfirmed")}
           </Typography>
           <Typography
             variant="body1"
             color="#64748b"
             sx={{ mb: 3, lineHeight: 1.6 }}
           >
-            Your reservation for <strong>{selectedRoom?.code}</strong> on{" "}
+            {t("user.reservationConfirmed")} <strong>{selectedRoom?.code}</strong> on{" "}
             <strong>
               {monthNameShort} {selectedDate}
             </strong>{" "}
@@ -1734,7 +1749,7 @@ export default function Booking() {
               "&:hover": { bgcolor: "#334155" },
             }}
           >
-            Got it, thanks!
+            {t("user.gotIt")}
           </Button>
         </DialogContent>
       </Dialog>

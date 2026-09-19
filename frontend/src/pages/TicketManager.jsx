@@ -1,23 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, CircularProgress, Button, Chip, IconButton
+  TableHead, TableRow, CircularProgress, Button, Chip
 } from '@mui/material';
-import { ArrowBack, CheckCircle } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { CheckCircle } from '@mui/icons-material';
 import axios from 'axios';
+import AdminShell from '../components/AdminShell';
+import { useLanguage } from '../context/language-context.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 export default function TicketManager() {
-  const navigate = useNavigate();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { t } = useLanguage();
 
   useEffect(() => {
-    document.title = 'Ticket Manager | Smart Lab Admin';
+    document.title = `${t('admin.ticketTitle')} | Smart Lab Admin`;
     fetchTickets();
-  }, []);
+  }, [t]);
 
   // ฟังก์ชันดึงข้อมูล Ticket ทั้งหมดจาก Backend
   const fetchTickets = async () => {
@@ -53,19 +54,9 @@ export default function TicketManager() {
   };
 
   return (
-    <Box sx={{ p: 4, bgcolor: '#fcfdfe', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
-      {/* ส่วนหัว */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 4, gap: 2 }}>
-        <IconButton onClick={() => navigate('/admin')} sx={{ bgcolor: '#f1f5f9' }}>
-          <ArrowBack />
-        </IconButton>
-        <Typography variant="h4" fontWeight="800" color="#1e293b">
-          Support Tickets
-        </Typography>
-      </Box>
-
+    <AdminShell title={t('admin.ticketTitle')}>
       {/* ตารางแสดงข้อมูล */}
-      <Paper elevation={0} sx={{ p: 4, borderRadius: 4, border: '1px solid #e2e8f0' }}>
+      <Paper className="admin-table-paper surface-card data-table-shell" elevation={0} sx={{ p: 4 }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
@@ -75,13 +66,13 @@ export default function TicketManager() {
             <Table>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f8fafc' }}>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>ID</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>User ID</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>หัวข้อ (Subject)</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>รายละเอียด (Message)</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>วันที่ (Timestamp)</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>สถานะ</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b', textAlign: 'center' }}>จัดการ</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>{t('admin.ticketId')}</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>{t('admin.ticketUserId')}</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>{t('admin.ticketSubject')}</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>{t('admin.ticketMessage')}</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>{t('admin.ticketSubmitted')}</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>{t('admin.ticketStatus')}</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#64748b', textAlign: 'center' }}>{t('admin.ticketManage')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -135,6 +126,6 @@ export default function TicketManager() {
           </TableContainer>
         )}
       </Paper>
-    </Box>
+    </AdminShell>
   );
 }

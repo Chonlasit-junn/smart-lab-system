@@ -7,9 +7,9 @@ import { useNavigate } from 'react-router-dom';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
-import LanguageIcon from '@mui/icons-material/Language';
 import { useAuth } from '../context/auth-context';
 import { loginLocales } from '../utils/locales';
+import { useLanguage } from '../context/language-context.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -17,8 +17,7 @@ export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  // default ภาษาไทย — กดปุ่มมุมขวาบนเพื่อสลับเป็น EN
-  const [lang, setLang]               = useState('th');
+  const { language: lang } = useLanguage();
   const t = loginLocales[lang];
 
   const [email, setEmail]             = useState('');
@@ -95,32 +94,15 @@ export default function Login() {
   return (
     <div className="login-wrapper" style={{ position: 'relative' }}>
 
-      {/* ปุ่มสลับภาษา มุมขวาบน */}
-      <Box sx={{ position: 'absolute', top: 24, right: 24, zIndex: 10 }}>
-        <Button
-          onClick={() => setLang(prev => prev === 'th' ? 'en' : 'th')}
-          startIcon={<LanguageIcon />}
-          variant="outlined"
-          size="small"
-          sx={{
-            color: '#64748b', borderColor: '#e2e8f0', bgcolor: 'white',
-            fontWeight: 'bold', borderRadius: 2, textTransform: 'none',
-            '&:hover': { bgcolor: '#f8fafc', borderColor: '#cbd5e1' },
-          }}
-        >
-          {lang === 'th' ? 'English' : 'ภาษาไทย'}
-        </Button>
-      </Box>
-
       <div className="login-container">
 
         {/* ฝั่งซ้าย: banner */}
         <div className="login-banner">
           <h1 className="login-banner-title">
             {lang === 'th' ? (
-              <>สำรวจห้องแล็บ<br />ที่คุณ<br /><span style={{ color: '#1877f2' }}>ต้องการ</span></>
+              <>สำรวจห้องแล็บ<br />ที่คุณ<br /><span style={{ color: 'var(--brand-color)' }}>ต้องการ</span></>
             ) : (
-              <>Explore<br />the labs<br /><span style={{ color: '#1877f2' }}>you need.</span></>
+              <>Explore<br />the labs<br /><span style={{ color: 'var(--brand-color)' }}>you need.</span></>
             )}
           </h1>
         </div>
@@ -180,8 +162,9 @@ export default function Login() {
               sx={{
                 height: '48px', fontSize: '1.1rem', fontWeight: 'bold',
                 borderRadius: '24px', textTransform: 'none',
-                backgroundColor: '#1877f2',
-                '&:hover': { backgroundColor: '#166fe5' },
+                backgroundColor: 'var(--brand-color)',
+                color: 'var(--brand-contrast)',
+                '&:hover': { backgroundColor: 'var(--brand-hover)' },
                 mb: 2,
               }}
             >
@@ -189,7 +172,7 @@ export default function Login() {
             </Button>
 
             <Box sx={{ textAlign: 'center', mb: 3 }}>
-              <a href="#" style={{ color: '#1877f2', textDecoration: 'none', fontSize: '0.95rem' }}>
+              <a href="#" style={{ color: 'var(--brand-color)', textDecoration: 'none', fontSize: '0.95rem' }}>
                 {t.forgotPassword}
               </a>
             </Box>
@@ -203,8 +186,8 @@ export default function Login() {
               sx={{
                 height: '48px', fontSize: '1.05rem', fontWeight: 'bold',
                 borderRadius: '24px', textTransform: 'none',
-                color: '#1877f2', borderColor: '#1877f2',
-                '&:hover': { borderColor: '#166fe5', backgroundColor: '#e7f3ff' },
+                color: 'var(--brand-color)', borderColor: 'var(--brand-color)',
+                '&:hover': { borderColor: 'var(--brand-hover)', backgroundColor: 'var(--brand-soft)' },
               }}
             >
               {t.createAccount}

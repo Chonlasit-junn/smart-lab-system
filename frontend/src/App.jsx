@@ -1,7 +1,13 @@
+import { useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { CssBaseline } from '@mui/material';
+import { CssBaseline, ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/auth-context';
+import { ThemeProvider as AppThemeProvider } from './context/theme-context.jsx';
+import { useTheme } from './context/theme-context.js';
+import ThemeToggle from './components/ThemeToggle';
+import { LanguageProvider } from './context/language-context.jsx';
+import LanguageToggle from './components/LanguageToggle';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -31,11 +37,80 @@ function AdminRoute({ children }) {
   return currentUser.roleName === "admin" ? children : <Navigate to="/booking" replace />;
 }
 
-function App() {
+function AppContent() {
+  const { mode } = useTheme();
+  const muiTheme = useMemo(() => createTheme({
+    palette: {
+      mode,
+      primary: {
+        main: mode === "dark" ? "#5EEAD4" : "#0F766E",
+        contrastText: mode === "dark" ? "#042F2E" : "#FFFFFF",
+      },
+      background: {
+        default: mode === "dark" ? "#111827" : "#F6F7F5",
+        paper: mode === "dark" ? "#1F2937" : "#FFFFFF",
+      },
+      text: {
+        primary: mode === "dark" ? "#F8FAFC" : "#17202A",
+        secondary: mode === "dark" ? "#CBD5E1" : "#52606D",
+      },
+      divider: mode === "dark" ? "#3A4758" : "#D8DDD8",
+    },
+    shape: { borderRadius: 12 },
+    components: {
+      MuiButton: {
+        styleOverrides: {
+          root: { borderRadius: "var(--radius-control)" },
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: { borderRadius: "var(--radius-control)" },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: { borderRadius: "var(--radius-card)" },
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: { borderRadius: "var(--radius-card)" },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: { borderRadius: "var(--radius-modal)" },
+        },
+      },
+      MuiPopover: {
+        styleOverrides: {
+          paper: { borderRadius: "var(--radius-modal)" },
+        },
+      },
+      MuiMenu: {
+        styleOverrides: {
+          paper: { borderRadius: "var(--radius-modal)" },
+        },
+      },
+      MuiAlert: {
+        styleOverrides: {
+          root: { borderRadius: "var(--radius-control)" },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: { borderRadius: "var(--radius-pill)" },
+        },
+      },
+    },
+  }), [mode]);
+
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <CssBaseline /> 
+    <MuiThemeProvider theme={muiTheme}>
+      <CssBaseline enableColorScheme />
+      <AuthProvider>
+        <BrowserRouter>
           <Routes>
             <Route path="/" element={<Login />} />
             <Route path="/booking" element={<ProtectedRoute><Booking /></ProtectedRoute>} />
@@ -54,10 +129,22 @@ function App() {
             <Route path="/blacklist" element={<AdminRoute><BlacklistManager /></AdminRoute>} />
             <Route path="/ticket" element={<AdminRoute><TicketManager /></AdminRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
-            
           </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+          <LanguageToggle className="global-language-toggle" />
+          <ThemeToggle className="global-theme-toggle" />
+        </BrowserRouter>
+      </AuthProvider>
+    </MuiThemeProvider>
+  );
+}
+
+function App() {
+  return (
+    <AppThemeProvider>
+      <LanguageProvider>
+        <AppContent />
+      </LanguageProvider>
+    </AppThemeProvider>
   );
 }
 
