@@ -2,7 +2,10 @@
 .env
 venv/
 .venv/
+runtime/
+uploads/
 __pycache__/
 *.py[cod]
+*.pkl
 *.log
 .pytest_cache/

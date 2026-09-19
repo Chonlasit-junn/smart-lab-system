@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import models
 from database import engine, Base
 from routers import auth, users, labs, agent, devices, gatekeeper, admin, blacklist, points, tickets
+from utils import UPLOAD_ROOT
 
 Base.metadata.create_all(bind=engine)
 
@@ -18,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
 
 app.include_router(auth.router)
 app.include_router(users.router)

@@ -9,6 +9,7 @@ import Booking from './pages/Booking';
 import Admin from './pages/Admin';
 import AdminPoints from './pages/AdminPoints';
 import AdminPointPolicy from './pages/AdminPointPolicy';
+import RoleManagement from './pages/RoleManagement';
 import ManageLabs from './pages/ManageLabs';
 import AdminDevices from './pages/AdminDevices';
 import Reserved from './pages/Reserved';
@@ -46,6 +47,7 @@ function App() {
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
             <Route path="/admin/points" element={<AdminRoute><AdminPoints /></AdminRoute>} />
             <Route path="/admin/points/policy" element={<AdminRoute><AdminPointPolicy /></AdminRoute>} />
+            <Route path="/admin/roles" element={<AdminRoute><RoleManagement /></AdminRoute>} />
             <Route path="/manage-labs" element={<AdminRoute><ManageLabs /></AdminRoute>} />
             <Route path="/admin/devices" element={<AdminRoute><AdminDevices /></AdminRoute>} />
             <Route path="/verify-users" element={<AdminRoute><VerifyUsers /></AdminRoute>} />

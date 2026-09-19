@@ -24,6 +24,7 @@ import {
   Dashboard as DashIcon,
   ConfirmationNumber,
   Logout,
+  ManageAccounts,
   Person,
   Group,
   Computer,
@@ -74,6 +75,11 @@ const SIDE_MENU_ITEMS = [
     text: "Point Criteria",
     icon: <Settings sx={{ fontSize: 20 }} />,
     path: "/admin/points/policy",
+  },
+  {
+    text: "Role Management",
+    icon: <ManageAccounts sx={{ fontSize: 20 }} />,
+    path: "/admin/roles",
   },
   {
     text: "Blacklist",

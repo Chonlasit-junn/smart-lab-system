@@ -1,0 +1,14 @@
+# Runtime uploads and local data
+runtime/
+uploads/
+
+# Local secrets and environments
+.env
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+*.db
+*.pkl

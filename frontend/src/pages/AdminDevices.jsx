@@ -36,6 +36,7 @@ import {
   Dashboard as DashIcon,
   HowToReg,
   Logout,
+  ManageAccounts,
   MeetingRoom,
   Notifications,
   Person,
@@ -55,6 +56,7 @@ const SIDE_MENU_ITEMS = [
   { text: "Verify Users", icon: <HowToReg sx={{ fontSize: 20 }} />, path: "/verify-users" },
   { text: "User Points", icon: <Assessment sx={{ fontSize: 20 }} />, path: "/admin/points" },
   { text: "Point Criteria", icon: <Settings sx={{ fontSize: 20 }} />, path: "/admin/points/policy" },
+  { text: "Role Management", icon: <ManageAccounts sx={{ fontSize: 20 }} />, path: "/admin/roles" },
   { text: "Blacklist", icon: <Block sx={{ fontSize: 20 }} />, path: "/blacklist" },
   { text: "Ticket", icon: <ConfirmationNumber sx={{ fontSize: 20 }} />, path: "/ticket" },
 ];

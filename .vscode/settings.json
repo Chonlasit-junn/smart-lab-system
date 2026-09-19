@@ -1,5 +1,6 @@
 {
     "python.analysis.extraPaths": [
         "./gatekeeper/Silent-Face-Anti-Spoofing"
-    ]
+    ],
+    "git.ignoreLimitWarning": true
 }

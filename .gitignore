@@ -17,9 +17,16 @@ __pycache__/
 venv/
 .venv/
 env/
-*.pkl       # ละเว้นไฟล์ความจำใบหน้า
+*.pkl
 *.dat
-*.pth       # ละเว้นไฟล์โมเดล AI (ขนาดใหญ่)
+*.pth
+
+# --- Runtime and biometric data (never commit) ---
+backend/runtime/
+backend/uploads/
+gatekeeper/runtime/
+gatekeeper/known_faces/
+gatekeeper/embeddings_cache.pkl
 
 # --- Secrets & Configs ---
 .env

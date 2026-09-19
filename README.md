@@ -182,6 +182,27 @@ py -3.11 provision_device.py `
 `%LOCALAPPDATA%\SmartLabAgent\device_registration.json` จากนั้นให้ปิดแล้วเปิด Agent ใหม่
 รหัสลงทะเบียนใช้ได้ครั้งเดียวและผูกกับ Lab ที่ Admin เลือกเท่านั้น ไม่ควรส่งรหัสนี้ให้ผู้ใช้ทั่วไป
 
+หากไม่ต้องการเปิดเว็บไซต์ ให้เปิดโปรแกรม `lab_setup.pyw` บนเครื่องเป้าหมายแทน
+(ดับเบิลคลิกไฟล์ได้เลย) หรือรันจาก source:
+
+```powershell
+cd smart-lab-agent
+py -3.11 lab_setup.py
+```
+
+โปรแกรมจะให้ Admin Login, เลือก Lab ที่มีสถานะ `active` และลงทะเบียนเครื่องให้อัตโนมัติ
+โดยใช้ API เดิมของระบบ รหัสผ่านและ Access Token จะอยู่ในหน่วยความจำเท่านั้น ไม่ถูกบันทึกลงเครื่อง
+ส่วน Device Token จะถูกบันทึกไว้ที่ `%LOCALAPPDATA%\SmartLabAgent\device_registration.json`
+จากนั้นให้ปิดแล้วเปิด Agent ใหม่ก่อนเริ่มใช้งาน
+
+โปรแกรมใช้ PyQt6 ที่มีอยู่ใน Agent และมีโหมดหน้าจอคำสั่งสำรองกรณีเครื่องยังไม่มี PyQt6:
+
+```powershell
+py -3.11 lab_setup.py `
+  --api-url http://127.0.0.1:8000 `
+  --cli
+```
+
 ### รันจาก source เพื่อดู log
 
 ```powershell

@@ -8,7 +8,13 @@ from PIL import Image
 import models, schemas
 from database import get_db
 from face_service import get_deepface
-from utils import send_otp_mail, create_access_token, pwd_context, UPLOAD_DIR
+from utils import (
+    send_otp_mail,
+    create_access_token,
+    pwd_context,
+    UPLOAD_DIR,
+    PROFILE_URL_PREFIX,
+)
 
 router = APIRouter(tags=["Authentication"])
 MAX_FACE_IMAGE_BYTES = 5 * 1024 * 1024
@@ -79,7 +85,8 @@ async def register(
         image = Image.open(io.BytesIO(image_data)).convert("RGB")
         image.thumbnail((200, 200))
         safe_email = email.replace("@", "_").replace(".", "_")
-        file_path = f"{UPLOAD_DIR}/{safe_email}.jpg"
+        file_path = os.path.join(UPLOAD_DIR, f"{safe_email}.jpg")
+        profile_url = f"{PROFILE_URL_PREFIX}/{safe_email}.jpg"
         image.save(file_path, "JPEG", quality=85)
     except HTTPException:
         raise
@@ -111,7 +118,7 @@ async def register(
             password=hashed_password,
             first_name=first_name,
             last_name=last_name,
-            profile_pic=file_path,
+            profile_pic=profile_url,
             face_embedding=face_embedding_vector,
         )
         db.add(new_user)

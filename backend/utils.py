@@ -1,6 +1,7 @@
 import os
 import httpx
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional, Dict, Any
 from jose import jwt
 from passlib.context import CryptContext
@@ -8,8 +9,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-UPLOAD_DIR = "uploads/profiles"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Keep uploaded biometric data outside the source tree while preserving the
+# public URL prefix stored in the database (uploads/profiles/<file>).  A
+# deployment can override the physical storage location with an absolute
+# SMART_LAB_UPLOAD_DIR path.
+BACKEND_DIR = Path(__file__).resolve().parent
+configured_upload_root = Path(
+    os.getenv("SMART_LAB_UPLOAD_DIR") or "runtime/uploads"
+).expanduser()
+UPLOAD_ROOT = (
+    configured_upload_root
+    if configured_upload_root.is_absolute()
+    else BACKEND_DIR / configured_upload_root
+)
+UPLOAD_DIR = str(UPLOAD_ROOT / "profiles")
+PROFILE_URL_PREFIX = "uploads/profiles"
+UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
