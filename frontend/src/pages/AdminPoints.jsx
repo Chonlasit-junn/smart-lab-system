@@ -30,28 +30,23 @@ import {
   CheckCircle,
   Close,
   Computer,
-  ConfirmationNumber,
-  Dashboard as DashIcon,
   Group,
-  HowToReg,
   Lock,
   Logout,
-  ManageAccounts,
-  MeetingRoom,
   Notifications,
   Person,
   Refresh,
   RemoveCircleOutline,
   Restore,
   Search,
-  Settings,
   Visibility,
   WarningAmber,
 } from "@mui/icons-material";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import AdminUserDetailsDialog from "../components/AdminUserDetailsDialog";
+import AdminNavigation from "../components/AdminNavigation";
 import { useLanguage } from "../context/language-context.js";
 import {
   buildTestPointEndpoint,
@@ -60,54 +55,6 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL;
 const DEFAULT_WARNING_THRESHOLD = 20;
-
-const SIDE_MENU_ITEMS = [
-  {
-    key: "dashboard",
-    icon: <DashIcon sx={{ fontSize: 20 }} />,
-    path: "/admin",
-  },
-  {
-    key: "manageLabs",
-    icon: <MeetingRoom sx={{ fontSize: 20 }} />,
-    path: "/manage-labs",
-  },
-  {
-    key: "labDevices",
-    icon: <Computer sx={{ fontSize: 20 }} />,
-    path: "/admin/devices",
-  },
-  {
-    key: "verifyUsers",
-    icon: <HowToReg sx={{ fontSize: 20 }} />,
-    path: "/verify-users",
-  },
-  {
-    key: "userPoints",
-    icon: <Assessment sx={{ fontSize: 20 }} />,
-    path: "/admin/points",
-  },
-  {
-    key: "pointCriteria",
-    icon: <Settings sx={{ fontSize: 20 }} />,
-    path: "/admin/points/policy",
-  },
-  {
-    key: "roleManagement",
-    icon: <ManageAccounts sx={{ fontSize: 20 }} />,
-    path: "/admin/roles",
-  },
-  {
-    key: "blacklist",
-    icon: <Block sx={{ fontSize: 20 }} />,
-    path: "/blacklist",
-  },
-  {
-    key: "ticket",
-    icon: <ConfirmationNumber sx={{ fontSize: 20 }} />,
-    path: "/ticket",
-  },
-];
 
 const EMPTY_SUMMARY = {
   total_users: 0,
@@ -197,7 +144,6 @@ const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
 
 export default function AdminPoints() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { logout } = useAuth();
   const { t } = useLanguage();
 
@@ -489,7 +435,7 @@ export default function AdminPoints() {
         display: "flex",
         minHeight: "100vh",
         bgcolor: "var(--bg-color)",
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "var(--font-family-ui)",
       }}
     >
       <Box
@@ -542,41 +488,7 @@ export default function AdminPoints() {
           </Box>
         </Box>
 
-        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
-          {SIDE_MENU_ITEMS.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Button
-                key={item.key}
-                className={isActive ? "active" : ""}
-                fullWidth
-                onClick={() => navigate(item.path)}
-                startIcon={item.icon}
-                sx={{
-                  justifyContent: "flex-start",
-                  py: 1,
-                  px: 2.5,
-                  mb: 0.5,
-                  bgcolor: isActive ? "var(--card-bg)" : "transparent",
-                  color: isActive ? "var(--brand-color)" : "var(--text-muted)",
-                  fontWeight: isActive ? "700" : "600",
-                  fontSize: "var(--sidebar-font-size)",
-                  boxShadow: isActive ? "0 10px 25px rgba(0,0,0,0.03)" : "none",
-                  borderRadius: "var(--sidebar-active-radius)",
-                  textTransform: "none",
-                  transition: "0.3s",
-                  "&:hover": {
-                    bgcolor: isActive ? "var(--card-bg)" : "var(--brand-soft)",
-                    color: "var(--brand-color)",
-                    transform: "translateX(5px)",
-                  },
-                }}
-              >
-                {t(`admin.${item.key}`)}
-              </Button>
-            );
-          })}
-        </Box>
+        <AdminNavigation />
       </Box>
 
       <Box
@@ -921,8 +833,6 @@ export default function AdminPoints() {
                   minWidth: 240,
                   display: "flex",
                   alignItems: "center",
-                  bgcolor: "var(--surface-subtle)",
-                  borderRadius: 3,
                   px: 1.5,
                   py: 0.5,
                 }}
@@ -937,7 +847,7 @@ export default function AdminPoints() {
                   inputProps={{ "aria-label": t("admin.searchUsers") }}
                 />
               </Box>
-              <FormControl size="small" sx={{ minWidth: 170 }}>
+              <FormControl className="admin-filter-control" size="small" sx={{ minWidth: 170 }}>
                 <InputLabel id="points-filter-label">{t("admin.pointFilter")}</InputLabel>
                 <Select
                   labelId="points-filter-label"
@@ -951,7 +861,7 @@ export default function AdminPoints() {
                   <MenuItem value="allowed">{t("admin.bookingAllowed")}</MenuItem>
                 </Select>
               </FormControl>
-              <FormControl size="small" sx={{ minWidth: 170 }}>
+              <FormControl className="admin-filter-control" size="small" sx={{ minWidth: 170 }}>
                 <InputLabel id="points-sort-label">{t("admin.pointSort")}</InputLabel>
                 <Select
                   labelId="points-sort-label"

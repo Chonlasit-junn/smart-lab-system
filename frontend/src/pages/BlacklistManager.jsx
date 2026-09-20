@@ -26,84 +26,30 @@ import {
 import {
   Search,
   Notifications,
-  ConfirmationNumber,
   Logout,
-  ManageAccounts,
   Computer,
   Person,
-  Dashboard as DashIcon,
-  MeetingRoom,
   Add,
   Save,
   Delete,
   Edit,
-  HowToReg,
-  Assessment,
   Block,
   Settings,
   Close,
 } from "@mui/icons-material";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-const SIDE_MENU_ITEMS = [
-  {
-    key: "dashboard",
-    icon: <DashIcon sx={{ fontSize: 20 }} />,
-    path: "/admin",
-  },
-  {
-    key: "manageLabs",
-    icon: <MeetingRoom sx={{ fontSize: 20 }} />,
-    path: "/manage-labs",
-  },
-  {
-    key: "labDevices",
-    icon: <Computer sx={{ fontSize: 20 }} />,
-    path: "/admin/devices",
-  },
-  {
-    key: "verifyUsers",
-    icon: <HowToReg sx={{ fontSize: 20 }} />,
-    path: "/verify-users",
-  },
-  {
-    key: "userPoints",
-    icon: <Assessment sx={{ fontSize: 20 }} />,
-    path: "/admin/points",
-  },
-  {
-    key: "pointCriteria",
-    icon: <Settings sx={{ fontSize: 20 }} />,
-    path: "/admin/points/policy",
-  },
-  {
-    key: "roleManagement",
-    icon: <ManageAccounts sx={{ fontSize: 20 }} />,
-    path: "/admin/roles",
-  },
-  {
-    key: "blacklist",
-    icon: <Block sx={{ fontSize: 20 }} />,
-    path: "/blacklist",
-  },
-  {
-    key: "ticket",
-    icon: <ConfirmationNumber sx={{ fontSize: 20 }} />,
-    path: "/ticket",
-  },
-];
-
 const EMPTY_FORM = { app_name: "", description: "" };
 
 export default function BlacklistManager() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { logout } = useAuth();
   const { t } = useLanguage();
 
@@ -198,7 +144,7 @@ export default function BlacklistManager() {
 
   const filtered = blacklist.filter(
     (item) =>
-      item.app_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.app_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.description || "")
         .toLowerCase()
         .includes(searchQuery.toLowerCase()),
@@ -214,7 +160,7 @@ export default function BlacklistManager() {
         display: "flex",
         minHeight: "100vh",
         bgcolor: "#fcfdfe",
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "var(--font-family-ui)",
       }}
     >
       {/* SIDEBAR */}
@@ -267,41 +213,7 @@ export default function BlacklistManager() {
           </Box>
         </Box>
 
-        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
-          {SIDE_MENU_ITEMS.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Button
-                key={item.key}
-                className={isActive ? "active" : ""}
-                fullWidth
-                onClick={() => navigate(item.path)}
-                startIcon={item.icon}
-                sx={{
-                  justifyContent: "flex-start",
-                  py: 1,
-                  px: 2.5,
-                  mb: 0.5,
-                  bgcolor: isActive ? "white" : "transparent",
-                  color: isActive ? "#3b82f6" : "#94a3b8",
-                  fontWeight: isActive ? "700" : "600",
-                  fontSize: "var(--sidebar-font-size)",
-                  boxShadow: isActive ? "0 10px 25px rgba(0,0,0,0.03)" : "none",
-                  borderRadius: "var(--sidebar-active-radius)",
-                  textTransform: "none",
-                  transition: "0.3s",
-                  "&:hover": {
-                    bgcolor: isActive ? "white" : "transparent",
-                    color: isActive ? "#3b82f6" : "#64748b",
-                    transform: "translateX(5px)",
-                  },
-                }}
-              >
-                {t(`admin.${item.key}`)}
-              </Button>
-            );
-          })}
-        </Box>
+        <AdminNavigation />
       </Box>
 
       {/* MAIN AREA */}
@@ -323,7 +235,7 @@ export default function BlacklistManager() {
             justifyContent: "space-between",
             px: 6,
             py: 1,
-            bgcolor: "white",
+                bgcolor: "var(--surface-elevated)",
             borderBottom: "1px solid #e2e8f0",
             zIndex: 5,
           }}
@@ -337,19 +249,18 @@ export default function BlacklistManager() {
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Paper
+              className="admin-search-control"
               elevation={0}
               sx={{
-                bgcolor: "#f1f5f9",
                 px: 2,
                 py: 0.5,
-                borderRadius: 4,
                 display: "flex",
                 alignItems: "center",
                 width: 400,
                 height: 44,
               }}
             >
-              <Search sx={{ color: "#94a3b8", mr: 1.5 }} />
+              <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
               <InputBase
                 placeholder={t("admin.searchLabs")}
                 fullWidth
@@ -554,7 +465,7 @@ export default function BlacklistManager() {
                 }}
               >
                 <Typography variant="h6" fontWeight="700" color="#64748b">
-                  {blacklist.length} {t("admin.blockedProgramHeading")}
+                  {blacklist.length} {t("admin.programsBlocked")}
                 </Typography>
                 <Button
                   variant="contained"
@@ -655,11 +566,12 @@ export default function BlacklistManager() {
                         </TableRow>
                       ) : (
                         filtered.map((item, index) => (
-                          <TableRow
-                            key={item.id}
-                            sx={{
-                              "& td": { borderBottom: "1px solid #f1f5f9" },
-                              "&:hover": { bgcolor: "#fafafa" },
+                      <TableRow
+                        key={item.id}
+                        sx={{
+                          backgroundColor: "var(--card-bg)",
+                          "& td": { borderBottom: "1px solid var(--border-light)" },
+                          "&:hover": { backgroundColor: "var(--surface-subtle)" },
                             }}
                           >
                             {/* Index */}
@@ -700,7 +612,7 @@ export default function BlacklistManager() {
                                     fontWeight="800"
                                     color="#1e293b"
                                   >
-                                    {item.app_name}
+                                    {item.app_name || t("admin.unknownProgram")}
                                   </Typography>
                                   <Chip
                                     label={t("common.inactive")}
@@ -831,10 +743,6 @@ export default function BlacklistManager() {
               setFormData({ ...formData, app_name: e.target.value });
               setFormError("");
             }}
-            disabled={isEditing} // app_name is the unique key — edit description only
-            helperText={
-                isEditing ? t("admin.programName") : ""
-            }
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           <TextField

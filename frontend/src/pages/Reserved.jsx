@@ -460,9 +460,10 @@ export default function Reserved() {
                 p: { xs: 2, sm: 4 },
                 border: "1px solid #e2e8f0",
                 borderRadius: 4,
+                width: "min(100%, 900px)",
                 maxWidth: "900px",
                 mx: "auto",
-                bgcolor: "white",
+                bgcolor: "var(--card-bg)",
                 boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
               }}
             >
@@ -591,10 +592,11 @@ export default function Reserved() {
                 </TableContainer>
               ) : (
                 <Box
+                  className="reservation-empty-state"
                   sx={{
                     py: 6,
                     textAlign: "center",
-                    bgcolor: "#f8fafc",
+                    bgcolor: "var(--surface-subtle)",
                     borderRadius: 3,
                   }}
                 >

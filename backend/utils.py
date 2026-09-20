@@ -42,6 +42,13 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "smartlab@example.com") # ใช้อีเมลที่สมัคร Brevo
 
+
+def normalize_email(value: Any) -> str:
+    """Use one canonical form for email comparisons across the API."""
+
+    return str(value or "").strip().casefold()
+
+
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))

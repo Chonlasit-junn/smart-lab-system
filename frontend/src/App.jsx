@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/auth-context';
 import { ThemeProvider as AppThemeProvider } from './context/theme-context.jsx';
 import { useTheme } from './context/theme-context.js';
+import { useLanguage } from './context/language-context.js';
 import ThemeToggle from './components/ThemeToggle';
 import { LanguageProvider } from './context/language-context.jsx';
 import LanguageToggle from './components/LanguageToggle';
@@ -39,7 +40,29 @@ function AdminRoute({ children }) {
 
 function AppContent() {
   const { mode } = useTheme();
-  const muiTheme = useMemo(() => createTheme({
+  const { language } = useLanguage();
+  const muiFontFamily = language === "th"
+    ? '"Noto Sans Thai", "Ruwudu", sans-serif'
+    : '"Ruwudu", sans-serif';
+  const muiTheme = useMemo(() => {
+    const typographySize = (value) => language === "en" ? `calc(${value} + 1px)` : value;
+    const muiTypography = {
+      fontFamily: muiFontFamily,
+      h1: { fontSize: typographySize("6rem"), fontWeight: 700, lineHeight: 1.15 },
+      h2: { fontSize: typographySize("3.75rem"), fontWeight: 700, lineHeight: 1.18 },
+      h3: { fontSize: typographySize("3rem"), fontWeight: 700, lineHeight: 1.2 },
+      h4: { fontSize: typographySize("2.125rem"), fontWeight: 700, lineHeight: 1.22 },
+      h5: { fontSize: typographySize("1.5rem"), fontWeight: 700, lineHeight: 1.28 },
+      h6: { fontSize: typographySize("1.25rem"), fontWeight: 600, lineHeight: 1.35 },
+      subtitle1: { fontSize: typographySize("1rem"), fontWeight: 500, lineHeight: 1.45 },
+      subtitle2: { fontSize: typographySize("0.875rem"), fontWeight: 500, lineHeight: 1.4 },
+      body1: { fontSize: typographySize("1rem"), fontWeight: 400, lineHeight: 1.5 },
+      body2: { fontSize: typographySize("0.875rem"), fontWeight: 400, lineHeight: 1.45 },
+      button: { fontSize: typographySize("0.875rem"), fontWeight: 600, lineHeight: 1.3, textTransform: "none" },
+      caption: { fontSize: typographySize("0.75rem"), fontWeight: 400, lineHeight: 1.35 },
+      overline: { fontSize: typographySize("0.75rem"), fontWeight: 700, lineHeight: 1.35, letterSpacing: "0.08em" },
+    };
+    return createTheme({
     palette: {
       mode,
       primary: {
@@ -56,11 +79,63 @@ function AppContent() {
       },
       divider: mode === "dark" ? "#3A4758" : "#D8DDD8",
     },
+    typography: muiTypography,
     shape: { borderRadius: 12 },
     components: {
       MuiButton: {
         styleOverrides: {
-          root: { borderRadius: "var(--radius-control)" },
+          root: {
+            borderRadius: "var(--radius-control)",
+            fontFamily: muiFontFamily,
+            lineHeight: 1.3,
+            textTransform: "none",
+          },
+          startIcon: { lineHeight: 0 },
+          endIcon: { lineHeight: 0 },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: { borderRadius: "var(--radius-pill)", fontFamily: muiFontFamily },
+          label: { fontSize: typographySize("0.8125rem"), lineHeight: 1.2 },
+          icon: { marginLeft: 6, marginRight: -4 },
+        },
+      },
+      MuiInputBase: {
+        styleOverrides: {
+          root: { fontFamily: muiFontFamily, fontSize: typographySize("1rem") },
+          input: { fontFamily: muiFontFamily, fontSize: typographySize("1rem"), lineHeight: 1.4 },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: { fontFamily: muiFontFamily, lineHeight: 1.25 },
+        },
+      },
+      MuiFormHelperText: {
+        styleOverrides: {
+          root: { fontFamily: muiFontFamily, lineHeight: 1.35 },
+        },
+      },
+      MuiMenuItem: {
+        styleOverrides: {
+          root: { fontFamily: muiFontFamily, lineHeight: 1.35 },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          root: { fontFamily: muiFontFamily, lineHeight: 1.4 },
+        },
+      },
+      MuiAlert: {
+        styleOverrides: {
+          root: { borderRadius: "var(--radius-control)", fontFamily: muiFontFamily },
+          message: { lineHeight: 1.4 },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: { fontFamily: muiFontFamily, lineHeight: 1.3, textTransform: "none" },
         },
       },
       MuiOutlinedInput: {
@@ -93,18 +168,9 @@ function AppContent() {
           paper: { borderRadius: "var(--radius-modal)" },
         },
       },
-      MuiAlert: {
-        styleOverrides: {
-          root: { borderRadius: "var(--radius-control)" },
-        },
-      },
-      MuiChip: {
-        styleOverrides: {
-          root: { borderRadius: "var(--radius-pill)" },
-        },
-      },
     },
-  }), [mode]);
+    });
+  }, [mode, language, muiFontFamily]);
 
   return (
     <MuiThemeProvider theme={muiTheme}>

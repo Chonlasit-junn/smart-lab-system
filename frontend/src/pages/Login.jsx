@@ -60,7 +60,7 @@ export default function Login() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.append('username', email);
+      params.append('username', email.trim().toLowerCase());
       params.append('password', password);
 
       const response = await axios.post(`${API_URL}/login`, params, {
@@ -91,6 +91,11 @@ export default function Login() {
     }
   };
 
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!loading) handleLogin();
+  };
+
   return (
     <div className="login-wrapper" style={{ position: 'relative' }}>
 
@@ -109,7 +114,7 @@ export default function Login() {
 
         {/* ฝั่งขวา: ฟอร์ม login */}
         <div className="login-form-section">
-          <div className="login-form-content">
+          <form className="login-form-content" onSubmit={handleSubmit}>
             <h2 className="login-title">{t.pageTitle}</h2>
 
             {apiError && (
@@ -145,7 +150,11 @@ export default function Login() {
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                    <IconButton
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
@@ -155,9 +164,9 @@ export default function Login() {
             />
 
             <Button
+              type="submit"
               fullWidth
               variant="contained"
-              onClick={handleLogin}
               disabled={loading}
               sx={{
                 height: '48px', fontSize: '1.1rem', fontWeight: 'bold',
@@ -180,6 +189,7 @@ export default function Login() {
             <Divider sx={{ mb: 3 }} />
 
             <Button
+              type="button"
               fullWidth
               variant="outlined"
               onClick={() => navigate('/register')}
@@ -192,7 +202,7 @@ export default function Login() {
             >
               {t.createAccount}
             </Button>
-          </div>
+          </form>
         </div>
 
       </div>

@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from jose import jwt, JWTError
 import os
 import models
 from database import get_db
+from profile_storage import get_profile_image_url
+from utils import normalize_email
 
 router = APIRouter(tags=["Users"])
 
@@ -21,7 +24,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")
-    user = db.query(models.User).filter(models.User.email == email).first()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == normalize_email(email),
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     return user
@@ -61,7 +66,7 @@ def get_all_users(
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "email": user.email,
-                "profile_pic": user.profile_pic,
+                "profile_pic": get_profile_image_url(user.profile_pic),
                 "created_at": user.created_at,
             }
             for user in users
@@ -92,7 +97,7 @@ def get_my_profile(current_user: models.User = Depends(get_current_user), db: Se
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
         "email": current_user.email,
-        "profile_pic": current_user.profile_pic,
+        "profile_pic": get_profile_image_url(current_user.profile_pic),
         "role": role,
         "created_at": current_user.created_at,
         "stats": {"total_bookings": total_bookings},

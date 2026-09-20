@@ -12,6 +12,7 @@ from database import get_db
 from device_registry import require_registered_device
 from policy import build_policy, find_matching_rule, get_policy_rules
 from routers.points import apply_point_event, mark_due_no_shows
+from utils import normalize_email
 
 router = APIRouter(tags=["Hardware Agent"])
 
@@ -135,7 +136,10 @@ def start_session(
     client_session_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
-    user = db.query(models.User).filter(models.User.email == email).first()
+    normalized_email = normalize_email(email)
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == normalized_email,
+    ).first()
     if not user:
         raise HTTPException(status_code=404, detail="Invalid credentials.")
 

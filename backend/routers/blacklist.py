@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -18,6 +19,7 @@ class BlacklistCreate(BaseModel):
     enabled: bool = True
 
 class BlacklistUpdate(BaseModel):
+    app_name: Optional[str] = None
     description: Optional[str] = None
     match_type: Optional[str] = None
     match_value: Optional[str] = None
@@ -89,6 +91,22 @@ def update(
     app = db.query(models.BlacklistedApp).filter(models.BlacklistedApp.id == app_id).first()
     if not app:
         raise HTTPException(status_code=404, detail="App not found.")
+
+    if payload.app_name is not None:
+        app_name = payload.app_name.strip()
+        if not app_name:
+            raise HTTPException(status_code=422, detail="app_name cannot be empty.")
+
+        duplicate = db.query(models.BlacklistedApp).filter(
+            models.BlacklistedApp.id != app.id,
+            func.lower(models.BlacklistedApp.app_name) == app_name.casefold(),
+        ).first()
+        if duplicate:
+            raise HTTPException(
+                status_code=400,
+                detail=f'"{app_name}" is already blacklisted.',
+            )
+        app.app_name = app_name
 
     if payload.description is not None:
         app.description = payload.description

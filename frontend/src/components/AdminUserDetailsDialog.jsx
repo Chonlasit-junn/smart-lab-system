@@ -53,7 +53,9 @@ const stringToColor = (value) => {
 };
 
 const getProfileImage = (profilePic) => {
-  if (!profilePic || !API_URL) return "";
+  if (!profilePic) return "";
+  if (/^https?:\/\//i.test(profilePic)) return profilePic;
+  if (!API_URL) return profilePic;
   return `${API_URL}/${profilePic.replace(/^\/+/, "")}`;
 };
 

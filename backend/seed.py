@@ -23,10 +23,7 @@ DEFAULT_LABS = [
     }
 ]
 
-TEST_STUDENT_EMAIL = os.getenv("SEED_TEST_STUDENT_EMAIL", "student.test@bumail.net")
-TEST_STUDENT_ID = os.getenv("SEED_TEST_STUDENT_ID", "TEST0001")
 ADMIN_PASSWORD = os.getenv("SEED_ADMIN_PASSWORD")
-TEST_STUDENT_PASSWORD = os.getenv("SEED_TEST_STUDENT_PASSWORD")
 
 DEFAULT_BLACKLIST = [
     {
@@ -105,55 +102,12 @@ def seed_users(db: Session) -> None:
     if admin_role and admin_role not in admin_user.roles:
         admin_user.roles.append(admin_role)
 
-    student_role = db.query(models.Role).filter(models.Role.name == "student").first()
-    test_student = db.query(models.User).filter(
-        models.User.email == TEST_STUDENT_EMAIL
+    points_record = db.query(models.UserPoints).filter(
+        models.UserPoints.user_id == admin_user.id,
     ).first()
-    if not test_student:
-        if not TEST_STUDENT_PASSWORD:
-            raise ValueError(
-                "SEED_TEST_STUDENT_PASSWORD is required to create the test student."
-            )
-        test_student = models.User(
-            first_name="Test",
-            last_name="Student",
-            email=TEST_STUDENT_EMAIL,
-            password=pwd_context.hash(TEST_STUDENT_PASSWORD),
-        )
-        db.add(test_student)
-        db.flush()
-        print(f"  + test student: {TEST_STUDENT_EMAIL}")
-
-    if student_role and student_role not in test_student.roles:
-        test_student.roles.append(student_role)
-
-    student_record = db.query(models.Student).filter(
-        models.Student.user_id == test_student.id
-    ).first()
-    if not student_record:
-        existing_student_id = db.query(models.Student).filter(
-            models.Student.student_id == TEST_STUDENT_ID
-        ).first()
-        if existing_student_id and existing_student_id.user_id != test_student.id:
-            raise ValueError(
-                f"Student ID {TEST_STUDENT_ID} belongs to another user."
-            )
-        db.add(models.Student(
-            student_id=TEST_STUDENT_ID,
-            user_id=test_student.id,
-            faculty="Test Faculty",
-            department="Test Department",
-            is_active=True,
-        ))
-        print(f"  + student record: {TEST_STUDENT_ID}")
-
-    for seeded_user in (admin_user, test_student):
-        points_record = db.query(models.UserPoints).filter(
-            models.UserPoints.user_id == seeded_user.id,
-        ).first()
-        if not points_record:
-            db.add(models.UserPoints(user_id=seeded_user.id, points=100))
-            print(f"  + initial points: {seeded_user.email}")
+    if not points_record:
+        db.add(models.UserPoints(user_id=admin_user.id, points=100))
+        print(f"  + initial points: {admin_user.email}")
 
 
 def seed_data() -> None:

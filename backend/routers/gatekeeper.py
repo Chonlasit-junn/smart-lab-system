@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 import models
 from database import get_db
 from face_service import FACE_MODEL_NAME, get_deepface
+from sqlalchemy import func
+from utils import normalize_email
 
 router = APIRouter(tags=["Gatekeeper"])
 MAX_FACE_IMAGE_BYTES = 5 * 1024 * 1024
@@ -151,7 +153,9 @@ def record_scan(data: ScanData, db: Session = Depends(get_db)):
     if not data.is_real:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Spoofing detected.")
 
-    user = db.query(models.User).filter(models.User.email == data.email).first()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == normalize_email(data.email),
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Access denied: User not found.")
 

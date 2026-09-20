@@ -41,6 +41,13 @@ import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+const getProfileImageUrl = (profilePic) => {
+  if (!profilePic) return undefined;
+  if (/^https?:\/\//i.test(profilePic)) return profilePic;
+  if (!API_URL) return profilePic;
+  return `${API_URL}/${String(profilePic).replace(/^\/+/, "")}`;
+};
+
 const FACULTY_NAMES = {
   business: "School of Business Administration",
   communication: "School of Communication Arts",
@@ -572,11 +579,7 @@ export default function Profile() {
                         sx={{ px: 3, pb: 3, mt: "-48px", textAlign: "center" }}
                       >
                         <Avatar
-                          src={
-                            profile.profile_pic
-                              ? `${API_URL}/${profile.profile_pic}`
-                              : undefined
-                          }
+                          src={getProfileImageUrl(profile.profile_pic)}
                           sx={{
                             width: 96,
                             height: 96,

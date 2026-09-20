@@ -21,78 +21,24 @@ import {
 import {
   Search,
   Notifications,
-  Dashboard as DashIcon,
-  ConfirmationNumber,
   Logout,
-  ManageAccounts,
   Person,
   Group,
   Computer,
-  MeetingRoom,
   PendingActions,
   SupportAgent,
-  HowToReg,
-  Assessment,
-  Block,
   Settings,
   Close,
   CameraAlt,
 } from "@mui/icons-material";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import AdminNavigation from "../components/AdminNavigation";
 import { useLanguage } from "../context/language-context.js";
 import { authConfig } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL;
-
-const SIDE_MENU_ITEMS = [
-  {
-    key: "dashboard",
-    icon: <DashIcon sx={{ fontSize: 20 }} />,
-    path: "/admin",
-  },
-  {
-    key: "manageLabs",
-    icon: <MeetingRoom sx={{ fontSize: 20 }} />,
-    path: "/manage-labs",
-  },
-  {
-    key: "labDevices",
-    icon: <Computer sx={{ fontSize: 20 }} />,
-    path: "/admin/devices",
-  },
-  {
-    key: "verifyUsers",
-    icon: <HowToReg sx={{ fontSize: 20 }} />,
-    path: "/verify-users",
-  },
-  {
-    key: "userPoints",
-    icon: <Assessment sx={{ fontSize: 20 }} />,
-    path: "/admin/points",
-  },
-  {
-    key: "pointCriteria",
-    icon: <Settings sx={{ fontSize: 20 }} />,
-    path: "/admin/points/policy",
-  },
-  {
-    key: "roleManagement",
-    icon: <ManageAccounts sx={{ fontSize: 20 }} />,
-    path: "/admin/roles",
-  },
-  {
-    key: "blacklist",
-    icon: <Block sx={{ fontSize: 20 }} />,
-    path: "/blacklist",
-  },
-  {
-    key: "ticket",
-    icon: <ConfirmationNumber sx={{ fontSize: 20 }} />,
-    path: "/ticket",
-  },
-];
 
 // generates a consistent hex color from any string — used for avatar backgrounds
 const stringToColor = (string) => {
@@ -108,7 +54,6 @@ const stringToColor = (string) => {
 
 export default function Admin() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { logout } = useAuth();
   const { t } = useLanguage();
 
@@ -197,7 +142,7 @@ export default function Admin() {
         display: "flex",
         minHeight: "100vh",
         bgcolor: "#fcfdfe",
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "var(--font-family-ui)",
       }}
     >
       {/* sidebar */}
@@ -250,41 +195,7 @@ export default function Admin() {
           </Box>
         </Box>
 
-        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
-          {SIDE_MENU_ITEMS.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Button
-                key={item.key}
-                className={isActive ? "active" : ""}
-                fullWidth
-                onClick={() => navigate(item.path)}
-                startIcon={item.icon}
-                sx={{
-                  justifyContent: "flex-start",
-                  py: 1,
-                  px: 2.5,
-                  mb: 0.5,
-                  bgcolor: isActive ? "white" : "transparent",
-                  color: isActive ? "#3b82f6" : "#94a3b8",
-                  fontWeight: isActive ? "700" : "600",
-                  fontSize: "var(--sidebar-font-size)",
-                  boxShadow: isActive ? "0 10px 25px rgba(0,0,0,0.03)" : "none",
-                  borderRadius: "var(--sidebar-active-radius)",
-                  textTransform: "none",
-                  transition: "0.3s",
-                  "&:hover": {
-                    bgcolor: isActive ? "white" : "transparent",
-                    color: "#3b82f6",
-                    transform: "translateX(5px)",
-                  },
-                }}
-              >
-                {t(`admin.${item.key}`)}
-              </Button>
-            );
-          })}
-        </Box>
+        <AdminNavigation />
       </Box>
 
       {/* main content */}
@@ -320,19 +231,18 @@ export default function Admin() {
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Paper
+              className="admin-search-control"
               elevation={0}
               sx={{
-                bgcolor: "#f1f5f9",
                 px: 2,
                 py: 0.5,
-                borderRadius: 4,
                 display: "flex",
                 alignItems: "center",
                 width: 400,
                 height: 44,
               }}
             >
-              <Search sx={{ color: "#94a3b8", mr: 1.5 }} />
+              <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
               <InputBase placeholder={t("common.search")} fullWidth />
             </Paper>
             <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
@@ -621,7 +531,7 @@ export default function Admin() {
                                   borderBottom: "1px solid #e2e8f0",
                                 }}
                               >
-                                {h}
+                                <span className="font-baseline-text">{h}</span>
                               </TableCell>
                             ))}
                           </TableRow>
@@ -675,17 +585,21 @@ export default function Admin() {
                                   <TableCell
                                     sx={{ color: "#475569", fontWeight: "600" }}
                                   >
-                                    {labCode}
+                                    <span className="font-baseline-text">{labCode}</span>
                                   </TableCell>
                                   <TableCell
                                     sx={{ color: "#475569", fontWeight: "600" }}
                                   >
-                                    {row.booking_date || "-"}
+                                    <span className="font-baseline-text">
+                                      {row.booking_date || "-"}
+                                    </span>
                                   </TableCell>
                                   <TableCell
                                     sx={{ color: "#475569", fontWeight: "600" }}
                                   >
-                                    {row.start_time || "-"}
+                                    <span className="font-baseline-text">
+                                      {row.start_time || "-"}
+                                    </span>
                                   </TableCell>
                                 </TableRow>
                               );
@@ -697,7 +611,9 @@ export default function Admin() {
                                 align="center"
                                 sx={{ py: 4, color: "#94a3b8" }}
                               >
-                                {t("admin.noRecentReservations")}
+                                <span className="font-baseline-text">
+                                  {t("admin.noRecentReservations")}
+                                </span>
                               </TableCell>
                             </TableRow>
                           )}

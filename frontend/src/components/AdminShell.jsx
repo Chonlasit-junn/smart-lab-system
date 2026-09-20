@@ -1,14 +1,7 @@
 import { useState } from "react";
 import {
-  Assessment,
-  Block,
   Computer,
-  ConfirmationNumber,
-  Dashboard,
-  HowToReg,
   Logout,
-  ManageAccounts,
-  MeetingRoom,
   Menu as MenuIcon,
   Notifications,
   Person,
@@ -23,25 +16,13 @@ import {
   Popover,
   Typography,
 } from "@mui/material";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
-
-const ADMIN_MENU_ITEMS = [
-  { key: "dashboard", icon: <Dashboard sx={{ fontSize: 20 }} />, path: "/admin" },
-  { key: "manageLabs", icon: <MeetingRoom sx={{ fontSize: 20 }} />, path: "/manage-labs" },
-  { key: "labDevices", icon: <Computer sx={{ fontSize: 20 }} />, path: "/admin/devices" },
-  { key: "verifyUsers", icon: <HowToReg sx={{ fontSize: 20 }} />, path: "/verify-users" },
-  { key: "userPoints", icon: <Assessment sx={{ fontSize: 20 }} />, path: "/admin/points" },
-  { key: "pointCriteria", icon: <Settings sx={{ fontSize: 20 }} />, path: "/admin/points/policy" },
-  { key: "roleManagement", icon: <ManageAccounts sx={{ fontSize: 20 }} />, path: "/admin/roles" },
-  { key: "blacklist", icon: <Block sx={{ fontSize: 20 }} />, path: "/blacklist" },
-  { key: "ticket", icon: <ConfirmationNumber sx={{ fontSize: 20 }} />, path: "/ticket" },
-];
+import AdminNavigation from "./AdminNavigation";
 
 export default function AdminShell({ title, children }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -84,22 +65,7 @@ export default function AdminShell({ title, children }) {
           </Box>
         </Box>
 
-        <Box className="sidebar-menu">
-          {ADMIN_MENU_ITEMS.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Button
-                key={item.path}
-                fullWidth
-                onClick={() => handleNavigate(item.path)}
-                startIcon={item.icon}
-                className={isActive ? "active" : ""}
-              >
-                {t(`admin.${item.key}`)}
-              </Button>
-            );
-          })}
-        </Box>
+        <AdminNavigation onNavigate={() => setIsSidebarOpen(false)} />
       </Box>
 
       <Box className="main-area admin-main-area">

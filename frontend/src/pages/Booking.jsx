@@ -77,6 +77,14 @@ const POINT_REASON_LABELS = {
   admin_grant: "Admin อนุมัติเพิ่มคะแนน",
 };
 
+// Admin point actions stay available in the Profile audit history, but do not
+// appear in the User notification bell.
+const HIDDEN_POINT_NOTIFICATION_REASONS = new Set([
+  "admin_grant",
+  "admin_test_deduction",
+  "admin_test_reset",
+]);
+
 // localStorage key prefix used to remember which point-log notification the user last saw
 const LAST_SEEN_POINT_LOG_KEY = "last_seen_point_log_id";
 
@@ -189,7 +197,7 @@ export default function Booking() {
     const fetchPointLogs = async () => {
       try {
         const response = await axios.get(
-          `${API_URL}/users/me/points/logs?limit=10`,
+          `${API_URL}/users/me/points/logs?limit=10&notifications_only=true`,
           {
             headers: { Authorization: `Bearer ${token}` },
           },
@@ -446,11 +454,16 @@ export default function Booking() {
   const [notifAnchorEl, setNotifAnchorEl] = useState(null);
   const openNotifMenu = Boolean(notifAnchorEl);
 
+  const visiblePointLogs = useMemo(
+    () => pointLogs.filter((log) => !HIDDEN_POINT_NOTIFICATION_REASONS.has(log.reason)),
+    [pointLogs],
+  );
+
   const handleNotifClick = (e) => {
     setNotifAnchorEl(e.currentTarget);
     // Mark all currently loaded point-change notifications as seen.
-    if (pointLogs.length > 0) {
-      const latestId = Math.max(...pointLogs.map((log) => log.id));
+    if (visiblePointLogs.length > 0) {
+      const latestId = Math.max(...visiblePointLogs.map((log) => log.id));
       if (latestId > lastSeenLogId) {
         setLastSeenLogId(latestId);
         localStorage.setItem(LAST_SEEN_POINT_LOG_KEY, String(latestId));
@@ -462,7 +475,7 @@ export default function Booking() {
   // Notifications are derived from the user's point-change history.
   const notifications = useMemo(
     () =>
-      pointLogs.map((log) => {
+      visiblePointLogs.map((log) => {
         const isPositive = log.change > 0;
         const reasonLabel = POINT_REASON_LABELS[log.reason] || log.reason;
         return {
@@ -477,7 +490,7 @@ export default function Booking() {
           unread: log.id > lastSeenLogId,
         };
       }),
-    [pointLogs, lastSeenLogId],
+    [visiblePointLogs, lastSeenLogId],
   );
 
   // ============================================================================
@@ -510,10 +523,10 @@ export default function Booking() {
           <Computer sx={{ fontSize: 40, color: "#1877f2" }} />
           <div>
             <Typography variant="h6" fontWeight="bold" lineHeight={1.2}>
-              Smart Lab
+              <span className="font-baseline-text">Smart Lab</span>
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              Reserve Lab to use
+              <span className="font-baseline-text">Reserve Lab to use</span>
             </Typography>
           </div>
         </div>
@@ -523,16 +536,16 @@ export default function Booking() {
             className="menu-item active"
             onClick={() => setIsSidebarOpen(false)}
           >
-            <EventNote /> {t("common.labReserve")}
+            <EventNote /> <span className="font-baseline-text">{t("common.labReserve")}</span>
           </div>
           <div className="menu-item" onClick={() => navigate("/reserved")}>
-            <Assignment /> {t("common.reserved")}
+            <Assignment /> <span className="font-baseline-text">{t("common.reserved")}</span>
           </div>
           <div className="menu-item" onClick={() => navigate("/history")}>
-            <History /> {t("common.history")}
+            <History /> <span className="font-baseline-text">{t("common.history")}</span>
           </div>
           <div className="menu-item" onClick={() => navigate("/my-tickets")}>
-            <ConfirmationNumber /> {t("common.myTickets")}
+            <ConfirmationNumber /> <span className="font-baseline-text">{t("common.myTickets")}</span>
           </div>
         </div>
 
@@ -541,10 +554,10 @@ export default function Booking() {
           style={{ flex: "none", paddingBottom: "24px" }}
         >
           <div className="menu-item" onClick={() => navigate("/my-tickets")}>
-            <Assignment /> {t("common.myTickets")}
+            <Assignment /> <span className="font-baseline-text">{t("common.myTickets")}</span>
           </div>
           <div className="menu-item" onClick={() => setIsSupportOpen(true)}>
-            <SupportAgent /> {t("common.support")}
+            <SupportAgent /> <span className="font-baseline-text">{t("common.support")}</span>
           </div>
         </div>
       </div>
@@ -566,7 +579,7 @@ export default function Booking() {
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
-              {t("user.pageTitle")}
+              <span className="font-baseline-text">{t("user.pageTitle")}</span>
             </Typography>
           </Box>
 
@@ -744,10 +757,10 @@ export default function Booking() {
                     fontWeight="bold"
                     lineHeight={1.2}
                   >
-                    {currentUser.name}
+                    <span className="font-baseline-text">{currentUser.name}</span>
                   </Typography>
                   <Typography variant="caption" color="textSecondary">
-                    {currentUser.role}
+                    <span className="font-baseline-text">{currentUser.role}</span>
                   </Typography>
                 </Box>
 
@@ -967,9 +980,11 @@ export default function Booking() {
                   color="#64748b"
                   sx={{ mb: 3 }}
                 >
-                  {searchQuery
-                    ? `${t("user.searchResults")}: "${searchQuery}"`
-                    : t("user.selectLabRoom")}
+                  <span className="font-baseline-text">
+                    {searchQuery
+                      ? `${t("user.searchResults")}: "${searchQuery}"`
+                      : t("user.selectLabRoom")}
+                  </span>
                 </Typography>
                 <Grid container spacing={3}>
                   {filteredLabs.length > 0 ? (
@@ -993,6 +1008,7 @@ export default function Booking() {
                           }}
                         >
                           <Box
+                            className="room-card__visual"
                             sx={{
                               height: "140px",
                               bgcolor: "#e0f2fe",
@@ -1003,7 +1019,7 @@ export default function Booking() {
                           >
                             <Computer sx={{ fontSize: 60, color: "#3b82f6" }} />
                           </Box>
-                          <Box sx={{ p: 3, flexGrow: 1, bgcolor: "white" }}>
+                          <Box className="room-card__content" sx={{ p: 3, flexGrow: 1, bgcolor: "white" }}>
                             <Box
                               sx={{
                                 display: "flex",
@@ -1017,7 +1033,7 @@ export default function Booking() {
                                 fontWeight="bold"
                                 color="#1e293b"
                               >
-                                {room.code}
+                                <span className="font-baseline-text">{room.code}</span>
                               </Typography>
                               <span
                                 className={
@@ -1028,9 +1044,11 @@ export default function Booking() {
                               >
                                 <Chip
                                   label={
-                                    room.status === "active"
-                                      ? t("user.available")
-                                      : t("user.maintenance")
+                                    <span className="font-baseline-text">
+                                      {room.status === "active"
+                                        ? t("user.available")
+                                        : t("user.maintenance")}
+                                    </span>
                                   }
                                   color={
                                     room.status === "active"
@@ -1049,7 +1067,7 @@ export default function Booking() {
                               title={room.name}
                               sx={{ mt: 1 }}
                             >
-                              {room.name}
+                              <span className="font-baseline-text">{room.name}</span>
                             </Typography>
                             <Divider sx={{ my: 2 }} />
                             <Box
@@ -1074,7 +1092,9 @@ export default function Booking() {
                               >
                                 <PeopleAlt fontSize="small" />
                                 <Typography variant="body2" fontWeight="bold">
-                                  {room.capacity} {t("user.users")}
+                                  <span className="font-baseline-text">
+                                    {room.capacity} {t("user.users")}
+                                  </span>
                                 </Typography>
                               </Box>
                               <Box
@@ -1084,9 +1104,11 @@ export default function Booking() {
                                   alignItems: "center",
                                   gap: 1,
                                 }}
-                              >
-                                {t("user.location")}: {room.location || "-"}
-                              </Box>
+                                >
+                                  <span className="font-baseline-text">
+                                    {t("user.location")}: {room.location || "-"}
+                                  </span>
+                                </Box>
                             </Box>
                           </Box>
                         </Paper>
@@ -1204,14 +1226,14 @@ export default function Booking() {
                         color="#0f172a"
                         sx={{ mb: 1 }}
                       >
-                        {selectedRoom.code}
+                        <span className="font-baseline-text">{selectedRoom.code}</span>
                       </Typography>
                       <Typography
                         variant="body1"
                         color="textSecondary"
                         sx={{ mb: 3, lineHeight: 1.6 }}
                       >
-                        {selectedRoom.name}
+                        <span className="font-baseline-text">{selectedRoom.name}</span>
                       </Typography>
                       <Divider sx={{ mb: 3 }} />
                       <Box

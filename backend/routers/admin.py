@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 import models
 from database import get_db
 from routers.users import require_admin_user
+from profile_storage import delete_profile_image_sync, get_profile_image_url
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -192,7 +193,7 @@ def get_pending_users(
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "email": user.email,
-                "profile_pic": user.profile_pic,
+                "profile_pic": get_profile_image_url(user.profile_pic),
                 "phone": passport.phone,
                 "created_at": user.created_at,
             }
@@ -220,6 +221,7 @@ def verify_user(
         return {"message": "User approved successfully."}
 
     elif payload.action == "reject":
+        profile_image_path = user.profile_pic
         # delete child records first, then flush so FK constraints are satisfied
         # before we delete the parent user row
         db.delete(passport)
@@ -227,6 +229,7 @@ def verify_user(
         db.flush()
         db.delete(user)
         db.commit()
+        delete_profile_image_sync(profile_image_path)
         return {"message": "User rejected and removed."}
 
     else:

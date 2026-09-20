@@ -15,7 +15,7 @@ export default function LanguageToggle({ className = "" }) {
         variant="outlined"
         aria-label={t("language.aria")}
       >
-        {t("language.switchTo")}
+        <span className="font-baseline-text">{t("language.switchTo")}</span>
       </Button>
     </Tooltip>
   );

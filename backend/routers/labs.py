@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, time, date, timezone
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from urllib.parse import unquote
 
@@ -12,6 +13,7 @@ from routers.points import (
     mark_due_no_shows,
 )
 from routers.users import get_current_user, require_admin_user
+from utils import normalize_email
 
 router = APIRouter(tags=["Lab Management & Booking"])
 
@@ -439,7 +441,7 @@ def create_booking(
     if booking.booking_date > now.date() + timedelta(days=2):
         raise HTTPException(status_code=400, detail="Cannot book more than 2 days in advance.")
     
-    if booking.email.lower() != current_user.email.lower() and not is_admin_user(current_user.id, db):
+    if normalize_email(booking.email) != normalize_email(current_user.email) and not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="Booking email does not match the signed-in user.")
 
     # Serialize bookings for the same user as well, so two browser tabs cannot
@@ -516,11 +518,13 @@ def get_user_bookings(
     db: Session = Depends(get_db),
 ):
     mark_due_no_shows(db, now=_lab_now())
-    clean_email = unquote(email).strip()
-    if clean_email.lower() != current_user.email.lower() and not is_admin_user(current_user.id, db):
+    clean_email = normalize_email(unquote(email))
+    if clean_email != normalize_email(current_user.email) and not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="You cannot view another user's bookings.")
 
-    user = db.query(models.User).filter(models.User.email == clean_email).first()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == clean_email,
+    ).first()
     if not user:
         raise HTTPException(status_code=404, detail=f"User '{clean_email}' not found")
     
@@ -558,11 +562,13 @@ def cancel_booking(
     db: Session = Depends(get_db),
 ):
     mark_due_no_shows(db)
-    clean_email = unquote(email).strip()
-    if clean_email.lower() != current_user.email.lower() and not is_admin_user(current_user.id, db):
+    clean_email = normalize_email(unquote(email))
+    if clean_email != normalize_email(current_user.email) and not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="You cannot cancel another user's booking.")
 
-    user = db.query(models.User).filter(models.User.email == clean_email).first()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == clean_email,
+    ).first()
     if not user:
         raise HTTPException(status_code=404, detail=f"User '{clean_email}' not found")
     

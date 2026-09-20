@@ -156,6 +156,30 @@ class PointSystemTests(unittest.TestCase):
         ]
         self.assertEqual(reasons, ["admin_test_deduction", "admin_test_reset"])
 
+    def test_user_notification_logs_hide_admin_point_actions(self):
+        points.apply_point_event(
+            self.student.id,
+            "daily_bonus",
+            self.session,
+            event_id="daily:notification-test",
+        )
+        points.apply_point_event(
+            self.student.id,
+            "admin_test_deduction",
+            self.session,
+            event_id="admin:notification-test",
+        )
+
+        result = points._logs_response(
+            self.student.id,
+            self.session,
+            limit=20,
+            before_id=None,
+            exclude_admin_actions=True,
+        )
+
+        self.assertEqual([row["reason"] for row in result["data"]], ["daily_bonus"])
+
     def test_reset_clears_only_test_bans(self):
         self._point_record().points = 80
         self.session.commit()

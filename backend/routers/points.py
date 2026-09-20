@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import models
 from database import get_db
 from routers.users import get_current_user
+from profile_storage import get_profile_image_url
 
 router = APIRouter(tags=["Point System"])
 
@@ -33,6 +34,14 @@ POINT_RULES = {
     "admin_test_deduction": -10,  # ปุ่มทดสอบของ Admin เท่านั้น
     "admin_test_reset": 0,   # เปลี่ยนแบบ dynamic กลับไปที่ 100 สำหรับการทดสอบ
 }
+
+# These events are internal Admin actions. They remain in the user's point
+# history for auditability, but are excluded from the User notification feed.
+ADMIN_POINT_LOG_REASONS = frozenset({
+    "admin_grant",
+    "admin_test_deduction",
+    "admin_test_reset",
+})
 
 # ตรวจจาก threshold ต่ำสุดก่อน เพื่อให้ 10 คะแนนได้ Ban 30 วัน ไม่ใช่ 2 วัน
 BAN_RULES = [
@@ -693,8 +702,18 @@ def _serialize_point_log(log: models.PointLog) -> dict:
     }
 
 
-def _logs_response(user_id: int, db: Session, limit: int, before_id: Optional[int]) -> dict:
+def _logs_response(
+    user_id: int,
+    db: Session,
+    limit: int,
+    before_id: Optional[int],
+    exclude_admin_actions: bool = False,
+) -> dict:
     query = db.query(models.PointLog).filter(models.PointLog.user_id == user_id)
+    if exclude_admin_actions:
+        query = query.filter(
+            ~models.PointLog.reason.in_(ADMIN_POINT_LOG_REASONS),
+        )
     if before_id is not None:
         query = query.filter(models.PointLog.id < before_id)
 
@@ -745,12 +764,22 @@ def get_user_points(
 def get_my_point_logs(
     limit: int = Query(30, ge=1, le=100),
     before_id: Optional[int] = Query(None, gt=0),
+    notifications_only: bool = Query(
+        False,
+        description="Exclude internal Admin point actions from User notifications.",
+    ),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     mark_due_no_shows(db)
     ensure_daily_bonus(current_user.id, db)
-    result = _logs_response(current_user.id, db, limit, before_id)
+    result = _logs_response(
+        current_user.id,
+        db,
+        limit,
+        before_id,
+        exclude_admin_actions=notifications_only,
+    )
     db.commit()
     return result
 
@@ -1273,7 +1302,7 @@ def get_admin_user_details(
         "first_name": user.first_name,
         "last_name": user.last_name,
         "email": user.email,
-        "profile_pic": user.profile_pic,
+        "profile_pic": get_profile_image_url(user.profile_pic),
         "role": role,
         "account_status": "active" if account_active else "pending",
         "created_at": user.created_at,

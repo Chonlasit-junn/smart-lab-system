@@ -27,40 +27,21 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  Assessment,
-  Block,
   Close,
   Computer,
-  ConfirmationNumber,
   ContentCopy,
-  Dashboard as DashIcon,
-  HowToReg,
   Logout,
-  ManageAccounts,
-  MeetingRoom,
   Notifications,
   Person,
-  Settings,
 } from "@mui/icons-material";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
+import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
-
-const SIDE_MENU_ITEMS = [
-  { key: "dashboard", icon: <DashIcon sx={{ fontSize: 20 }} />, path: "/admin" },
-  { key: "manageLabs", icon: <MeetingRoom sx={{ fontSize: 20 }} />, path: "/manage-labs" },
-  { key: "labDevices", icon: <Computer sx={{ fontSize: 20 }} />, path: "/admin/devices" },
-  { key: "verifyUsers", icon: <HowToReg sx={{ fontSize: 20 }} />, path: "/verify-users" },
-  { key: "userPoints", icon: <Assessment sx={{ fontSize: 20 }} />, path: "/admin/points" },
-  { key: "pointCriteria", icon: <Settings sx={{ fontSize: 20 }} />, path: "/admin/points/policy" },
-  { key: "roleManagement", icon: <ManageAccounts sx={{ fontSize: 20 }} />, path: "/admin/roles" },
-  { key: "blacklist", icon: <Block sx={{ fontSize: 20 }} />, path: "/blacklist" },
-  { key: "ticket", icon: <ConfirmationNumber sx={{ fontSize: 20 }} />, path: "/ticket" },
-];
 
 const STATUS_LABELS = {
   active: "active",
@@ -78,7 +59,6 @@ function formatDate(value, locale = "th-TH") {
 
 export default function AdminDevices() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { logout } = useAuth();
   const { t } = useLanguage();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -191,7 +171,7 @@ export default function AdminDevices() {
   };
 
   return (
-    <Box className="app-layout admin-layout" sx={{ display: "flex", minHeight: "100vh", bgcolor: "#fcfdfe", fontFamily: "'Inter', sans-serif" }}>
+    <Box className="app-layout admin-layout" sx={{ display: "flex", minHeight: "100vh", bgcolor: "#fcfdfe", fontFamily: "var(--font-family-ui)" }}>
       <Box className="sidebar admin-sidebar" sx={{ width: "var(--sidebar-width)", bgcolor: "#f0f7ff", borderRight: "1px solid #e2efff", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", zIndex: 10 }}>
         <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
           <Box className="admin-brand-mark" sx={{ bgcolor: "#000", p: 1, borderRadius: 2.5, display: "flex", boxShadow: "0 4px 10px rgba(0,0,0,0.2)" }}>
@@ -202,20 +182,7 @@ export default function AdminDevices() {
             <Typography variant="caption" sx={{ color: "#64748b", fontWeight: "500", display: "block", mt: -0.5 }}>Admin Dashboard</Typography>
           </Box>
         </Box>
-        <Box className="sidebar-menu" sx={{ px: 2, mt: 4 }}>
-          {SIDE_MENU_ITEMS.map((item) => (
-            <Button
-              key={item.key}
-              className={location.pathname === item.path ? "active" : ""}
-              fullWidth
-              onClick={() => navigate(item.path)}
-              startIcon={item.icon}
-              sx={{ justifyContent: "flex-start", py: 1, px: 2.5, mb: 0.5, bgcolor: location.pathname === item.path ? "white" : "transparent", color: location.pathname === item.path ? "#3b82f6" : "#94a3b8", fontWeight: location.pathname === item.path ? "700" : "600", fontSize: "var(--sidebar-font-size)", boxShadow: location.pathname === item.path ? "0 10px 25px rgba(0,0,0,0.03)" : "none", borderRadius: "var(--sidebar-active-radius)", textTransform: "none", "&:hover": { bgcolor: "white", color: "#3b82f6" } }}
-            >
-              {t(`admin.${item.key}`)}
-            </Button>
-          ))}
-        </Box>
+        <AdminNavigation />
       </Box>
 
       <Box className="main-area admin-main-area" sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden" }}>

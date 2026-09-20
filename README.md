@@ -36,8 +36,28 @@ SECRET_KEY=<ใส่ค่า secret ของระบบ>
 BREVO_API_KEY=<ใส่เมื่อทดสอบอีเมล OTP>
 SENDER_EMAIL=<อีเมลผู้ส่ง>
 SEED_ADMIN_PASSWORD=<ตั้งเฉพาะตอน seed บัญชี admin>
-SEED_TEST_STUDENT_PASSWORD=<ตั้งเฉพาะตอน seed บัญชีทดสอบ>
 ```
+
+### 1.1 ตั้งค่า Storage รูปโปรไฟล์สำหรับ Production
+
+ปัจจุบันโหมดเริ่มต้นสำหรับเครื่อง Local ยังใช้ `backend/runtime/uploads` เพื่อให้ทดสอบได้ทันที แต่พื้นที่ใน Container ของ Hugging Face ไม่ควรใช้เก็บรูปถาวร ให้สร้าง Bucket แบบ **Private** ใน Supabase Storage ชื่อ `profile-images` แล้วเพิ่มค่าต่อไปนี้ใน Backend/Hugging Face Secrets เท่านั้น:
+
+```env
+PROFILE_STORAGE_BACKEND=supabase
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<เก็บเป็น Secret ของ Backend เท่านั้น>
+SUPABASE_PROFILE_BUCKET=profile-images
+PROFILE_SIGNED_URL_TTL=3600
+```
+
+Backend จะอัปโหลดรูปที่ผ่านการย่อและตรวจใบหน้าแล้วไปยัง path รูปแบบ `profiles/<user_id>/avatar.jpg` และเก็บเฉพาะ path นี้ใน `users.profile_pic` ไม่เก็บ binary หรือ service-role key ใน PostgreSQL/Frontend ส่วน API จะสร้าง signed URL ชั่วคราวให้หน้าเว็บ จึงไม่ต้องเปิด Bucket เป็น Public และไม่ต้องเพิ่มคอลัมน์ใหม่
+
+ข้อควรระวัง:
+
+- `SUPABASE_SERVICE_ROLE_KEY` ห้ามใส่ใน `frontend/.env*`, ห้ามส่งไป Browser และห้าม commit ลง Git
+- ถ้าไม่ตั้ง `PROFILE_STORAGE_BACKEND=supabase` ระบบจะใช้ Local Storage ต่อไป เหมาะเฉพาะการทดสอบบนเครื่อง
+- รูปเก่าที่อยู่ใน `backend/runtime/uploads` ยังไม่ได้ย้ายอัตโนมัติ ต้องย้ายขึ้น Bucket แบบครั้งเดียวหรือให้ผู้ใช้ลงทะเบียนรูปใหม่ก่อนเปลี่ยน Production
+- การสร้าง/ตั้งค่า Bucket ทำใน Supabase Dashboard หรือ SQL Editor ของโปรเจคจริง ไม่ได้ถูกรันโดยโค้ดนี้
 
 ติดตั้งและรัน Backend บน Windows PowerShell:
 
@@ -244,12 +264,13 @@ Credential Manager อาจทำให้ข้อมูลบางอย่�
 
 ### Test case: บันทึกการใช้โปรแกรมปกติ
 
-1. ตรวจว่ามี test user และ lab code อยู่ใน Database
-2. เปิด Agent และ login ด้วย test user
-3. เปิดโปรแกรมที่ไม่อยู่ใน blacklist เช่น Notepad หรือ Calculator อย่างน้อย 10 วินาที
-4. เปลี่ยนไปยังโปรแกรมอื่นอย่างน้อย 10 วินาที
-5. กดจบการใช้งานบน Agent
-6. ตรวจ Database ตาม query ด้านล่าง
+1. ใช้ Admin ตรวจว่ามี Lab และบัญชีผู้ใช้สำหรับทดสอบอยู่ใน Database
+2. ถ้ายังไม่มีผู้ใช้ทดสอบ ให้สมัครบัญชี Student/Guest ผ่านหน้า Register แล้วให้ Admin อนุมัติ Guest ตาม flow ของระบบ
+3. เปิด Agent และ login ด้วยบัญชีผู้ใช้ที่เตรียมไว้
+4. เปิดโปรแกรมที่ไม่อยู่ใน blacklist เช่น Notepad หรือ Calculator อย่างน้อย 10 วินาที
+5. เปลี่ยนไปยังโปรแกรมอื่นอย่างน้อย 10 วินาที
+6. กดจบการใช้งานบน Agent
+7. ตรวจ Database ตาม query ด้านล่าง
 
 ข้อมูลที่ Agent ส่งตามปกติ:
 

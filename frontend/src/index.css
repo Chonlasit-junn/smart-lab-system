@@ -48,6 +48,8 @@
   --surface-neutral: #f1f5f9;
   --info-color: #1d4ed8;
   --neutral-color: #64748b;
+  --font-family-ui: "Ruwudu", sans-serif;
+  --font-size-step: 0px;
 
   /* --- Dimensions & Radius --- */
   /* Shape scale: controls, surfaces, and dialogs share these values. */
@@ -103,6 +105,28 @@
   --neutral-color: #cbd5e1;
 }
 
+html[lang="th"] {
+  --font-family-ui: "Noto Sans Thai", "Ruwudu", sans-serif;
+}
+
+html[lang="en"] {
+  --font-family-ui: "Ruwudu", sans-serif;
+  --font-size-step: 1px;
+  --sidebar-font-size: 15px;
+}
+
+/* Keep the inline wrapper used by the booking view layout-neutral. Font size
+ * and line-height now come from the shared typography system in App.jsx. */
+.font-baseline-text {
+  display: inline;
+  line-height: inherit;
+}
+
+html[lang="en"] .font-baseline-text {
+  position: relative;
+  top: 0.26em;
+}
+
 /* CSS Reset พื้นฐาน */
 *,
 *::before,
@@ -113,13 +137,37 @@
 body {
   margin: 0;
   padding: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-    sans-serif;
+  font-size: calc(1rem + var(--font-size-step));
+  font-family: var(--font-family-ui);
+  line-height: 1.4;
   background-color: var(--bg-color);
   color: var(--text-dark);
   -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+button,
+input,
+textarea,
+select,
+option,
+.MuiTypography-root,
+.MuiButton-root,
+.MuiInputBase-root,
+.MuiInputBase-input,
+.MuiInputLabel-root,
+.MuiFormHelperText-root,
+.MuiChip-root,
+.MuiMenuItem-root,
+.MuiTableCell-root,
+.MuiTablePagination-root,
+.MuiAlert-root,
+.MuiTooltip-tooltip,
+.MuiTab-root,
+.MuiFormControlLabel-label {
+  font-family: var(--font-family-ui) !important;
 }
 
 /* ==========================================================================
@@ -257,6 +305,23 @@ body {
   padding: 24px;
 }
 
+.sidebar-logo > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.sidebar-logo .MuiTypography-h6 {
+  line-height: 1.2 !important;
+}
+
+.sidebar-logo .MuiTypography-caption {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.25 !important;
+}
+
 .sidebar-menu {
   flex: 1;
   display: flex;
@@ -275,9 +340,10 @@ body {
   border-radius: var(--sidebar-active-radius);
   color: #94a3b8;
   text-decoration: none;
-  font-family: "Inter", sans-serif;
+  font-family: var(--font-family-ui);
   font-weight: 600;
   font-size: var(--sidebar-font-size);
+  line-height: 1.25;
   cursor: pointer;
   transition:
     background-color 0.2s,
@@ -325,7 +391,12 @@ body {
   background: transparent;
   outline: none;
   font-size: 14px;
+  line-height: 1.25;
   color: var(--text-dark);
+}
+
+html[lang="en"] .search-bar input {
+  font-size: 15px;
 }
 
 .search-bar input::placeholder {
@@ -452,6 +523,26 @@ body {
   border-bottom: 1px solid var(--border-light);
 }
 
+.top-header .MuiTypography-subtitle2 {
+  line-height: 1.4 !important;
+}
+
+.top-header .MuiTypography-caption {
+  line-height: 1.35 !important;
+}
+
+/* Keep the page title stable when the search area has less room than the
+ * desktop header. The search field may shrink; the title should not wrap. */
+.top-header > :first-child .MuiTypography-root {
+  white-space: nowrap;
+}
+
+.top-header > :nth-child(2),
+.top-header .search-bar,
+.top-header .search-bar input {
+  min-width: 0;
+}
+
 .filter-bar {
   display: flex;
   align-items: center;
@@ -469,17 +560,62 @@ body {
   gap: 8px;
   padding: 4px 12px;
   color: var(--text-muted);
-  background-color: var(--surface-subtle);
-  border-radius: var(--radius-control);
+  background-color: var(--surface-subtle) !important;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-pill) !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.search-control .MuiInputBase-input {
+.search-control:focus-within,
+.admin-search-control:focus-within {
+  border-color: var(--brand-color);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.search-control .MuiInputBase-input,
+.admin-search-control .MuiInputBase-input {
   color: var(--text-dark);
 }
 
-.search-control .MuiInputBase-input::placeholder {
+.search-control .MuiInputBase-input::placeholder,
+.admin-search-control .MuiInputBase-input::placeholder {
   color: var(--text-muted);
   opacity: 1;
+}
+
+.search-control .MuiSvgIcon-root,
+.admin-search-control .MuiSvgIcon-root {
+  color: var(--text-muted) !important;
+}
+
+.admin-search-control {
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+  padding: 4px 16px;
+  background-color: var(--surface-subtle) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-filter-control .MuiOutlinedInput-root {
+  color: var(--text-dark);
+  background-color: var(--surface-subtle);
+  border-radius: var(--radius-pill) !important;
+}
+
+.admin-filter-control .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border-light);
+}
+
+.admin-filter-control .MuiInputLabel-root {
+  color: var(--text-muted);
+}
+
+.admin-filter-control .MuiSelect-icon {
+  color: var(--text-muted);
 }
 
 .data-table-shell {
@@ -579,6 +715,61 @@ textarea:focus-visible,
   position: relative !important;
   top: auto !important;
   overflow-y: auto;
+}
+
+.admin-navigation {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 10px 16px 24px;
+}
+
+.admin-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-nav-group-label {
+  padding: 0 12px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.admin-nav-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-navigation .MuiButton-root {
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
+/* Ruwudu has a taller Latin glyph box than the surrounding controls. Keep
+ * every app layout's geometry unchanged and correct only the visual baseline
+ * of text, so labels sit optically centered instead of appearing to float. */
+html[lang="en"] .app-layout .MuiTypography-root,
+html[lang="en"] .app-layout .font-baseline-text {
+  position: relative;
+  top: 0.26em;
+}
+
+html[lang="en"] .app-layout .MuiTableCell-root {
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+.admin-navigation .MuiButton-startIcon {
+  margin-left: 0;
+  margin-right: 10px;
 }
 
 .admin-main-area {
@@ -698,9 +889,21 @@ textarea:focus-visible,
 
 .admin-table-paper {
   border: 1px solid var(--border-light);
-  border-radius: var(--border-radius-input);
+  border-radius: var(--radius-card) !important;
+  overflow: hidden !important;
+  isolation: isolate;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
   overflow: hidden;
+}
+
+.room-card__visual {
+  overflow: hidden;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+}
+
+.room-card__content {
+  overflow: hidden;
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
 }
 
 .admin-page-heading {
@@ -776,7 +979,7 @@ textarea:focus-visible,
 
 .room-card-meta {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
@@ -791,7 +994,31 @@ textarea:focus-visible,
   flex: 1 1 120px;
   min-width: 0;
   overflow-wrap: anywhere;
+  line-height: 1.35;
   text-align: right;
+}
+
+.room-card .MuiChip-root {
+  align-self: center;
+}
+
+.room-card .MuiChip-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2 !important;
+}
+
+.reservation-empty-state {
+  background-color: var(--surface-subtle) !important;
+  color: var(--text-gray) !important;
+}
+
+.data-table-shell .MuiTableBody-root .MuiTableRow-root {
+  background-color: var(--card-bg);
+}
+
+.data-table-shell .MuiTableBody-root .MuiTableRow-root:hover {
+  background-color: var(--surface-subtle) !important;
 }
 
 /* ==========================================================================
@@ -868,6 +1095,12 @@ textarea:focus-visible,
 
 :root[data-theme="dark"] .MuiOutlinedInput-notchedOutline {
   border-color: var(--border-light);
+}
+
+:root[data-theme="dark"] .admin-search-control,
+:root[data-theme="dark"] .search-control {
+  background-color: var(--surface-subtle) !important;
+  border-color: var(--border-light) !important;
 }
 
 :root[data-theme="dark"] .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline,
@@ -1021,6 +1254,11 @@ textarea:focus-visible,
 :root[data-theme="dark"] .room-card > .MuiBox-root:not(:first-child) {
   color: var(--text-gray) !important;
   background-color: var(--card-bg) !important;
+}
+
+:root[data-theme="dark"] .reservation-empty-state {
+  background-color: var(--surface-subtle) !important;
+  color: var(--text-gray) !important;
 }
 
 /* ==========================================================================
