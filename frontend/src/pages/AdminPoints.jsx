@@ -888,8 +888,20 @@ export default function AdminPoints() {
                 <CircularProgress />
               </Box>
             ) : (
-              <TableContainer sx={{ overflowX: "auto" }}>
-                <Table sx={{ minWidth: 980 }}>
+              <TableContainer
+                sx={{
+                  maxHeight: { xs: "55vh", md: "58vh" },
+                  overflowX: "auto",
+                  overflowY: "auto",
+                  overscrollBehavior: "contain",
+                  "& .MuiTableHead-root": {
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 2,
+                  },
+                }}
+              >
+                <Table sx={{ minWidth: 1160 }}>
                   <TableHead>
                     <TableRow sx={{ bgcolor: "var(--surface-subtle)" }}>
                       <TableCell

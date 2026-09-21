@@ -88,7 +88,7 @@ const SLOT_OPTIONS = [
 // ============================================================================
 export default function ManageLabs() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { currentUser, logout, refreshCurrentUser } = useAuth();
   const { t } = useLanguage();
 
   // --- User menu (avatar dropdown) ---
@@ -160,9 +160,10 @@ export default function ManageLabs() {
 
   useEffect(() => {
     // This effect intentionally loads remote data and updates state asynchronously.
+    refreshCurrentUser();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLabs();
-  }, [fetchLabs]);
+  }, [fetchLabs, refreshCurrentUser]);
 
   const fetchSchedules = async (labId) => {
     try {
@@ -474,7 +475,7 @@ export default function ManageLabs() {
                   fontWeight="800"
                   color="#1e293b"
                 >
-                  {t("common.systemAdmin")}
+                  {currentUser?.name || t("common.systemAdmin")}
                 </Typography>
                 <Typography variant="caption" fontWeight="600" color="#94a3b8">
                   {t("common.administrator")}
@@ -532,7 +533,7 @@ export default function ManageLabs() {
                     color="#64748b"
                     sx={{ pl: 0.5 }}
                   >
-                    admin@smartlab.ac.th
+                    {currentUser?.email || "admin@smartlab.ac.th"}
                   </Typography>
                   <IconButton size="small" onClick={handleCloseUserMenu}>
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />
@@ -561,12 +562,15 @@ export default function ManageLabs() {
                     fontWeight="700"
                     fontSize="18px"
                   >
-                    {t("common.systemAdmin")}
+                    {currentUser?.name || t("common.systemAdmin")}
                   </Typography>
 
                   <Button
                     variant="outlined"
-                    onClick={handleCloseUserMenu}
+                    onClick={() => {
+                      handleCloseUserMenu();
+                      navigate("/profile");
+                    }}
                     sx={{
                       mt: 2,
                       borderRadius: 20,

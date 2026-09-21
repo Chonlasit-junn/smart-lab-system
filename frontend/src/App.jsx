@@ -28,12 +28,14 @@ import TicketManager from './pages/TicketManager';
 import MyTickets from './pages/MyTickets';
 
 function ProtectedRoute({ children }) {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
   return currentUser ? children : <Navigate to="/" replace />;
 }
 
 function AdminRoute({ children }) {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
   if (!currentUser) return <Navigate to="/" replace />;
   return currentUser.roleName === "admin" ? children : <Navigate to="/booking" replace />;
 }

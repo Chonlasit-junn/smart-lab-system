@@ -494,6 +494,11 @@ html[lang="en"] .search-bar input {
   box-shadow: var(--shadow-sm);
 }
 
+.profile-point-history-item {
+  background-color: var(--surface-subtle);
+  border: 1px solid var(--border-light);
+}
+
 .surface-card--flat {
   box-shadow: none;
 }

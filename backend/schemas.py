@@ -65,7 +65,9 @@ class BookingCreate(BaseModel):
     lab_id: int
     booking_date: date
     slot_number: int = Field(..., ge=1, le=4)
-    email: EmailStr
+    # Legacy compatibility only. The booking owner is always resolved from
+    # the authenticated Bearer token, never from client-supplied identity.
+    email: Optional[EmailStr] = None
     purpose: Optional[str] = None
     total_participants: int = Field(1, gt=0)
 

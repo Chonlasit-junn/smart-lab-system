@@ -1,5 +1,12 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import axios from 'axios';
 import { AuthContext } from './auth-context';
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+function roleLabel(roleName) {
+  return roleName === "admin" ? "Admin" : roleName === "student" ? "Student" : "Guest";
+}
 
 function readStoredUser() {
   const token = localStorage.getItem('access_token');
@@ -23,9 +30,10 @@ function readStoredUser() {
     const roleName = typeof decoded.role === "string" ? decoded.role : "guest";
 
     return {
+      id: decoded.user_id || null,
       name: decoded.sub.split('@')[0],
       roleName,
-      role: roleName === "admin" ? "Admin" : roleName === "student" ? "Student" : "Guest",
+      role: roleLabel(roleName),
       email: decoded.sub,
       initial: decoded.sub.charAt(0).toUpperCase(),
     };
@@ -36,14 +44,79 @@ function readStoredUser() {
   }
 }
 
+function mergeProfileIntoUser(tokenUser, profile) {
+  const roleName = profile.role || tokenUser.roleName;
+  const profileName = [profile.first_name, profile.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const name = profileName || tokenUser.name;
+
+  return {
+    ...tokenUser,
+    id: profile.id || tokenUser.id,
+    name,
+    email: profile.email || tokenUser.email,
+    roleName,
+    role: roleLabel(roleName),
+    initial: name.charAt(0).toUpperCase(),
+  };
+}
+
 // 2. สร้าง Provider เพื่อห่อหุ้มแอปพลิเคชัน
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(readStoredUser);
-  const loading = false;
+  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('access_token')));
+
+  const refreshCurrentUser = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      setCurrentUser(null);
+      return null;
+    }
+
+    try {
+      const response = await axios.get(`${API_URL}/users/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const tokenUser = readStoredUser();
+      if (!tokenUser) return null;
+      const nextUser = mergeProfileIntoUser(tokenUser, response.data || {});
+      setCurrentUser(nextUser);
+      return nextUser;
+    } catch (error) {
+      if ([401, 404].includes(error.response?.status)) {
+        localStorage.removeItem('access_token');
+        setCurrentUser(null);
+      }
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const token = localStorage.getItem('access_token');
+
+    if (!token) {
+      return undefined;
+    }
+
+    // The refresh synchronizes the token with the authoritative profile API.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshCurrentUser().finally(() => {
+      if (mounted) setLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [refreshCurrentUser]);
 
   const login = (token) => {
     localStorage.setItem('access_token', token);
     setCurrentUser(readStoredUser());
+    setLoading(false);
+    void refreshCurrentUser();
   };
 
   const logout = () => {
@@ -52,7 +125,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, login, logout, loading }}>
+    <AuthContext.Provider value={{ currentUser, login, logout, loading, refreshCurrentUser }}>
       {!loading && children}
     </AuthContext.Provider>
   );

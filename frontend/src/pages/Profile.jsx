@@ -70,6 +70,17 @@ const POINT_REASON_LABELS = {
   admin_grant: "Admin อนุมัติเพิ่มคะแนน",
 };
 
+const HIDDEN_USER_POINT_LOG_REASONS = new Set([
+  "admin_grant",
+  "admin_test_deduction",
+  "admin_test_reset",
+]);
+
+const isInternalAdminPointLog = (log) =>
+  HIDDEN_USER_POINT_LOG_REASONS.has(log.reason) ||
+  log.source_type === "admin_test" ||
+  String(log.reason || "").startsWith("admin_");
+
 export default function Profile() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
@@ -84,51 +95,75 @@ export default function Profile() {
   const [pointRequestLoading, setPointRequestLoading] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
     if (!currentUser) {
+      setProfile(null);
       navigate("/");
-      return;
+      return () => controller.abort();
     }
-    fetchProfile();
+
+    // Clear the previous account while the new account is loading. Without
+    // this, a slow request from the previous login can briefly overwrite the
+    // current user's profile (for example, showing the Admin profile to a
+    // Student after switching accounts).
+    setProfile(null);
+
+    const loadProfile = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        setPointsError("");
+        const token = localStorage.getItem("access_token");
+        const headers = { Authorization: `Bearer ${token}` };
+        const requestConfig = { headers, signal: controller.signal };
+
+        const [profileResult, pointsResult, logsResult] = await Promise.allSettled([
+          axios.get(`${API_URL}/users/me`, requestConfig),
+          axios.get(`${API_URL}/users/me/points`, requestConfig),
+          axios.get(
+            `${API_URL}/users/me/points/logs?limit=20&notifications_only=true`,
+            requestConfig,
+          ),
+        ]);
+
+        if (cancelled) return;
+        if (profileResult.status !== "fulfilled") {
+          throw profileResult.reason;
+        }
+
+        const profileData = profileResult.value.data;
+        const pointData =
+          pointsResult.status === "fulfilled"
+            ? pointsResult.value.data
+            : { points: null, daily_score: null, points_loaded: false };
+
+        if (pointsResult.status !== "fulfilled") {
+          setPointsError("ไม่สามารถโหลดข้อมูลคะแนนได้ กรุณาลองใหม่อีกครั้ง");
+        }
+        setProfile({ ...profileData, ...pointData });
+        const logs =
+          logsResult.status === "fulfilled" && Array.isArray(logsResult.value.data.data)
+            ? logsResult.value.data.data
+            : [];
+        setPointLogs(logs.filter((log) => !isInternalAdminPointLog(log)));
+      } catch (err) {
+        if (cancelled || axios.isCancel(err)) return;
+        setError("ไม่สามารถโหลดข้อมูลโปรไฟล์ได้");
+        console.error("[Profile] fetch failed:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [currentUser, navigate]);
-
-  const fetchProfile = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      setPointsError("");
-      const token = localStorage.getItem("access_token");
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const [profileResult, pointsResult, logsResult] = await Promise.allSettled([
-        axios.get(`${API_URL}/users/me`, { headers }),
-        axios.get(`${API_URL}/users/me/points`, { headers }),
-        axios.get(`${API_URL}/users/me/points/logs?limit=20`, { headers }),
-      ]);
-
-      if (profileResult.status !== "fulfilled") {
-        throw profileResult.reason;
-      }
-
-      const profileData = profileResult.value.data;
-      const pointData =
-        pointsResult.status === "fulfilled"
-          ? pointsResult.value.data
-          : { points: null, daily_score: null, points_loaded: false };
-
-      if (pointsResult.status !== "fulfilled") {
-        setPointsError("ไม่สามารถโหลดข้อมูลคะแนนได้ กรุณาลองใหม่อีกครั้ง");
-      }
-      setProfile({ ...profileData, ...pointData });
-      setPointLogs(
-        logsResult.status === "fulfilled" ? logsResult.value.data.data || [] : [],
-      );
-    } catch (err) {
-      setError("ไม่สามารถโหลดข้อมูลโปรไฟล์ได้");
-      console.error("[Profile] fetch failed:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Add User Menu Popover States
   const [anchorEl, setAnchorEl] = useState(null);
@@ -531,11 +566,11 @@ export default function Profile() {
                     {numericPoints === 0 ? (
                       <Box>
                         <Typography fontWeight="700">
-                          {t("common.zeroPointsMessage")}
+                          {t("user.zeroPointsMessage")}
                         </Typography>
                         {pointRequest?.status === "pending" ? (
                           <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            {t("common.contactAdmin")} {pointRequest.requested_points || pointRequestAmount} {t("common.requestSubmitted")}
+                            {t("user.contactAdmin")} {pointRequest.requested_points || pointRequestAmount} {t("user.requestSubmitted")}
                           </Typography>
                         ) : (
                           <Button
@@ -546,14 +581,14 @@ export default function Profile() {
                             disabled={pointRequestLoading || profile.can_request_points === false}
                             sx={{ mt: 1.25, borderColor: "currentColor", color: "inherit", textTransform: "none", fontWeight: "700" }}
                           >
-                            {pointRequestLoading ? t("common.sendingRequest") : `${t("common.contactAdmin")} ${pointRequestAmount} ${t("common.points")}`}
+                            {pointRequestLoading ? t("user.sendingRequest") : `${t("user.contactAdmin")} ${pointRequestAmount} ${t("common.points")}`}
                           </Button>
                         )}
                       </Box>
                     ) : profile.is_banned ? (
-                            `${t("common.bannedUntil")} ${new Date(profile.ban_until).toLocaleString(t("common.locale"))}`
+                            `${t("user.bannedUntil")} ${new Date(profile.ban_until).toLocaleString(t("common.locale"))}`
                     ) : numericPoints <= pointWarningThreshold ? (
-                      `${t("common.lowPointsWarning")} (${numericPoints} ${t("common.points")})`
+                      `${t("user.lowPointsWarning")} (${numericPoints} ${t("common.points")})`
                     ) : null}
                   </Alert>
                 ) : null}
@@ -627,7 +662,7 @@ export default function Profile() {
                         >
                           <CalendarMonth sx={{ fontSize: 14 }} />
                           <Typography variant="caption">
-                            {t("common.joinedAt")} {formatDate(profile.created_at)}
+                            {t("user.joinedAt")} {formatDate(profile.created_at)}
                           </Typography>
                         </Box>
                       </Box>
@@ -651,7 +686,7 @@ export default function Profile() {
                         color="#94a3b8"
                         sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                       >
-                        {t("common.usageStats")}
+                        {t("user.usageStats")}
                       </Typography>
                       <Box
                         sx={{
@@ -675,7 +710,7 @@ export default function Profile() {
                             color="#94a3b8"
                             sx={{ mt: 0.5, display: "block" }}
                           >
-                            {t("common.bookings")}
+                            {t("user.bookings")}
                           </Typography>
                         </Box>
                         <Divider
@@ -723,7 +758,7 @@ export default function Profile() {
                         color="#94a3b8"
                         sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                       >
-                        {t("common.personalInfo")}
+                        {t("user.personalInfo")}
                       </Typography>
 
                       <Box
@@ -754,7 +789,7 @@ export default function Profile() {
                                 />
                               }
                               iconBg="#eff6ff"
-                              label={t("common.studentId")}
+                              label={t("user.studentId")}
                               value={profile.student_id || "—"}
                             />
                             <InfoRow
@@ -764,7 +799,7 @@ export default function Profile() {
                                 />
                               }
                               iconBg="#eff6ff"
-                              label={t("common.facultyDepartment")}
+                              label={t("user.facultyDepartment")}
                               value={
                                 FACULTY_NAMES[profile.faculty] ||
                                 profile.faculty ||
@@ -815,7 +850,7 @@ export default function Profile() {
                           color="#94a3b8"
                           sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                         >
-                          {t("common.myPoints")}
+                          {t("user.myPoints")}
                         </Typography>
                       </Box>
 
@@ -828,7 +863,7 @@ export default function Profile() {
                         }}
                       >
                         <Typography variant="body2" color="#64748b">
-                          {t("common.currentPoints")}
+                          {t("user.currentPoints")}
                         </Typography>
                         <Typography
                           variant="h6"
@@ -879,7 +914,7 @@ export default function Profile() {
 
                       {pointsError ? (
                         <Chip
-                          label={t("common.pointsStatusUnavailable")}
+                          label={t("user.pointsStatusUnavailable")}
                           size="small"
                           sx={{
                             bgcolor: "#f1f5f9",
@@ -889,7 +924,7 @@ export default function Profile() {
                         />
                       ) : pointRequest?.status === "pending" ? (
                         <Chip
-                          label={t("common.pointRequestPending")}
+                          label={t("user.pointRequestPending")}
                           size="small"
                           sx={{
                             bgcolor: "#fff7ed",
@@ -909,7 +944,7 @@ export default function Profile() {
                         />
                       ) : numericPoints !== null && numericPoints <= pointWarningThreshold ? (
                         <Chip
-                          label={t("common.lowPointsWarning")}
+                          label={t("user.lowPointsWarning")}
                           size="small"
                           sx={{
                             bgcolor: "#fff7ed",
@@ -919,7 +954,7 @@ export default function Profile() {
                         />
                       ) : (
                         <Chip
-                          label={t("common.statusNormal")}
+                          label={t("user.statusNormal")}
                           size="small"
                           sx={{
                             bgcolor: "#f0fdf4",
@@ -931,18 +966,22 @@ export default function Profile() {
 
                       <Divider sx={{ my: 3 }} />
                       <Typography variant="subtitle2" fontWeight="bold" color="#334155" sx={{ mb: 1.5 }}>
-                        {t("common.scoreHistory")}
+                        {t("user.scoreHistory")}
                       </Typography>
                       {pointLogs.length === 0 ? (
                         <Typography variant="body2" color="#94a3b8">
-                          {t("common.noScoreHistory")}
+                          {t("user.noScoreHistory")}
                         </Typography>
                       ) : (
-                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+                        <Box
+                          className="profile-point-history"
+                          sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}
+                        >
                           {pointLogs.map((log) => {
                             const isPositive = log.change > 0;
                             return (
                               <Box
+                                className="profile-point-history-item"
                                 key={log.id}
                                 sx={{
                                   display: "flex",
@@ -951,21 +990,21 @@ export default function Profile() {
                                   gap: 2,
                                   p: 1.25,
                                   borderRadius: 2,
-                                  bgcolor: "#f8fafc",
                                 }}
                               >
                                 <Box sx={{ minWidth: 0 }}>
-                                  <Typography variant="body2" fontWeight="600" color="#334155" noWrap>
+                                  <Typography variant="body2" fontWeight="600" color="var(--text-dark)" noWrap>
                                     {POINT_REASON_LABELS[log.reason] || log.reason}
                                   </Typography>
-                                  <Typography variant="caption" color="#94a3b8" noWrap>
+                                  <Typography variant="caption" color="var(--text-gray)" noWrap>
                                     {log.note || "—"} · {log.created_at ? new Date(log.created_at).toLocaleString("th-TH") : "—"}
                                   </Typography>
                                 </Box>
                                 <Typography
+                                  className="theme-colored"
                                   variant="body2"
                                   fontWeight="bold"
-                                  color={isPositive ? "#16a34a" : "#dc2626"}
+                                  color={isPositive ? "var(--success-color)" : "var(--danger-color)"}
                                   sx={{ flexShrink: 0 }}
                                 >
                                   {isPositive ? "+" : ""}{log.change}

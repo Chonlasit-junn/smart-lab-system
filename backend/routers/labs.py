@@ -441,9 +441,9 @@ def create_booking(
     if booking.booking_date > now.date() + timedelta(days=2):
         raise HTTPException(status_code=400, detail="Cannot book more than 2 days in advance.")
     
-    if normalize_email(booking.email) != normalize_email(current_user.email) and not is_admin_user(current_user.id, db):
-        raise HTTPException(status_code=403, detail="Booking email does not match the signed-in user.")
-
+    # The owner is always the authenticated account. ``booking.email`` is a
+    # legacy client field and is intentionally ignored so an Admin token or a
+    # stale frontend state can never assign a booking to another account.
     # Serialize bookings for the same user as well, so two browser tabs cannot
     # create duplicate bookings in different labs for the same slot.
     user = db.query(models.User).filter(models.User.id == current_user.id).with_for_update().first()
@@ -509,6 +509,7 @@ def create_booking(
     return {
         "message": f"Booking successful for {booking.total_participants} seat(s).",
         "booking_id": new_booking.id,
+        "user_id": new_booking.user_id,
     }
 
 @router.get("/bookings/user/{email}")

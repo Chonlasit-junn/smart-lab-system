@@ -50,11 +50,11 @@ export default function SupportModal({ open, onClose }) {
       </DialogTitle>
       <DialogContent dividers>
         <TextField
-          autoFocus margin="dense" label={t('common.subject')} fullWidth variant="outlined"
+          autoFocus margin="dense" label={t('user.subject')} fullWidth variant="outlined"
           value={subject} onChange={(e) => setSubject(e.target.value)}
         />
         <TextField
-          margin="dense" label={t('common.message')} fullWidth multiline rows={4} variant="outlined"
+          margin="dense" label={t('user.message')} fullWidth multiline rows={4} variant="outlined"
           value={message} onChange={(e) => setMessage(e.target.value)} sx={{ mt: 2 }}
         />
       </DialogContent>

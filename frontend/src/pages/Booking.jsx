@@ -374,7 +374,6 @@ export default function Booking() {
     try {
       const payload = {
         lab_id: selectedRoom.id,
-        email: currentUser.email,
         booking_date: dateStr,
         slot_number: selectedTimeSlot,
         purpose: "General Usage", // 🌟 กำหนดค่าเริ่มต้นให้ไปเลยโดยที่ผู้ใช้ไม่ต้องพิมพ์
@@ -553,9 +552,6 @@ export default function Booking() {
           className="sidebar-menu"
           style={{ flex: "none", paddingBottom: "24px" }}
         >
-          <div className="menu-item" onClick={() => navigate("/my-tickets")}>
-            <Assignment /> <span className="font-baseline-text">{t("common.myTickets")}</span>
-          </div>
           <div className="menu-item" onClick={() => setIsSupportOpen(true)}>
             <SupportAgent /> <span className="font-baseline-text">{t("common.support")}</span>
           </div>

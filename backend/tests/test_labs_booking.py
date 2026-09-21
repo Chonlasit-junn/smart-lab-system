@@ -112,6 +112,29 @@ class LabBookingLogicTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn("scheduled class", str(context.exception.detail))
 
+    def test_booking_owner_comes_from_authenticated_user_without_client_email(self):
+        target_date = date.today() + timedelta(days=2)
+        payload = schemas.BookingCreate(
+            lab_id=self.lab.id,
+            booking_date=target_date,
+            slot_number=1,
+            purpose="test",
+            total_participants=1,
+        )
+        fake_now = datetime.combine(
+            target_date - timedelta(days=1),
+            time(8, 0),
+        )
+
+        with patch.object(labs, "_lab_now", return_value=fake_now):
+            result = labs.create_booking(payload, self.user, self.session)
+
+        booking = self.session.query(models.Booking).filter(
+            models.Booking.id == result["booking_id"],
+        ).one()
+        self.assertEqual(result["user_id"], self.user.id)
+        self.assertEqual(booking.user_id, self.user.id)
+
     def test_schedule_validation_rejects_reversed_date_range(self):
         payload = schemas.ScheduleCreate(
             lab_id=self.lab.id,

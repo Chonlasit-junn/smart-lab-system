@@ -41,9 +41,9 @@ import SupportModal from "./SupportModal";
 const API_URL = import.meta.env.VITE_API_URL;
 
 const STATUS_LABELS = {
-  open: { key: "common.openTicket", color: "warning" },
-  in_progress: { key: "common.inProgressTicket", color: "info" },
-  closed: { key: "common.closedTicket", color: "success" },
+  open: { key: "user.openTicket", color: "warning" },
+  in_progress: { key: "user.inProgressTicket", color: "info" },
+  closed: { key: "user.closedTicket", color: "success" },
 };
 
 const MENU_ITEMS = [
@@ -397,15 +397,15 @@ export default function MyTickets() {
             >
               <Box>
                 <Typography variant="h4" fontWeight="800" color="#1e293b">
-                  {t("common.myRequests")}
+                  {t("user.myRequests")}
                 </Typography>
                 <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
-                  {t("common.trackRequests")}
+                  {t("user.trackRequests")}
                 </Typography>
               </Box>
               <Chip
                 icon={<ConfirmationNumber />}
-                label={`${tickets.length} ${t("common.requests")}`}
+                label={`${tickets.length} ${t("user.requests")}`}
                 sx={{
                   bgcolor: "#eff6ff",
                   color: "#2563eb",
@@ -460,10 +460,10 @@ export default function MyTickets() {
                 >
                   <Box>
                     <Typography variant="h6" fontWeight="800" color="#0f172a">
-                      {t("common.requestHistory")}
+                      {t("user.requestHistory")}
                     </Typography>
                     <Typography variant="body2" color="#94a3b8">
-                      {t("common.requestConversation")}
+                      {t("user.requestConversation")}
                     </Typography>
                   </Box>
                   <Chip
@@ -490,10 +490,10 @@ export default function MyTickets() {
                       sx={{ fontSize: 52, color: "#cbd5e1", mb: 1 }}
                     />
                     <Typography variant="body1" color="#64748b" fontWeight="700">
-                      {t("common.noTicketsSent")}
+                      {t("user.noTicketsSent")}
                     </Typography>
                     <Typography variant="body2" color="#94a3b8" sx={{ mt: 0.5 }}>
-                      {t("common.supportHelp")}
+                      {t("user.supportHelp")}
                     </Typography>
                   </Box>
                 ) : (
@@ -502,13 +502,13 @@ export default function MyTickets() {
                       <TableHead>
                         <TableRow sx={{ bgcolor: "#f8fafc" }}>
                           <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
-                            {t("common.subject")}
+                            {t("user.subject")}
                           </TableCell>
                           <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
-                            {t("common.message")}
+                            {t("user.message")}
                           </TableCell>
                           <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
-                            {t("common.submittedAt")}
+                            {t("user.submittedAt")}
                           </TableCell>
                           <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
                             {t("common.status")}
@@ -518,7 +518,7 @@ export default function MyTickets() {
                       <TableBody>
                         {tickets.map((ticket) => {
                           const status = STATUS_LABELS[ticket.status] || {
-                            key: "common.unknownStatus",
+                            key: "user.unknownStatus",
                             color: "default",
                           };
 
