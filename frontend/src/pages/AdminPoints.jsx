@@ -795,6 +795,7 @@ export default function AdminPoints() {
               borderRadius: 4,
               border: "1px solid var(--border-light)",
               overflow: "hidden",
+              flexShrink: 0,
             }}
           >
             <Box
@@ -877,11 +878,12 @@ export default function AdminPoints() {
               </Box>
             ) : (
               <TableContainer
+                className="admin-points-table-scroll"
                 sx={{
-                  maxHeight: { xs: "55vh", md: "58vh" },
+                  maxHeight: { xs: "42vh", md: "45vh" },
                   overflowX: "auto",
                   overflowY: "auto",
-                  overscrollBehavior: "contain",
+                  overscrollBehaviorY: "contain",
                   "& .MuiTableHead-root": {
                     position: "sticky",
                     top: 0,

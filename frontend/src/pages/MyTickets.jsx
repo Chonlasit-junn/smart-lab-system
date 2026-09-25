@@ -379,134 +379,79 @@ export default function MyTickets() {
         </div>
 
         <div className="content-area page-content">
-          <Box sx={{ maxWidth: 1100, mx: "auto" }}>
-            <Box
+          {loading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Paper
+              className="surface-card data-table-shell"
+              elevation={0}
               sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: { xs: "flex-start", sm: "center" },
-                gap: 2,
-                mb: 3,
-                flexWrap: "wrap",
+                p: { xs: 2, sm: 4 },
+                border: "2px solid #cbd5e1",
+                borderRadius: 4,
+                width: "100%",
+                maxWidth: "900px",
+                mx: "auto",
+                bgcolor: "white",
               }}
             >
-              <Box>
-                <Typography variant="h4" fontWeight="700" color="#1e293b">
-                  {t("user.myRequests")}
-                </Typography>
-                <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
-                  {t("user.trackRequests")}
-                </Typography>
-              </Box>
-              <Chip
-                icon={<ConfirmationNumber />}
-                label={`${tickets.length} ${t("user.requests")}`}
-                sx={{
-                  bgcolor: "#eff6ff",
-                  color: "#2563eb",
-                  fontWeight: "700",
-                  borderRadius: 2.5,
-                  "& .MuiChip-icon": { color: "inherit" },
-                }}
-              />
-            </Box>
+              {error && (
+                <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>
+                  {error}
+                </Alert>
+              )}
 
-            {error && (
-              <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>
-                {error}
-              </Alert>
-            )}
-
-            {loading ? (
-              <Paper
-                className="surface-card"
-                elevation={0}
-                sx={{
-                  minHeight: 320,
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  borderRadius: 4,
-                  border: "1px solid #e2e8f0",
-                }}
+              <Typography
+                variant="h6"
+                fontWeight="600"
+                color="#64748b"
+                sx={{ mb: 3 }}
               >
-                <CircularProgress />
-              </Paper>
-            ) : (
-              <Paper
-                className="surface-card data-table-shell"
-                elevation={0}
-                sx={{
-                  p: { xs: 2, sm: 3 },
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 4,
-                  bgcolor: "white",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-                }}
-              >
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 2,
-                    mb: 2,
-                  }}
-                >
-                  <Box>
-                    <Typography variant="h6" fontWeight="700" color="#0f172a">
-                      {t("user.requestHistory")}
-                    </Typography>
-                    <Typography variant="body2" color="#94a3b8">
-                      {t("user.requestConversation")}
-                    </Typography>
-                  </Box>
-                  <Chip
-                    label={t("common.support")}
-                    size="small"
-                    sx={{
-                      bgcolor: "#f8fafc",
-                      color: "#64748b",
-                      fontWeight: "600",
-                    }}
-                  />
-                </Box>
+                {t("user.myRequests")}
+              </Typography>
 
-                {tickets.length === 0 ? (
-                  <Box
-                    sx={{
-                      py: 8,
-                      textAlign: "center",
-                      bgcolor: "#f8fafc",
-                      borderRadius: 3,
-                    }}
-                  >
-                    <ConfirmationNumber
-                      sx={{ fontSize: 52, color: "#cbd5e1", mb: 1 }}
-                    />
-                    <Typography variant="body1" color="#64748b" fontWeight="600">
-                      {t("user.noTicketsSent")}
-                    </Typography>
-                    <Typography variant="body2" color="#94a3b8" sx={{ mt: 0.5 }}>
-                      {t("user.supportHelp")}
-                    </Typography>
-                  </Box>
-                ) : (
-                  <>
+              {tickets.length > 0 ? (
+                <>
                   <TableContainer>
                     <Table sx={{ minWidth: 760 }}>
                       <TableHead>
-                        <TableRow sx={{ bgcolor: "#f8fafc" }}>
-                          <TableCell sx={{ fontWeight: "700", color: "#64748b" }}>
+                        <TableRow>
+                          <TableCell
+                            sx={{
+                              fontWeight: "600",
+                              borderBottom: "1px solid #e2e8f0",
+                              color: "#64748b",
+                            }}
+                          >
                             {t("user.subject")}
                           </TableCell>
-                          <TableCell sx={{ fontWeight: "700", color: "#64748b" }}>
+                          <TableCell
+                            sx={{
+                              fontWeight: "600",
+                              borderBottom: "1px solid #e2e8f0",
+                              color: "#64748b",
+                            }}
+                          >
                             {t("user.message")}
                           </TableCell>
-                          <TableCell sx={{ fontWeight: "700", color: "#64748b" }}>
+                          <TableCell
+                            sx={{
+                              fontWeight: "600",
+                              borderBottom: "1px solid #e2e8f0",
+                              color: "#64748b",
+                            }}
+                          >
                             {t("user.submittedAt")}
                           </TableCell>
-                          <TableCell sx={{ fontWeight: "700", color: "#64748b" }}>
+                          <TableCell
+                            sx={{
+                              fontWeight: "600",
+                              borderBottom: "1px solid #e2e8f0",
+                              color: "#64748b",
+                            }}
+                          >
                             {t("common.status")}
                           </TableCell>
                         </TableRow>
@@ -519,7 +464,13 @@ export default function MyTickets() {
                           };
 
                           return (
-                            <TableRow key={ticket.id} hover>
+                            <TableRow
+                              key={ticket.id}
+                              sx={{
+                                "&:last-child td, &:last-child th": { border: 0 },
+                                opacity: 0.8,
+                              }}
+                            >
                               <TableCell
                                 sx={{
                                   minWidth: 180,
@@ -575,11 +526,19 @@ export default function MyTickets() {
                       />
                     </Box>
                   )}
-                  </>
-                )}
-              </Paper>
-            )}
-          </Box>
+                </>
+              ) : (
+                <Box
+                  className="empty-state history-empty-state"
+                  sx={{ bgcolor: "var(--surface-subtle)" }}
+                >
+                  <Typography variant="body1" color="textSecondary">
+                    {t("user.noTicketsSent")}
+                  </Typography>
+                </Box>
+              )}
+            </Paper>
+          )}
         </div>
       </div>
 
