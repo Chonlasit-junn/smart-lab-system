@@ -22,7 +22,6 @@ import {
   Computer,
   Email,
   Logout,
-  Notifications,
   PendingActions,
   Person,
   PersonOutline,
@@ -35,6 +34,7 @@ import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -85,12 +85,12 @@ export default function VerifyUsers() {
       setError(
         typeof detail === "string"
           ? detail
-          : "ไม่สามารถโหลดรายการผู้ใช้ที่รอตรวจสอบได้",
+          : t("admin.pendingUsersLoadFailed"),
       );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     document.title = `${t("admin.verifyTitle")} | Smart Lab Admin`;
@@ -100,7 +100,7 @@ export default function VerifyUsers() {
   const handleVerify = async (userId, action) => {
     if (
       action === "reject" &&
-      !window.confirm("Are you sure you want to reject and delete this user?")
+      !window.confirm(t("admin.rejectUserConfirmation"))
     ) {
       return;
     }
@@ -113,7 +113,7 @@ export default function VerifyUsers() {
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
       setError(
-        typeof detail === "string" ? detail : `Failed to ${action} user.`,
+        typeof detail === "string" ? detail : t("admin.verifyUserFailed"),
       );
     } finally {
       setProcessingId(null);
@@ -179,7 +179,7 @@ export default function VerifyUsers() {
           <Box>
             <Typography
               variant="h6"
-              fontWeight="800"
+              fontWeight="700"
               sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}
             >
               Smart Lab
@@ -188,12 +188,12 @@ export default function VerifyUsers() {
               variant="caption"
               sx={{
                 color: "#64748b",
-                fontWeight: "500",
+                fontWeight: "400",
                 display: "block",
                 mt: -0.5,
               }}
             >
-              Admin Dashboard
+              {t("common.adminDashboard")}
             </Typography>
           </Box>
         </Box>
@@ -240,7 +240,7 @@ export default function VerifyUsers() {
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="800"
+              fontWeight="700"
               sx={{ color: "#1e293b", letterSpacing: "-1px" }}
             >
               {t("admin.verifyTitle")}
@@ -266,13 +266,15 @@ export default function VerifyUsers() {
                 fullWidth
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                sx={{ fontSize: "14px", fontWeight: "500" }}
+                sx={{ fontSize: "14px", fontWeight: "400" }}
                 inputProps={{ "aria-label": t("admin.searchPendingUsers") }}
               />
             </Paper>
-            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "#64748b" }} />
-            </IconButton>
+            <NotificationBell
+              className="admin-notification-button"
+              iconColor="#64748b"
+              loadNotifications={false}
+            />
             <Divider
               orientation="vertical"
               flexItem
@@ -287,12 +289,12 @@ export default function VerifyUsers() {
               >
                 <Typography
                   variant="subtitle2"
-                  fontWeight="800"
+                  fontWeight="700"
                   color="#1e293b"
                 >
                   {t("common.systemAdmin")}
                 </Typography>
-                <Typography variant="caption" fontWeight="600" color="#94a3b8">
+                <Typography variant="caption" fontWeight="500" color="#94a3b8">
                   {t("common.administrator")}
                 </Typography>
               </Box>
@@ -330,7 +332,7 @@ export default function VerifyUsers() {
                     pt: 1.5,
                   }}
                 >
-                  <Typography fontSize="13px" fontWeight="600" color="#64748b">
+                  <Typography fontSize="13px" fontWeight="500" color="#64748b">
                     admin@smartlab.ac.th
                   </Typography>
                   <IconButton
@@ -349,7 +351,7 @@ export default function VerifyUsers() {
                     sx={{
                       justifyContent: "flex-start",
                       color: "#ef4444",
-                      fontWeight: "700",
+                      fontWeight: "600",
                       textTransform: "none",
                       borderRadius: 2,
                     }}
@@ -380,7 +382,7 @@ export default function VerifyUsers() {
                 <Box>
                   <Typography
                     variant="h4"
-                    fontWeight="800"
+                    fontWeight="700"
                     color="#1e293b"
                     sx={{ letterSpacing: "-1px" }}
                   >
@@ -392,11 +394,11 @@ export default function VerifyUsers() {
                 </Box>
                 <Chip
                   icon={<PendingActions />}
-                  label={`${pendingUsers.length} Pending`}
+                  label={`${pendingUsers.length} ${t("admin.pending")}`}
                   sx={{
                     bgcolor: "#fff7ed",
                     color: "#c2410c",
-                    fontWeight: "800",
+                    fontWeight: "700",
                     borderRadius: 2.5,
                     "& .MuiChip-icon": { color: "inherit" },
                   }}
@@ -439,7 +441,7 @@ export default function VerifyUsers() {
                   <PersonOutline
                     sx={{ fontSize: 64, color: "#94a3b8", mb: 2 }}
                   />
-                  <Typography variant="h6" color="#64748b" fontWeight="700">
+                  <Typography variant="h6" color="#64748b" fontWeight="600">
                     {t("admin.noPendingVerifications")}
                   </Typography>
                   <Typography variant="body2" color="#94a3b8">
@@ -459,7 +461,7 @@ export default function VerifyUsers() {
                   }}
                 >
                   <Search sx={{ fontSize: 56, color: "#94a3b8", mb: 2 }} />
-                  <Typography variant="h6" color="#64748b" fontWeight="700">
+                  <Typography variant="h6" color="#64748b" fontWeight="600">
                     {t("admin.noMatchingGuestUsers")}
                   </Typography>
                   <Typography variant="body2" color="#94a3b8">
@@ -530,7 +532,7 @@ export default function VerifyUsers() {
                                 width: 82,
                                 height: 82,
                                 fontSize: 28,
-                                fontWeight: "800",
+                                fontWeight: "700",
                               }}
                             >
                               {getInitials(user)}
@@ -559,7 +561,7 @@ export default function VerifyUsers() {
                             <Box sx={{ minWidth: 0 }}>
                               <Typography
                                 variant="h6"
-                                fontWeight="800"
+                                fontWeight="700"
                                 color="#1e293b"
                                 noWrap
                               >
@@ -575,7 +577,7 @@ export default function VerifyUsers() {
                               sx={{
                                 bgcolor: "#f1f5f9",
                                 color: "#64748b",
-                                fontWeight: "700",
+                                fontWeight: "600",
                                 flexShrink: 0,
                               }}
                             />
@@ -620,7 +622,7 @@ export default function VerifyUsers() {
                                 sx={{ color: "#94a3b8" }}
                               />
                               <Typography variant="body2" noWrap>
-                                {user.phone || "No phone provided"}
+                                {user.phone || t("common.noPhone")}
                               </Typography>
                             </Box>
                           </Box>
@@ -637,7 +639,7 @@ export default function VerifyUsers() {
                               onClick={() => handleVerify(user.id, "reject")}
                               sx={{
                                 borderRadius: 3,
-                                fontWeight: "700",
+                                fontWeight: "600",
                                 textTransform: "none",
                               }}
                             >
@@ -652,7 +654,7 @@ export default function VerifyUsers() {
                               onClick={() => handleVerify(user.id, "approve")}
                               sx={{
                                 borderRadius: 3,
-                                fontWeight: "700",
+                                fontWeight: "600",
                                 textTransform: "none",
                                 boxShadow: "none",
                               }}

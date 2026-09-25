@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, time, date, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timedelta, time, date
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from urllib.parse import unquote
@@ -13,6 +13,7 @@ from routers.points import (
     mark_due_no_shows,
 )
 from routers.users import get_current_user, require_admin_user
+from time_utils import LAB_TIMEZONE, lab_now_naive
 from utils import normalize_email
 
 router = APIRouter(tags=["Lab Management & Booking"])
@@ -23,11 +24,6 @@ VALID_TIME_SLOTS = {
     3: {"start": time(14, 30), "end": time(16, 50)},
     4: {"start": time(17, 0), "end": time(19, 20)}
 }
-
-# All booking rules are based on the Lab's local calendar, not the server's
-# timezone. Thailand has no daylight-saving changes, so a fixed UTC+7 offset is
-# sufficient and keeps the service compatible with Windows and Linux hosts.
-LAB_TIMEZONE = timezone(timedelta(hours=7))
 
 DAY_OF_WEEK_ALIASES = {
     "monday": "Monday",
@@ -73,8 +69,9 @@ DAY_OF_WEEK_ALIASES = {
 
 
 def _lab_now() -> datetime:
-    """Return a naive local time for the Lab's timestamp columns."""
-    return datetime.now(LAB_TIMEZONE).replace(tzinfo=None)
+    """Return Lab wall-clock time for date/time-only booking rules."""
+
+    return lab_now_naive()
 
 
 def normalize_day_of_week(value: str, *, strict: bool = True):
@@ -350,15 +347,26 @@ def delete_schedule(
 def get_all_bookings(
     _admin: models.User = Depends(require_admin_user),
     db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
 ):
     """Fetch all bookings for Admin Dashboard"""
+    page_number = page if isinstance(page, int) else 1
+    page_limit = page_size if isinstance(page_size, int) else 50
     mark_due_no_shows(db, now=_lab_now())
-    bookings = db.query(models.Booking)\
+    query = db.query(models.Booking)
+    total = query.order_by(None).count()
+    bookings = query\
         .options(
             joinedload(models.Booking.user),
             joinedload(models.Booking.lab)
         )\
-        .order_by(models.Booking.created_at.desc())\
+        .order_by(
+            models.Booking.created_at.desc(),
+            models.Booking.id.desc(),
+        )\
+        .offset((page_number - 1) * page_limit)\
+        .limit(page_limit)\
         .all()
     return {
         "data": [
@@ -383,7 +391,11 @@ def get_all_bookings(
                 } if booking.lab else None,
             }
             for booking in bookings
-        ]
+        ],
+        "page": page_number,
+        "page_size": page_limit,
+        "total": total,
+        "has_more": page_number * page_limit < total,
     }
 
 @router.get("/labs/{lab_id}/availability")
@@ -517,8 +529,12 @@ def get_user_bookings(
     email: str,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    scope: str = Query("all", pattern="^(all|upcoming|history)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
 ):
     mark_due_no_shows(db, now=_lab_now())
+    scope_value = scope if isinstance(scope, str) else "all"
     clean_email = normalize_email(unquote(email))
     if clean_email != normalize_email(current_user.email) and not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="You cannot view another user's bookings.")
@@ -528,11 +544,28 @@ def get_user_bookings(
     ).first()
     if not user:
         raise HTTPException(status_code=404, detail=f"User '{clean_email}' not found")
+
+    page_number = page if isinstance(page, int) else 1
+    page_limit = page_size if isinstance(page_size, int) else 20
     
-    bookings = db.query(models.Booking, models.Lab)\
+    query = db.query(models.Booking, models.Lab)\
         .join(models.Lab, models.Booking.lab_id == models.Lab.id)\
-        .filter(models.Booking.user_id == user.id)\
-        .order_by(models.Booking.booking_date.desc(), models.Booking.start_time.desc())\
+        .filter(models.Booking.user_id == user.id)
+    today = _lab_now().date()
+    if scope_value == "upcoming":
+        query = query.filter(models.Booking.booking_date >= today)
+    elif scope_value == "history":
+        query = query.filter(models.Booking.booking_date < today)
+
+    total = query.order_by(None).count()
+    bookings = query\
+        .order_by(
+            models.Booking.booking_date.desc(),
+            models.Booking.start_time.desc(),
+            models.Booking.id.desc(),
+        )\
+        .offset((page_number - 1) * page_limit)\
+        .limit(page_limit)\
         .all()
     
     result = []
@@ -553,7 +586,14 @@ def get_user_bookings(
             "no_show_at": booking.no_show_at,
         })
         
-    return {"data": result}
+    return {
+        "data": result,
+        "scope": scope_value,
+        "page": page_number,
+        "page_size": page_limit,
+        "total": total,
+        "has_more": page_number * page_limit < total,
+    }
 
 @router.delete("/bookings/{booking_id}")
 def cancel_booking(

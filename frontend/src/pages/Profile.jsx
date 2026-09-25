@@ -15,7 +15,6 @@ import {
   Alert,
 } from "@mui/material";
 import {
-  Notifications,
   EventNote,
   Assignment,
   History,
@@ -38,6 +37,9 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
+import { formatDate, formatDateTime } from "../utils/dateFormat";
+import { getPointReasonLabel } from "../utils/pointReason";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -61,20 +63,22 @@ const FACULTY_NAMES = {
   economics: "School of Economics",
 };
 
-const POINT_REASON_LABELS = {
-  daily_bonus: "Daily bonus",
-  no_show: "ไม่มาตามการจอง",
-  forbidden_app: "ใช้โปรแกรมต้องห้าม",
-  late_cancel: "ยกเลิกการจองกระชั้นชิด",
-  complete_session: "จบการใช้งานปกติ",
-  admin_grant: "Admin อนุมัติเพิ่มคะแนน",
-};
-
 const HIDDEN_USER_POINT_LOG_REASONS = new Set([
   "admin_grant",
   "admin_test_deduction",
   "admin_test_reset",
 ]);
+
+const formatPointLogSubtitle = (log, locale) => {
+  const timestamp = formatDateTime(log.created_at, locale);
+  const note = String(log.note || "").trim();
+
+  // The reason is already displayed as the row title. Avoid repeating the
+  // daily-bonus note and its ISO date in the description.
+  if (log.reason === "daily_bonus") return timestamp;
+  if (!note) return timestamp;
+  return `${note} · ${timestamp}`;
+};
 
 const isInternalAdminPointLog = (log) =>
   HIDDEN_USER_POINT_LOG_REASONS.has(log.reason) ||
@@ -140,7 +144,7 @@ export default function Profile() {
             : { points: null, daily_score: null, points_loaded: false };
 
         if (pointsResult.status !== "fulfilled") {
-          setPointsError("ไม่สามารถโหลดข้อมูลคะแนนได้ กรุณาลองใหม่อีกครั้ง");
+          setPointsError(t("user.pointsLoadFailed"));
         }
         setProfile({ ...profileData, ...pointData });
         const logs =
@@ -150,7 +154,7 @@ export default function Profile() {
         setPointLogs(logs.filter((log) => !isInternalAdminPointLog(log)));
       } catch (err) {
         if (cancelled || axios.isCancel(err)) return;
-        setError("ไม่สามารถโหลดข้อมูลโปรไฟล์ได้");
+        setError(t("user.profileLoadFailed"));
         console.error("[Profile] fetch failed:", err);
       } finally {
         if (!cancelled) setLoading(false);
@@ -163,7 +167,7 @@ export default function Profile() {
       cancelled = true;
       controller.abort();
     };
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, t]);
 
   // Add User Menu Popover States
   const [anchorEl, setAnchorEl] = useState(null);
@@ -199,21 +203,12 @@ export default function Profile() {
       }
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
-      const message = typeof detail === "string" ? detail : "ไม่สามารถส่งคำขอเพิ่มคะแนนได้ กรุณาลองใหม่อีกครั้ง";
+      const message = typeof detail === "string" ? detail : t("user.pointRequestFailed");
       window.alert(message);
     } finally {
       setPointRequestLoading(false);
     }
   };
-
-  const formatDate = (d) =>
-    d
-      ? new Date(d).toLocaleDateString(t("common.locale"), {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })
-      : "—";
 
   const roleColor =
     profile?.role === "student"
@@ -224,10 +219,10 @@ export default function Profile() {
 
   const roleLabel =
     profile?.role === "student"
-      ? "นักศึกษา"
+        ? t("user.studentRole")
       : profile?.role === "admin"
-        ? "ผู้ดูแลระบบ"
-        : "บุคคลทั่วไป";
+        ? t("user.adminRole")
+        : t("user.guestRole");
 
   const numericPoints =
     profile?.points == null ? null : Number(profile.points);
@@ -257,11 +252,11 @@ export default function Profile() {
         <div className="sidebar-logo">
           <Computer sx={{ fontSize: 40, color: "#1877f2" }} />
           <div>
-            <Typography variant="h6" fontWeight="bold" lineHeight={1.2}>
+            <Typography variant="h6" fontWeight="600" lineHeight={1.2}>
               Smart Lab
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              Reserve Lab to use
+              {t("common.brandTagline")}
             </Typography>
           </div>
         </div>
@@ -301,7 +296,7 @@ export default function Profile() {
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="bold"
+              fontWeight="600"
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
@@ -315,9 +310,7 @@ export default function Profile() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton className="header-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "#111827" }} />
-            </IconButton>
+            <NotificationBell />
             {currentUser ? (
               <Box
                 sx={{
@@ -332,7 +325,7 @@ export default function Profile() {
                 <Box sx={{ textAlign: "right" }}>
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                   >
                     {currentUser.name}
@@ -389,7 +382,7 @@ export default function Profile() {
                   >
                     <Typography
                       fontSize="13px"
-                      fontWeight="600"
+                      fontWeight="500"
                       color="#64748b"
                       sx={{ pl: 0.5 }}
                     >
@@ -418,10 +411,10 @@ export default function Profile() {
 
                     <Typography
                       sx={{ mt: 1.5, color: "#1e293b" }}
-                      fontWeight="700"
+                      fontWeight="600"
                       fontSize="18px"
                     >
-                      Hi, {currentUser.name}
+                      {t("common.greeting")}, {currentUser.name}
                     </Typography>
 
                     <Button
@@ -434,7 +427,7 @@ export default function Profile() {
                         mt: 2,
                         borderRadius: 20,
                         textTransform: "none",
-                        fontWeight: "700",
+                        fontWeight: "600",
                         fontSize: "13px",
                         px: 2.5,
                         py: 0.6,
@@ -473,7 +466,7 @@ export default function Profile() {
                       <Settings sx={{ fontSize: 20, color: "#64748b" }} />
                       <Typography
                         fontSize="13px"
-                        fontWeight="700"
+                        fontWeight="600"
                         color="#1e293b"
                       >
                         {t("common.settings")}
@@ -495,7 +488,7 @@ export default function Profile() {
                       <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
                       <Typography
                         fontSize="13px"
-                        fontWeight="700"
+                        fontWeight="600"
                         color="#ef4444"
                       >
                         {t("common.logout")}
@@ -522,14 +515,14 @@ export default function Profile() {
                 <Box sx={{ textAlign: "right" }}>
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                     color="textSecondary"
                   >
-                    Guest User
+                    {t("common.guestUser")}
                   </Typography>
                   <Typography variant="caption" color="primary.main">
-                    Click to Log in
+                    {t("common.clickToLogin")}
                   </Typography>
                 </Box>
                 <Avatar sx={{ bgcolor: "#cbd5e1", width: 36, height: 36 }}>
@@ -565,12 +558,12 @@ export default function Profile() {
                   >
                     {numericPoints === 0 ? (
                       <Box>
-                        <Typography fontWeight="700">
+                        <Typography fontWeight="600">
                           {t("user.zeroPointsMessage")}
                         </Typography>
                         {pointRequest?.status === "pending" ? (
                           <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            {t("user.contactAdmin")} {pointRequest.requested_points || pointRequestAmount} {t("user.requestSubmitted")}
+                            {t("user.pointRequestSentPrefix")} {pointRequest.requested_points || pointRequestAmount} {t("common.points")} {t("user.requestSubmitted")}
                           </Typography>
                         ) : (
                           <Button
@@ -579,14 +572,14 @@ export default function Profile() {
                             startIcon={<SupportAgent />}
                             onClick={handlePointRequest}
                             disabled={pointRequestLoading || profile.can_request_points === false}
-                            sx={{ mt: 1.25, borderColor: "currentColor", color: "inherit", textTransform: "none", fontWeight: "700" }}
+                            sx={{ mt: 1.25, borderColor: "currentColor", color: "inherit", textTransform: "none", fontWeight: "600" }}
                           >
                             {pointRequestLoading ? t("user.sendingRequest") : `${t("user.contactAdmin")} ${pointRequestAmount} ${t("common.points")}`}
                           </Button>
                         )}
                       </Box>
                     ) : profile.is_banned ? (
-                            `${t("user.bannedUntil")} ${new Date(profile.ban_until).toLocaleString(t("common.locale"))}`
+                            `${t("common.bannedUntil")} ${formatDateTime(profile.ban_until, t("common.locale"))}`
                     ) : numericPoints <= pointWarningThreshold ? (
                       `${t("user.lowPointsWarning")} (${numericPoints} ${t("common.points")})`
                     ) : null}
@@ -631,7 +624,7 @@ export default function Profile() {
 
                         <Typography
                           variant="h6"
-                          fontWeight="bold"
+                          fontWeight="600"
                           color="#0f172a"
                           sx={{ mt: 1.5 }}
                         >
@@ -646,7 +639,7 @@ export default function Profile() {
                             mb: 2,
                             bgcolor: `${roleColor}18`,
                             color: roleColor,
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             fontSize: "12px",
                           }}
                         />
@@ -662,7 +655,7 @@ export default function Profile() {
                         >
                           <CalendarMonth sx={{ fontSize: 14 }} />
                           <Typography variant="caption">
-                            {t("user.joinedAt")} {formatDate(profile.created_at)}
+                            {t("user.joinedAt")} {formatDate(profile.created_at, t("common.locale"))}
                           </Typography>
                         </Box>
                       </Box>
@@ -682,7 +675,7 @@ export default function Profile() {
                     >
                       <Typography
                         variant="caption"
-                        fontWeight="bold"
+                        fontWeight="600"
                         color="#94a3b8"
                         sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                       >
@@ -699,7 +692,7 @@ export default function Profile() {
                         <Box>
                           <Typography
                             variant="h3"
-                            fontWeight="800"
+                            fontWeight="700"
                             color="#1e293b"
                             lineHeight={1}
                           >
@@ -721,7 +714,7 @@ export default function Profile() {
                         <Box>
                           <Typography
                             variant="h3"
-                            fontWeight="800"
+                            fontWeight="700"
                             lineHeight={1}
                             color={pointColor}
                           >
@@ -754,7 +747,7 @@ export default function Profile() {
                     >
                       <Typography
                         variant="caption"
-                        fontWeight="bold"
+                        fontWeight="600"
                         color="#94a3b8"
                         sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                       >
@@ -846,7 +839,7 @@ export default function Profile() {
                         <Star sx={{ color: "#f59e0b", fontSize: 20 }} />
                         <Typography
                           variant="caption"
-                          fontWeight="bold"
+                          fontWeight="600"
                           color="#94a3b8"
                           sx={{ textTransform: "uppercase", letterSpacing: 1 }}
                         >
@@ -867,7 +860,7 @@ export default function Profile() {
                         </Typography>
                         <Typography
                           variant="h6"
-                          fontWeight="bold"
+                          fontWeight="600"
                           color={pointColor}
                         >
                           {numericPoints ?? "—"}{" "}
@@ -907,7 +900,7 @@ export default function Profile() {
                         <Typography variant="body2" color="#64748b">
                           {t("user.todayPoints")}
                         </Typography>
-                        <Typography variant="body2" fontWeight="bold" color="#334155">
+                        <Typography variant="body2" fontWeight="600" color="#334155">
                           {profile.daily_score ?? "—"} / 100
                         </Typography>
                       </Box>
@@ -919,7 +912,7 @@ export default function Profile() {
                           sx={{
                             bgcolor: "#f1f5f9",
                             color: "#64748b",
-                            fontWeight: "bold",
+                            fontWeight: "600",
                           }}
                         />
                       ) : pointRequest?.status === "pending" ? (
@@ -929,17 +922,17 @@ export default function Profile() {
                           sx={{
                             bgcolor: "#fff7ed",
                             color: "#c2410c",
-                            fontWeight: "bold",
+                            fontWeight: "600",
                           }}
                         />
                       ) : profile.is_banned ? (
                         <Chip
-                          label={`ถูกระงับถึง ${new Date(profile.ban_until).toLocaleDateString("th-TH")}`}
+                          label={`${t("user.bookingSuspendedUntil")} ${formatDate(profile.ban_until, t("common.locale"))}`}
                           size="small"
                           sx={{
                             bgcolor: "#fef2f2",
                             color: "#ef4444",
-                            fontWeight: "bold",
+                            fontWeight: "600",
                           }}
                         />
                       ) : numericPoints !== null && numericPoints <= pointWarningThreshold ? (
@@ -949,7 +942,7 @@ export default function Profile() {
                           sx={{
                             bgcolor: "#fff7ed",
                             color: "#c2410c",
-                            fontWeight: "bold",
+                            fontWeight: "600",
                           }}
                         />
                       ) : (
@@ -959,13 +952,13 @@ export default function Profile() {
                           sx={{
                             bgcolor: "#f0fdf4",
                             color: "#16a34a",
-                            fontWeight: "bold",
+                            fontWeight: "600",
                           }}
                         />
                       )}
 
                       <Divider sx={{ my: 3 }} />
-                      <Typography variant="subtitle2" fontWeight="bold" color="#334155" sx={{ mb: 1.5 }}>
+                      <Typography variant="subtitle2" fontWeight="600" color="#334155" sx={{ mb: 1.5 }}>
                         {t("user.scoreHistory")}
                       </Typography>
                       {pointLogs.length === 0 ? (
@@ -993,17 +986,17 @@ export default function Profile() {
                                 }}
                               >
                                 <Box sx={{ minWidth: 0 }}>
-                                  <Typography variant="body2" fontWeight="600" color="var(--text-dark)" noWrap>
-                                    {POINT_REASON_LABELS[log.reason] || log.reason}
+                                  <Typography variant="body2" fontWeight="500" color="var(--text-dark)" noWrap>
+                                    {getPointReasonLabel(log.reason, t)}
                                   </Typography>
                                   <Typography variant="caption" color="var(--text-gray)" noWrap>
-                                    {log.note || "—"} · {log.created_at ? new Date(log.created_at).toLocaleString("th-TH") : "—"}
+                                    {formatPointLogSubtitle(log, t("common.locale"))}
                                   </Typography>
                                 </Box>
                                 <Typography
                                   className="theme-colored"
                                   variant="body2"
-                                  fontWeight="bold"
+                                  fontWeight="600"
                                   color={isPositive ? "var(--success-color)" : "var(--danger-color)"}
                                   sx={{ flexShrink: 0 }}
                                 >
@@ -1037,14 +1030,14 @@ function InfoRow({ icon, iconBg, label, value, sub }) {
         <Typography
           variant="caption"
           color="#94a3b8"
-          fontWeight="bold"
+          fontWeight="600"
           sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}
         >
           {label}
         </Typography>
         <Typography
           variant="body2"
-          fontWeight="600"
+          fontWeight="500"
           color="#1e293b"
           sx={{ mt: 0.2 }}
         >

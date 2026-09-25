@@ -56,12 +56,12 @@ export function validatePointPolicy(values) {
     const rawValue = values[fieldName];
     const numericValue = Number(rawValue);
     if (rawValue === "" || rawValue === null || !Number.isInteger(numericValue)) {
-      return "กรุณากรอกค่าเป็นจำนวนเต็มให้ครบทุกช่อง";
+      return "admin.policyIntegerRequired";
     }
 
     const [minimum, maximum] = FIELD_RANGES[fieldName];
     if (numericValue < minimum || numericValue > maximum) {
-      return `ค่า ${fieldName} ต้องอยู่ระหว่าง ${minimum} ถึง ${maximum}`;
+      return "admin.policyRangeInvalid";
     }
   }
 
@@ -72,7 +72,7 @@ export function validatePointPolicy(values) {
     Number(values.ban_level_4_below),
   ];
   if (thresholds.some((threshold, index) => index > 0 && threshold <= thresholds[index - 1])) {
-    return "เกณฑ์คะแนนสำหรับ Ban ต้องเรียงจากน้อยไปมากและไม่ซ้ำกัน";
+    return "admin.policyThresholdOrderInvalid";
   }
   return "";
 }

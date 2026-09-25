@@ -2,16 +2,18 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 sqlalchemy==2.0.23
 pydantic[email]==2.5.2
-passlib[bcrypt]
+passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-jose[cryptography]==3.3.0
 fastapi-mail==1.4.1
 python-multipart==0.0.6
 psycopg2-binary==2.9.9
 numpy==1.26.2
-opencv-python-headless==4.8.1.78
-Pillow>=10.0.0
-python-dotenv>=1.0.0,<2
-deepface
-tf-keras
-httpx
+# DeepFace depends on opencv-python; keep one pinned OpenCV distribution.
+opencv-python==4.8.1.78
+Pillow==12.2.0
+python-dotenv==1.2.2
+deepface==0.0.99
+tensorflow==2.21.0
+tf-keras==2.21.0
+httpx==0.28.1

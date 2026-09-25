@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy import and_, func, or_
@@ -12,6 +12,7 @@ from database import get_db
 from device_registry import require_registered_device
 from policy import build_policy, find_matching_rule, get_policy_rules
 from routers.points import apply_point_event, mark_due_no_shows
+from time_utils import as_utc, lab_now_naive, utc_now
 from utils import normalize_email
 
 router = APIRouter(tags=["Hardware Agent"])
@@ -73,10 +74,8 @@ def _same_session_identity(
 
 def _cleanup_stale_sessions(db: Session) -> int:
     """Close sessions whose Agent has stopped sending heartbeats."""
-    now_naive = datetime.now()
-    now_utc = datetime.now(timezone.utc)
+    now_utc = utc_now()
     stale_before_utc = now_utc - STALE_SESSION_AFTER
-    stale_entry_before = now_naive - STALE_SESSION_AFTER
 
     stale_filter = db.query(models.LabAccessLog).filter(
         models.LabAccessLog.session_status == "active",
@@ -88,7 +87,7 @@ def _cleanup_stale_sessions(db: Session) -> int:
             ),
             and_(
                 models.LabAccessLog.last_heartbeat_at.is_(None),
-                models.LabAccessLog.entry_time < stale_entry_before,
+                models.LabAccessLog.entry_time < stale_before_utc,
             ),
         ),
     )
@@ -96,7 +95,7 @@ def _cleanup_stale_sessions(db: Session) -> int:
         {
             models.LabAccessLog.session_status: "abandoned",
             models.LabAccessLog.end_reason: "stale_cleanup",
-            models.LabAccessLog.exit_time: now_naive,
+            models.LabAccessLog.exit_time: now_utc,
         },
         synchronize_session=False,
     )
@@ -108,20 +107,18 @@ def _require_active_session(access_log: models.LabAccessLog) -> None:
 
 
 def _parse_usage_time(value: Optional[str], fallback: datetime) -> datetime:
-    """Parse an Agent timestamp while keeping compatibility with old payloads."""
+    """Parse an Agent timestamp as UTC while accepting legacy local payloads."""
     if not value:
-        return fallback
+        return as_utc(fallback)
 
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail="Invalid usage timestamp.") from exc
 
-    # The current Supabase columns are timestamp without time zone. Normalize an
-    # explicitly supplied offset before storing it in those columns.
-    if parsed.tzinfo:
-        parsed = parsed.astimezone().replace(tzinfo=None)
-    return parsed
+    # New Agents send an explicit UTC offset. Older Agents sent naive Lab local
+    # time; as_utc() preserves those events by assuming UTC+7 for naive values.
+    return as_utc(parsed)
 
 
 @router.post("/agent/start-session")
@@ -183,7 +180,7 @@ def start_session(
         registered_device.device_name = resolved_device_name
         registered_device.device_mac = resolved_device_mac
         registered_device.agent_version = (agent_version or "").strip()[:64] or registered_device.agent_version
-        registered_device.last_seen_at = datetime.now(timezone.utc)
+        registered_device.last_seen_at = utc_now()
 
     resolved_client_session_id = _clean_idempotency_key(
         client_session_id,
@@ -256,32 +253,33 @@ def start_session(
             detail="This device already has an active lab session.",
         )
 
-    now = datetime.now()
+    lab_now = lab_now_naive()
+    now_utc = utc_now()
     matching_booking = db.query(models.Booking).filter(
         models.Booking.user_id == user.id,
         models.Booking.lab_id == lab.id,
-        models.Booking.booking_date == now.date(),
-        models.Booking.start_time <= now.time(),
-        models.Booking.end_time >= now.time(),
+        models.Booking.booking_date == lab_now.date(),
+        models.Booking.start_time <= lab_now.time(),
+        models.Booking.end_time >= lab_now.time(),
         models.Booking.status == "reserved",
     ).order_by(models.Booking.start_time.asc()).first()
     if matching_booking:
         matching_booking.status = "attended"
-        matching_booking.checked_in_at = now
+        matching_booking.checked_in_at = now_utc
 
     new_log = models.LabAccessLog(
         lab_id=lab.id,
         user_id=user.id,
         lab_device_id=resolved_lab_device_id,
         booking_id=matching_booking.id if matching_booking else None,
-        entry_time=datetime.now(),
+        entry_time=now_utc,
         access_type="manual",
         status="success",
         device_used=resolved_device_name,
         device_mac=resolved_device_mac,
         client_session_id=resolved_client_session_id,
         session_status="active",
-        last_heartbeat_at=datetime.now(timezone.utc),
+        last_heartbeat_at=now_utc,
     )
     try:
         db.add(new_log)
@@ -327,7 +325,7 @@ def log_usage(
         if not isinstance(logs, list):
             raise HTTPException(status_code=422, detail="usage_data must be a JSON list.")
 
-        now = datetime.now()
+        now = utc_now()
         parsed_logs = []
         for item in logs:
             if not isinstance(item, dict) or not str(item.get("name", "")).strip():
@@ -479,7 +477,7 @@ def log_violation(
         program_name=cleaned_program_name,
         reason=reason.strip() if reason else None,
         action_taken=action_taken.strip() or "logout",
-        detected_at=datetime.now(),
+        detected_at=utc_now(),
         event_id=resolved_event_id,
         process_name=process_name.strip() if process_name else None,
         exe_path=exe_path.strip() if exe_path else None,
@@ -548,14 +546,14 @@ def heartbeat(
         registered_device = require_registered_device(db, device_id, device_token)
         if registered_device.id != access_log.lab_device_id:
             raise HTTPException(status_code=409, detail="Device does not match session.")
-        registered_device.last_seen_at = datetime.now(timezone.utc)
+        registered_device.last_seen_at = utc_now()
 
     reported_mac = _clean_device_mac(device_mac)
     stored_mac = _clean_device_mac(access_log.device_mac)
     if reported_mac and stored_mac and reported_mac != stored_mac:
         raise HTTPException(status_code=409, detail="Device does not match session.")
 
-    heartbeat_at = datetime.now(timezone.utc)
+    heartbeat_at = utc_now()
     access_log.last_heartbeat_at = heartbeat_at
     db.commit()
     return {
@@ -585,7 +583,7 @@ def end_session(
     changed = False
     point_result = None
     if access_log.exit_time is None:
-        access_log.exit_time = datetime.now()
+        access_log.exit_time = utc_now()
         changed = True
 
     if access_log.session_status == "active":

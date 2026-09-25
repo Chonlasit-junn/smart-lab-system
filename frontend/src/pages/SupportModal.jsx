@@ -58,10 +58,14 @@ export default function SupportModal({ open, onClose }) {
           value={message} onChange={(e) => setMessage(e.target.value)} sx={{ mt: 2 }}
         />
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} color="inherit">{t('common.cancel')}</Button>
+      <DialogActions className="support-dialog-actions">
+        <Button onClick={onClose} color="inherit">
+          <span className="support-button-label">{t('common.cancel')}</span>
+        </Button>
         <Button onClick={handleSubmit} variant="contained" disabled={loading}>
-          {loading ? t('common.sending') : t('common.sendTicket')}
+          <span className="support-button-label">
+            {loading ? t('common.sending') : t('common.sendTicket')}
+          </span>
         </Button>
       </DialogActions>
     </Dialog>

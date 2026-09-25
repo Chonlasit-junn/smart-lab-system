@@ -18,9 +18,9 @@ import {
   Popover,
   Button,
   Divider,
+  Pagination,
 } from "@mui/material";
 import {
-  Notifications,
   EventNote,
   Assignment,
   History as HistoryIcon,
@@ -38,6 +38,8 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
+import { formatDate } from "../utils/dateFormat";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -49,6 +51,9 @@ export default function History() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pastBookings, setPastBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const fetchMyHistory = useCallback(async () => {
     if (!currentUser) return;
@@ -57,26 +62,19 @@ export default function History() {
       const token = localStorage.getItem("access_token");
       const response = await axios.get(
         `${API_URL}/bookings/user/${currentUser.email}`,
-        { headers: { Authorization: `Bearer ${token}` } },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { scope: "history", page, page_size: PAGE_SIZE },
+        },
       );
-      const allBookings = response.data.data;
-
-      const todayMidnight = new Date();
-      todayMidnight.setHours(0, 0, 0, 0);
-
-      const historyOnly = allBookings.filter((booking) => {
-        const bookingDate = new Date(booking.booking_date);
-        bookingDate.setHours(0, 0, 0, 0);
-        return bookingDate.getTime() < todayMidnight.getTime();
-      });
-
-      setPastBookings(historyOnly);
+      setPastBookings(response.data?.data || []);
+      setTotal(Number(response.data?.total) || 0);
     } catch (error) {
       console.error("[API Error] Failed to fetch history:", error);
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, page]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -99,11 +97,6 @@ export default function History() {
     navigate("/");
   };
 
-  const formatDate = (dateString) => {
-    const options = { day: "numeric", month: "short", year: "numeric" };
-    return new Date(dateString).toLocaleDateString("en-GB", options);
-  };
-
   return (
     <div className="app-layout">
       {isSidebarOpen && (
@@ -117,11 +110,11 @@ export default function History() {
         <div className="sidebar-logo">
           <Computer sx={{ fontSize: 40, color: "#1877f2" }} />
           <div>
-            <Typography variant="h6" fontWeight="bold" lineHeight={1.2}>
+            <Typography variant="h6" fontWeight="600" lineHeight={1.2}>
               Smart Lab
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              Reserve Lab to use
+              {t("common.brandTagline")}
             </Typography>
           </div>
         </div>
@@ -165,7 +158,7 @@ export default function History() {
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="800"
+              fontWeight="700"
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
@@ -180,9 +173,7 @@ export default function History() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton className="header-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "#111827" }} />
-            </IconButton>
+            <NotificationBell />
             {currentUser ? (
               <Box
                 sx={{
@@ -200,7 +191,7 @@ export default function History() {
                 >
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                   >
                     {currentUser.name}
@@ -257,7 +248,7 @@ export default function History() {
                   >
                     <Typography
                       fontSize="13px"
-                      fontWeight="600"
+                      fontWeight="500"
                       color="#64748b"
                       sx={{ pl: 0.5 }}
                     >
@@ -286,10 +277,10 @@ export default function History() {
 
                     <Typography
                       sx={{ mt: 1.5, color: "#1e293b" }}
-                      fontWeight="700"
+                      fontWeight="600"
                       fontSize="18px"
                     >
-                      Hi, {currentUser.name}
+                      {t("common.greeting")}, {currentUser.name}
                     </Typography>
 
                     <Button
@@ -302,7 +293,7 @@ export default function History() {
                         mt: 2,
                         borderRadius: 20,
                         textTransform: "none",
-                        fontWeight: "700",
+                        fontWeight: "600",
                         fontSize: "13px",
                         px: 2.5,
                         py: 0.6,
@@ -341,7 +332,7 @@ export default function History() {
                       <Settings sx={{ fontSize: 20, color: "#64748b" }} />
                       <Typography
                         fontSize="13px"
-                        fontWeight="700"
+                        fontWeight="600"
                         color="#1e293b"
                       >
                         {t("common.settings")}
@@ -363,7 +354,7 @@ export default function History() {
                       <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
                       <Typography
                         fontSize="13px"
-                        fontWeight="700"
+                        fontWeight="600"
                         color="#ef4444"
                       >
                         {t("common.logout")}
@@ -393,7 +384,7 @@ export default function History() {
                 >
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                     color="textSecondary"
                   >
@@ -424,6 +415,7 @@ export default function History() {
                 p: { xs: 2, sm: 4 },
                 border: "2px solid #cbd5e1",
                 borderRadius: 4,
+                width: "100%",
                 maxWidth: "900px",
                 mx: "auto",
                 bgcolor: "white",
@@ -431,7 +423,7 @@ export default function History() {
             >
               <Typography
                 variant="h6"
-                fontWeight="700"
+                fontWeight="600"
                 color="#64748b"
                 sx={{ mb: 3 }}
               >
@@ -439,13 +431,14 @@ export default function History() {
               </Typography>
 
               {pastBookings.length > 0 ? (
+                <>
                 <TableContainer>
                   <Table sx={{ minWidth: 600 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell
                           sx={{
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             borderBottom: "1px solid #e2e8f0",
                             color: "#64748b",
                           }}
@@ -454,7 +447,7 @@ export default function History() {
                         </TableCell>
                         <TableCell
                           sx={{
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             borderBottom: "1px solid #e2e8f0",
                             color: "#64748b",
                           }}
@@ -463,7 +456,7 @@ export default function History() {
                         </TableCell>
                         <TableCell
                           sx={{
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             borderBottom: "1px solid #e2e8f0",
                             color: "#64748b",
                           }}
@@ -472,7 +465,7 @@ export default function History() {
                         </TableCell>
                         <TableCell
                           sx={{
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             borderBottom: "1px solid #e2e8f0",
                             color: "#64748b",
                           }}
@@ -497,7 +490,7 @@ export default function History() {
                             {row.lab_code}
                           </TableCell>
                           <TableCell sx={{ color: "#64748b" }}>
-                            {formatDate(row.booking_date)}
+                            {formatDate(row.booking_date, t("common.locale"))}
                           </TableCell>
                           <TableCell sx={{ color: "#64748b" }}>
                             {row.start_time} - {row.end_time}
@@ -507,13 +500,22 @@ export default function History() {
                     </TableBody>
                   </Table>
                 </TableContainer>
+                {total > PAGE_SIZE && (
+                  <Box sx={{ display: "flex", justifyContent: "center", pt: 3 }}>
+                    <Pagination
+                      count={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+                      page={page}
+                      onChange={(_, nextPage) => setPage(nextPage)}
+                      color="primary"
+                    />
+                  </Box>
+                )}
+                </>
               ) : (
                 <Box
+                  className="empty-state history-empty-state"
                   sx={{
-                    py: 6,
-                    textAlign: "center",
-                    bgcolor: "#f8fafc",
-                    borderRadius: 3,
+                    bgcolor: "var(--surface-subtle)",
                   }}
                 >
                   <Typography variant="body1" color="textSecondary">

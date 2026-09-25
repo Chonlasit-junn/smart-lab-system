@@ -1,10 +1,12 @@
 import { DarkMode, LightMode } from "@mui/icons-material";
 import { IconButton, Tooltip } from "@mui/material";
 import { useTheme } from "../context/theme-context.js";
+import { useLanguage } from "../context/language-context.js";
 
 export default function ThemeToggle({ className = "" }) {
   const { isDark, toggleTheme } = useTheme();
-  const nextModeLabel = isDark ? "สลับเป็น Light Theme" : "สลับเป็น Dark Theme";
+  const { t } = useLanguage();
+  const nextModeLabel = isDark ? t("common.switchToLightTheme") : t("common.switchToDarkTheme");
 
   return (
     <Tooltip title={nextModeLabel} arrow>

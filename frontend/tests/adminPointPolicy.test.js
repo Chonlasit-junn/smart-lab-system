@@ -35,12 +35,12 @@ test("accepts warning settings without a booking minimum", () => {
     "",
   );
 
-  assert.match(
+  assert.equal(
     validatePointPolicy({
       ...DEFAULT_POINT_POLICY,
       ban_level_2_below: DEFAULT_POINT_POLICY.ban_level_1_below,
     }),
-    /Ban/,
+    "admin.policyThresholdOrderInvalid",
   );
 });
 

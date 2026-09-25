@@ -17,6 +17,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  Pagination,
 } from "@mui/material";
 import {
   Assignment,
@@ -27,7 +28,6 @@ import {
   History as HistoryIcon,
   Logout,
   Menu as MenuIcon,
-  Notifications,
   Person,
   Settings,
   SupportAgent,
@@ -36,7 +36,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
+import { formatDateTime } from "../utils/dateFormat";
 import SupportModal from "./SupportModal";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -57,17 +59,8 @@ const MENU_ITEMS = [
   },
 ];
 
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-};
-
 export default function MyTickets() {
+  const PAGE_SIZE = 20;
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser, logout } = useAuth();
@@ -79,6 +72,8 @@ export default function MyTickets() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const fetchMyTickets = useCallback(async () => {
     if (!currentUser) return;
@@ -89,26 +84,28 @@ export default function MyTickets() {
       const token = localStorage.getItem("access_token");
       const response = await axios.get(`${API_URL}/tickets/me`, {
         headers: { Authorization: `Bearer ${token}` },
+        params: { page, page_size: PAGE_SIZE },
       });
       setTickets(response.data?.data || []);
+      setTotal(Number(response.data?.total) || 0);
     } catch (requestError) {
       setError(
         requestError.response?.data?.detail ||
-          "ไม่สามารถโหลดคำร้องของคุณได้",
+          t("user.myTicketsLoadFailed"),
       );
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, page, t]);
 
   useEffect(() => {
-    document.title = "My Tickets | Smart Lab";
+    document.title = `${t("user.ticketTitle")} | Smart Lab`;
     if (!currentUser) {
       navigate("/");
       return;
     }
     fetchMyTickets();
-  }, [currentUser, fetchMyTickets, navigate]);
+  }, [currentUser, fetchMyTickets, navigate, t]);
 
   const handleLogout = () => {
     setAnchorEl(null);
@@ -134,11 +131,11 @@ export default function MyTickets() {
         <div className="sidebar-logo">
           <Computer sx={{ fontSize: 40, color: "#1877f2" }} />
           <div>
-            <Typography variant="h6" fontWeight="bold" lineHeight={1.2}>
+            <Typography variant="h6" fontWeight="600" lineHeight={1.2}>
               Smart Lab
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              Reserve Lab to use
+              {t("common.brandTagline")}
             </Typography>
           </div>
         </div>
@@ -179,13 +176,13 @@ export default function MyTickets() {
             <IconButton
               sx={{ display: { xs: "block", md: "none" }, color: "#111827" }}
               onClick={() => setIsSidebarOpen(true)}
-              aria-label="Open navigation"
+              aria-label={t("common.openNavigation")}
             >
               <MenuIcon />
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="800"
+              fontWeight="700"
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
@@ -200,9 +197,7 @@ export default function MyTickets() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton className="header-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "#111827" }} />
-            </IconButton>
+            <NotificationBell />
             {currentUser && (
               <Box
                 sx={{
@@ -219,7 +214,7 @@ export default function MyTickets() {
                 >
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                   >
                     {currentUser.name}
@@ -231,7 +226,7 @@ export default function MyTickets() {
                 <IconButton
                   onClick={(event) => setAnchorEl(event.currentTarget)}
                   sx={{ p: 0.5, "&:hover": { bgcolor: "#f1f5f9" } }}
-                  aria-label="Open user menu"
+                  aria-label={t("common.openUserMenu")}
                 >
                   <Avatar
                     sx={{
@@ -273,7 +268,7 @@ export default function MyTickets() {
                   >
                     <Typography
                       fontSize="13px"
-                      fontWeight="600"
+                      fontWeight="500"
                       color="#64748b"
                       noWrap
                     >
@@ -282,7 +277,7 @@ export default function MyTickets() {
                     <IconButton
                       size="small"
                       onClick={() => setAnchorEl(null)}
-                      aria-label="Close user menu"
+                      aria-label={t("common.closeUserMenu")}
                     >
                       <Close sx={{ fontSize: 18, color: "#64748b" }} />
                     </IconButton>
@@ -304,10 +299,10 @@ export default function MyTickets() {
                     </Avatar>
                     <Typography
                       sx={{ mt: 1.5, color: "#1e293b" }}
-                      fontWeight="700"
+                      fontWeight="600"
                       fontSize="18px"
                     >
-                      Hi, {currentUser.name}
+                      {t("common.greeting")}, {currentUser.name}
                     </Typography>
                     <Button
                       variant="outlined"
@@ -319,7 +314,7 @@ export default function MyTickets() {
                         mt: 2,
                         borderRadius: 20,
                         textTransform: "none",
-                        fontWeight: "700",
+                        fontWeight: "600",
                         fontSize: "13px",
                         px: 2.5,
                         py: 0.6,
@@ -354,7 +349,7 @@ export default function MyTickets() {
                       }}
                     >
                       <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                      <Typography fontSize="13px" fontWeight="700" color="#1e293b">
+                      <Typography fontSize="13px" fontWeight="600" color="#1e293b">
                         {t("common.settings")}
                       </Typography>
                     </Box>
@@ -372,7 +367,7 @@ export default function MyTickets() {
                       }}
                     >
                       <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
-                      <Typography fontSize="13px" fontWeight="700" color="#ef4444">
+                      <Typography fontSize="13px" fontWeight="600" color="#ef4444">
                         {t("common.logout")}
                       </Typography>
                     </Box>
@@ -396,7 +391,7 @@ export default function MyTickets() {
               }}
             >
               <Box>
-                <Typography variant="h4" fontWeight="800" color="#1e293b">
+                <Typography variant="h4" fontWeight="700" color="#1e293b">
                   {t("user.myRequests")}
                 </Typography>
                 <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
@@ -409,7 +404,7 @@ export default function MyTickets() {
                 sx={{
                   bgcolor: "#eff6ff",
                   color: "#2563eb",
-                  fontWeight: "800",
+                  fontWeight: "700",
                   borderRadius: 2.5,
                   "& .MuiChip-icon": { color: "inherit" },
                 }}
@@ -459,7 +454,7 @@ export default function MyTickets() {
                   }}
                 >
                   <Box>
-                    <Typography variant="h6" fontWeight="800" color="#0f172a">
+                    <Typography variant="h6" fontWeight="700" color="#0f172a">
                       {t("user.requestHistory")}
                     </Typography>
                     <Typography variant="body2" color="#94a3b8">
@@ -472,7 +467,7 @@ export default function MyTickets() {
                     sx={{
                       bgcolor: "#f8fafc",
                       color: "#64748b",
-                      fontWeight: "700",
+                      fontWeight: "600",
                     }}
                   />
                 </Box>
@@ -489,7 +484,7 @@ export default function MyTickets() {
                     <ConfirmationNumber
                       sx={{ fontSize: 52, color: "#cbd5e1", mb: 1 }}
                     />
-                    <Typography variant="body1" color="#64748b" fontWeight="700">
+                    <Typography variant="body1" color="#64748b" fontWeight="600">
                       {t("user.noTicketsSent")}
                     </Typography>
                     <Typography variant="body2" color="#94a3b8" sx={{ mt: 0.5 }}>
@@ -497,20 +492,21 @@ export default function MyTickets() {
                     </Typography>
                   </Box>
                 ) : (
+                  <>
                   <TableContainer>
                     <Table sx={{ minWidth: 760 }}>
                       <TableHead>
                         <TableRow sx={{ bgcolor: "#f8fafc" }}>
-                          <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
+                          <TableCell sx={{ fontWeight: "700", color: "#64748b" }}>
                             {t("user.subject")}
                           </TableCell>
-                          <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
+                          <TableCell sx={{ fontWeight: "700", color: "#64748b" }}>
                             {t("user.message")}
                           </TableCell>
-                          <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
+                          <TableCell sx={{ fontWeight: "700", color: "#64748b" }}>
                             {t("user.submittedAt")}
                           </TableCell>
-                          <TableCell sx={{ fontWeight: "800", color: "#64748b" }}>
+                          <TableCell sx={{ fontWeight: "700", color: "#64748b" }}>
                             {t("common.status")}
                           </TableCell>
                         </TableRow>
@@ -528,7 +524,7 @@ export default function MyTickets() {
                                 sx={{
                                   minWidth: 180,
                                   maxWidth: 240,
-                                  fontWeight: "700",
+                                  fontWeight: "600",
                                   color: "#334155",
                                   wordBreak: "break-word",
                                 }}
@@ -553,14 +549,14 @@ export default function MyTickets() {
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {formatDate(ticket.created_at)}
+                                {formatDateTime(ticket.created_at, t("common.locale"), { fallback: "-" })}
                               </TableCell>
                               <TableCell sx={{ minWidth: 150 }}>
                                 <Chip
                                   label={t(status.key)}
                                   color={status.color}
                                   size="small"
-                                  sx={{ fontWeight: "800" }}
+                                  sx={{ fontWeight: "700" }}
                                 />
                               </TableCell>
                             </TableRow>
@@ -569,6 +565,17 @@ export default function MyTickets() {
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  {total > PAGE_SIZE && (
+                    <Box sx={{ display: "flex", justifyContent: "center", pt: 3 }}>
+                      <Pagination
+                        count={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+                        page={page}
+                        onChange={(_, nextPage) => setPage(nextPage)}
+                        color="primary"
+                      />
+                    </Box>
+                  )}
+                  </>
                 )}
               </Paper>
             )}

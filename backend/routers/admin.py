@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from pydantic import BaseModel, Field
 import models
 from database import get_db
+from routers.points import mark_due_no_shows
 from routers.users import require_admin_user
 from profile_storage import delete_profile_image_sync, get_profile_image_url
+from time_utils import lab_now_naive
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -16,6 +18,7 @@ class VerifyAction(BaseModel):
 
 SYSTEM_ROLE_NAMES = {"admin", "student", "guest"}
 ROLE_PRIORITY = {"admin": 0, "student": 1, "guest": 2}
+DASHBOARD_RECENT_BOOKINGS_LIMIT = 10
 
 
 class RoleDisplayUpdate(BaseModel):
@@ -24,6 +27,65 @@ class RoleDisplayUpdate(BaseModel):
 
 class RoleAssignment(BaseModel):
     role_id: int = Field(..., gt=0)
+
+
+@router.get("/dashboard")
+def get_dashboard_summary(
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Return only aggregate counts and the latest bookings for the dashboard."""
+    mark_due_no_shows(db, now=lab_now_naive())
+
+    total_requests = db.query(func.count(models.Booking.id)).scalar() or 0
+    active_users = db.query(func.count(models.User.id)).scalar() or 0
+    pending_approvals = (
+        db.query(func.count(models.UserPassport.id))
+        .filter(models.UserPassport.is_active.is_(False))
+        .scalar()
+        or 0
+    )
+    recent_bookings = (
+        db.query(models.Booking)
+        .options(
+            joinedload(models.Booking.user),
+            joinedload(models.Booking.lab),
+        )
+        .order_by(models.Booking.created_at.desc(), models.Booking.id.desc())
+        .limit(DASHBOARD_RECENT_BOOKINGS_LIMIT)
+        .all()
+    )
+
+    return {
+        "data": {
+            "total_requests": total_requests,
+            "active_users": active_users,
+            "pending_approvals": pending_approvals,
+            "recent_reservations": [
+                {
+                    "id": booking.id,
+                    "booking_date": booking.booking_date,
+                    "start_time": booking.start_time,
+                    "end_time": booking.end_time,
+                    "purpose": booking.purpose,
+                    "total_participants": booking.total_participants,
+                    "status": booking.status,
+                    "created_at": booking.created_at,
+                    "user": {
+                        "id": booking.user.id,
+                        "first_name": booking.user.first_name,
+                        "last_name": booking.user.last_name,
+                    } if booking.user else None,
+                    "lab": {
+                        "id": booking.lab.id,
+                        "code": booking.lab.code,
+                        "name": booking.lab.name,
+                    } if booking.lab else None,
+                }
+                for booking in recent_bookings
+            ],
+        },
+    }
 
 
 def _primary_role(roles: list[models.Role]) -> models.Role | None:

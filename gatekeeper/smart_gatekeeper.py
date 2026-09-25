@@ -9,6 +9,8 @@ import customtkinter as ctk
 import requests
 from PIL import Image
 from liveness_policy import evaluate_liveness
+from device_registration import DEFAULT_API_URL, load_device_registration
+from registration_dialog import GatekeeperRegistrationDialog
 
 # Keep CPU inference predictable on the 8 GB scanning machine.
 os.environ.setdefault("OMP_NUM_THREADS", "2")
@@ -32,6 +34,9 @@ CONFIG = {
     "LIVENESS_CROP_SCALE": 2.7,
     "CAMERA_INDEX":       0,
     "DISPLAY_SIZE":       (600, 450),
+    # Keep camera capture/detection at their existing cadence while limiting
+    # expensive Tk image creation to a stable 25 FPS UI refresh.
+    "DISPLAY_INTERVAL_MS": 40,
     "SPOOF_COOLDOWN_SEC": 3,
     "RESET_DELAY_MS":     3000,
     "DETECT_EVERY_N":     3,
@@ -39,7 +44,7 @@ CONFIG = {
 
 API_URL = os.getenv(
     "SMART_LAB_API_URL",
-    "https://h0sh1na-smart-lab-backend.hf.space",
+    DEFAULT_API_URL,
 ).rstrip("/")
 LAB_CODE = os.getenv("SMART_LAB_CODE", "LAB01")
 GATEKEEPER_API_KEY = os.getenv("SMART_LAB_GATEKEEPER_KEY", "")
@@ -84,13 +89,82 @@ class GatekeeperDemo(ctk.CTk):
 
         self._last_faces    = []
         self._last_frame_hw = (480, 640)
+        self.registration = load_device_registration()
+        self._scanner_started = False
+        self.registration_dialog_open = False
+        self._registration_dialog = None
 
-        # scan available cameras before building UI
+        if self.registration:
+            self._start_scanner()
+        else:
+            self._show_registration_required()
+
+    def _show_registration_required(self):
+        self.geometry("620x350")
+        frame = ctk.CTkFrame(self, corner_radius=18)
+        frame.pack(fill="both", expand=True, padx=32, pady=32)
+        self.registration_required_frame = frame
+        ctk.CTkLabel(
+            frame,
+            text="ต้องลงทะเบียนกล้องก่อนใช้งาน",
+            font=ctk.CTkFont(size=25, weight="bold"),
+        ).pack(pady=(42, 8))
+        ctk.CTkLabel(
+            frame,
+            text="เข้าสู่ระบบด้วยบัญชี Admin แล้วเลือก Lab ที่ติดตั้งกล้องเครื่องนี้",
+            text_color="#94a3b8",
+            wraplength=480,
+        ).pack(pady=(0, 20))
+        ctk.CTkButton(
+            frame,
+            text="ลงทะเบียนกล้อง",
+            width=220,
+            height=42,
+            command=self._open_registration,
+        ).pack(pady=8)
+
+    def _start_scanner(self):
+        if self._scanner_started:
+            return
+        self._scanner_started = True
+        required_frame = getattr(self, "registration_required_frame", None)
+        if required_frame is not None:
+            required_frame.destroy()
+        self.geometry("1024x620")
         self._available_cameras = self._scan_cameras()
         self._current_cam_index = CONFIG["CAMERA_INDEX"]
-
         self._setup_ui()
         self._init_hardware()
+
+    def _open_registration(self):
+        if self._registration_dialog is not None:
+            self._registration_dialog.lift()
+            return
+        if self._scanner_started and self.is_scanning:
+            self.sub_label.configure(text="รอให้การตรวจสอบปัจจุบันเสร็จก่อน แล้วลองอีกครั้ง")
+            return
+        self.registration_dialog_open = True
+        self._registration_dialog = GatekeeperRegistrationDialog(
+            self,
+            self._on_registered,
+            initial_api_url=(self.registration or {}).get("api_url", API_URL),
+            on_close=self._registration_dialog_closed,
+        )
+
+    def _on_registered(self, registration):
+        self.registration = registration
+        self.registration_dialog_open = False
+        self._registration_dialog = None
+        if not self._scanner_started:
+            self._start_scanner()
+        else:
+            self.sub_label.configure(
+                text=f"ลงทะเบียนแล้ว: {registration.get('lab_code')} — {registration.get('lab_name')}"
+            )
+
+    def _registration_dialog_closed(self):
+        self.registration_dialog_open = False
+        self._registration_dialog = None
 
     # ──────────────────────────────────────────────────────────────────────
     # UI
@@ -137,6 +211,15 @@ class GatekeeperDemo(ctk.CTk):
 
         self._build_score_bar()
         self._build_cooldown_box()
+
+        ctk.CTkButton(
+            self.panel,
+            text="ตั้งค่าการลงทะเบียนกล้อง",
+            command=self._open_registration,
+            fg_color="#334155",
+            hover_color="#475569",
+            font=ctk.CTkFont(size=12),
+        ).pack(side="bottom", padx=20, pady=(0, 8), fill="x")
 
         # camera selector — แสดงเฉพาะเมื่อมีกล้องมากกว่า 1 ตัว
         if len(self._available_cameras) > 1:
@@ -376,7 +459,7 @@ class GatekeeperDemo(ctk.CTk):
         try:
             frame = self._frame_queue.get_nowait()
         except queue.Empty:
-            self.after(30, self._display_loop)
+            self.after(CONFIG["DISPLAY_INTERVAL_MS"], self._display_loop)
             return
 
         h, w   = frame.shape[:2]
@@ -385,7 +468,12 @@ class GatekeeperDemo(ctk.CTk):
 
         cv2.ellipse(frame, (cx, cy), (oval_a, oval_b), 0, 0, 360, (80, 80, 80), 1)
 
-        if self.models_loaded and not self.is_scanning and not self.in_cooldown:
+        if (
+            self.models_loaded
+            and not self.is_scanning
+            and not self.in_cooldown
+            and not self.registration_dialog_open
+        ):
             self._frame_count += 1
 
             if self._frame_count % CONFIG["DETECT_EVERY_N"] == 0:
@@ -427,7 +515,7 @@ class GatekeeperDemo(ctk.CTk):
         self.video_label.configure(image=imgtk, text="")
         self.video_label.image = imgtk
 
-        self.after(30, self._display_loop)
+        self.after(CONFIG["DISPLAY_INTERVAL_MS"], self._display_loop)
 
     # ──────────────────────────────────────────────────────────────────────
     # LIVENESS
@@ -516,17 +604,28 @@ class GatekeeperDemo(ctk.CTk):
         if not encoded_ok:
             return False, "ไม่สามารถเตรียมภาพสำหรับตรวจสอบได้"
 
+        registration = self.registration or {}
+        api_url = str(registration.get("api_url") or API_URL).rstrip("/")
         headers = {}
         if GATEKEEPER_API_KEY:
             headers["X-Gatekeeper-Key"] = GATEKEEPER_API_KEY
 
+        form_data = {
+            # Keep this field during rollout for older Backend deployments;
+            # registered Backends resolve the Lab from the device credential.
+            "lab_code": registration.get("lab_code") or LAB_CODE,
+            "liveness_score": f"{liveness_score:.6f}",
+        }
+        if registration:
+            form_data.update({
+                "device_id": registration["device_id"],
+                "device_token": registration["device_token"],
+            })
+
         try:
             response = requests.post(
-                f"{API_URL}/gatekeeper/identify",
-                data={
-                    "lab_code": LAB_CODE,
-                    "liveness_score": f"{liveness_score:.6f}",
-                },
+                f"{api_url}/gatekeeper/identify",
+                data=form_data,
                 files={
                     "face_image": (
                         "gatekeeper.jpg",
@@ -651,7 +750,9 @@ class GatekeeperDemo(ctk.CTk):
         self.after(800, self._show_result, is_real, 0.95 if is_real else 0.18)
 
     def on_closing(self):
-        self.cap.release()
+        camera = getattr(self, "cap", None)
+        if camera is not None:
+            camera.release()
         self.destroy()
 
 

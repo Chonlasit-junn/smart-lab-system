@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -21,6 +21,18 @@ if SQLALCHEMY_DATABASE_URL.startswith("postgresql"):
     engine_options.update(pool_size=3, max_overflow=2)
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_options)
+
+if SQLALCHEMY_DATABASE_URL.startswith("postgresql"):
+    @event.listens_for(engine, "connect")
+    def _set_postgres_timezone(dbapi_connection, _connection_record):
+        """Keep database defaults and timestamp serialization in UTC."""
+
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("SET TIME ZONE 'UTC'")
+        finally:
+            cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

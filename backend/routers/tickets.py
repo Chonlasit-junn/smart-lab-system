@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import get_db
 from routers.users import get_current_user
@@ -49,10 +49,25 @@ def create_ticket(
 def get_tickets(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
 ):
     _require_admin(current_user, db)
-    tickets = db.query(models.Ticket).order_by(models.Ticket.created_at.desc()).all()
-    return {"data": tickets}
+    page_number = page if isinstance(page, int) else 1
+    page_limit = page_size if isinstance(page_size, int) else 20
+    query = db.query(models.Ticket)
+    total = query.order_by(None).count()
+    tickets = query.order_by(
+        models.Ticket.created_at.desc(),
+        models.Ticket.id.desc(),
+    ).offset((page_number - 1) * page_limit).limit(page_limit).all()
+    return {
+        "data": tickets,
+        "page": page_number,
+        "page_size": page_limit,
+        "total": total,
+        "has_more": page_number * page_limit < total,
+    }
 
 
 # User ดูเฉพาะ Ticket ของตัวเอง
@@ -60,11 +75,26 @@ def get_tickets(
 def get_my_tickets(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
 ):
-    tickets = db.query(models.Ticket).filter(
+    page_number = page if isinstance(page, int) else 1
+    page_limit = page_size if isinstance(page_size, int) else 20
+    query = db.query(models.Ticket).filter(
         models.Ticket.user_id == current_user.id,
-    ).order_by(models.Ticket.created_at.desc()).all()
-    return {"data": tickets}
+    )
+    total = query.order_by(None).count()
+    tickets = query.order_by(
+        models.Ticket.created_at.desc(),
+        models.Ticket.id.desc(),
+    ).offset((page_number - 1) * page_limit).limit(page_limit).all()
+    return {
+        "data": tickets,
+        "page": page_number,
+        "page_size": page_limit,
+        "total": total,
+        "has_more": page_number * page_limit < total,
+    }
 
 
 # Admin อัปเดตสถานะ Ticket

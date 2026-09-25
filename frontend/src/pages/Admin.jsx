@@ -20,7 +20,6 @@ import {
 } from "@mui/material";
 import {
   Search,
-  Notifications,
   Logout,
   Person,
   Group,
@@ -37,6 +36,8 @@ import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { useLanguage } from "../context/language-context.js";
 import { authConfig } from "../utils/auth";
+import { formatDate } from "../utils/dateFormat";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -89,26 +90,14 @@ export default function Admin() {
     try {
       setLoading(true);
       const requestConfig = authConfig();
-      const [bookingsRes, usersRes, pendingRes] = await Promise.all([
-        axios.get(`${API_URL}/bookings`, requestConfig),
-        axios.get(`${API_URL}/users`, requestConfig),
-        axios.get(`${API_URL}/admin/users/pending`, requestConfig),
-      ]);
+      const dashboardRes = await axios.get(`${API_URL}/admin/dashboard`, requestConfig);
+      const dashboard = dashboardRes.data?.data || {};
 
-      const bookings = bookingsRes.data?.data || [];
-      const users = usersRes.data?.data || [];
-      const pending = pendingRes.data?.data || [];
-
-      // backend already returns newest-first, but sort locally as a safety net
-      const sorted = [...bookings].sort(
-        (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0),
-      );
-
-      setRecentReservations(sorted.slice(0, 10));
+      setRecentReservations(dashboard.recent_reservations || []);
       setStats({
-        totalRequests: bookings.length,
-        activeUsers: users.length,
-        pendingApprovals: pending.length,
+        totalRequests: dashboard.total_requests ?? 0,
+        activeUsers: dashboard.active_users ?? 0,
+        pendingApprovals: dashboard.pending_approvals ?? 0,
       });
     } catch (error) {
       console.error("[Admin] failed to fetch dashboard data:", error);
@@ -176,7 +165,7 @@ export default function Admin() {
           <Box>
             <Typography
               variant="h6"
-              fontWeight="800"
+              fontWeight="700"
               sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}
             >
               Smart Lab
@@ -185,12 +174,12 @@ export default function Admin() {
               variant="caption"
               sx={{
                 color: "#64748b",
-                fontWeight: "500",
+                fontWeight: "400",
                 display: "block",
                 mt: -0.5,
               }}
             >
-              Admin Dashboard
+              {t("common.adminDashboard")}
             </Typography>
           </Box>
         </Box>
@@ -224,7 +213,7 @@ export default function Admin() {
         >
           <Typography
             variant="h5"
-            fontWeight="800"
+            fontWeight="700"
             sx={{ color: "#1e293b", letterSpacing: "-1px" }}
           >
             {t("admin.dashboard")}
@@ -245,9 +234,11 @@ export default function Admin() {
               <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
               <InputBase placeholder={t("common.search")} fullWidth />
             </Paper>
-            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "#64748b" }} />
-            </IconButton>
+            <NotificationBell
+              className="admin-notification-button"
+              iconColor="#64748b"
+              loadNotifications={false}
+            />
             <Divider
               orientation="vertical"
               flexItem
@@ -257,12 +248,12 @@ export default function Admin() {
               <Box sx={{ textAlign: "right" }}>
                 <Typography
                   variant="subtitle2"
-                  fontWeight="800"
+                  fontWeight="700"
                   color="#1e293b"
                 >
                   {t("common.systemAdmin")}
                 </Typography>
-                <Typography variant="caption" fontWeight="600" color="#94a3b8">
+                <Typography variant="caption" fontWeight="500" color="#94a3b8">
                   {t("common.administrator")}
                 </Typography>
               </Box>
@@ -314,7 +305,7 @@ export default function Admin() {
                 >
                   <Typography
                     fontSize="13px"
-                    fontWeight="600"
+                    fontWeight="500"
                     color="#64748b"
                     sx={{ pl: 0.5 }}
                   >
@@ -344,7 +335,7 @@ export default function Admin() {
 
                   <Typography
                     sx={{ mt: 1.5, color: "#1e293b" }}
-                    fontWeight="700"
+                    fontWeight="600"
                     fontSize="18px"
                   >
                     {t("common.systemAdmin")}
@@ -357,7 +348,7 @@ export default function Admin() {
                       mt: 2,
                       borderRadius: 20,
                       textTransform: "none",
-                      fontWeight: "700",
+                      fontWeight: "600",
                       fontSize: "13px",
                       px: 2.5,
                       py: 0.6,
@@ -393,7 +384,7 @@ export default function Admin() {
                     <Settings sx={{ fontSize: 20, color: "#64748b" }} />
                     <Typography
                       fontSize="13px"
-                      fontWeight="700"
+                      fontWeight="600"
                       color="#1e293b"
                     >
                       {t("common.settings")}
@@ -415,7 +406,7 @@ export default function Admin() {
                     <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
                     <Typography
                       fontSize="13px"
-                      fontWeight="700"
+                      fontWeight="600"
                       color="#ef4444"
                     >
                       {t("common.logout")}
@@ -479,13 +470,13 @@ export default function Admin() {
                       <Box>
                         <Typography
                           variant="body2"
-                          sx={{ color: "#94a3b8", fontWeight: "700" }}
+                          sx={{ color: "#94a3b8", fontWeight: "600" }}
                         >
                           {s.label}
                         </Typography>
                         <Typography
                           variant="h3"
-                          fontWeight="800"
+                          fontWeight="700"
                           color="#1e293b"
                         >
                           {s.v}
@@ -511,7 +502,7 @@ export default function Admin() {
                   >
                     <Typography
                       variant="h5"
-                      fontWeight="800"
+                      fontWeight="700"
                       color="#1e293b"
                       sx={{ mb: 4 }}
                     >
@@ -526,7 +517,7 @@ export default function Admin() {
                                 key={h}
                                 sx={{
                                   color: "#64748b",
-                                  fontWeight: "800",
+                                  fontWeight: "700",
                                   py: 2,
                                   borderBottom: "1px solid #e2e8f0",
                                 }}
@@ -575,7 +566,7 @@ export default function Admin() {
                                       </Avatar>
                                       <Typography
                                         variant="subtitle1"
-                                        fontWeight="700"
+                                        fontWeight="600"
                                         color="#334155"
                                       >
                                         {userName}
@@ -583,19 +574,19 @@ export default function Admin() {
                                     </Box>
                                   </TableCell>
                                   <TableCell
-                                    sx={{ color: "#475569", fontWeight: "600" }}
+                                    sx={{ color: "#475569", fontWeight: "500" }}
                                   >
                                     <span className="font-baseline-text">{labCode}</span>
                                   </TableCell>
                                   <TableCell
-                                    sx={{ color: "#475569", fontWeight: "600" }}
+                                    sx={{ color: "#475569", fontWeight: "500" }}
                                   >
                                     <span className="font-baseline-text">
-                                      {row.booking_date || "-"}
+                                      {formatDate(row.booking_date, t("common.locale"), { fallback: "-" })}
                                     </span>
                                   </TableCell>
                                   <TableCell
-                                    sx={{ color: "#475569", fontWeight: "600" }}
+                                    sx={{ color: "#475569", fontWeight: "500" }}
                                   >
                                     <span className="font-baseline-text">
                                       {row.start_time || "-"}

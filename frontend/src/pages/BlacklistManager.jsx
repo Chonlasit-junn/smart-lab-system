@@ -25,7 +25,6 @@ import {
 } from "@mui/material";
 import {
   Search,
-  Notifications,
   Logout,
   Computer,
   Person,
@@ -42,7 +41,9 @@ import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
+import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -114,7 +115,7 @@ export default function BlacklistManager() {
 
   const handleSave = async () => {
     if (!formData.app_name.trim()) {
-      setFormError("App name is required.");
+      setFormError(t("admin.appNameRequired"));
       return;
     }
     try {
@@ -126,17 +127,17 @@ export default function BlacklistManager() {
       setOpenDialog(false);
       fetchBlacklist();
     } catch (err) {
-      setFormError(err.response?.data?.detail || "Operation failed.");
+      setFormError(err.response?.data?.detail || t("admin.blacklistOperationFailed"));
     }
   };
 
   const handleDelete = async (id, appName) => {
-    if (!window.confirm(`Remove "${appName}" from the blacklist?`)) return;
+    if (!window.confirm(`${t("admin.confirmRemoveBlacklistItem")}: ${appName}?`)) return;
     try {
       await axios.delete(`${API_URL}/admin/blacklist/${id}`, authConfig());
       fetchBlacklist();
     } catch (err) {
-      alert(err.response?.data?.detail || "Delete failed.");
+      alert(err.response?.data?.detail || t("admin.deleteBlacklistFailed"));
     }
   };
 
@@ -194,7 +195,7 @@ export default function BlacklistManager() {
           <Box>
             <Typography
               variant="h6"
-              fontWeight="800"
+              fontWeight="700"
               sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}
             >
               Smart Lab
@@ -203,12 +204,12 @@ export default function BlacklistManager() {
               variant="caption"
               sx={{
                 color: "#64748b",
-                fontWeight: "500",
+                fontWeight: "400",
                 display: "block",
                 mt: -0.5,
               }}
             >
-              Admin Dashboard
+              {t("common.adminDashboard")}
             </Typography>
           </Box>
         </Box>
@@ -242,7 +243,7 @@ export default function BlacklistManager() {
         >
           <Typography
             variant="h5"
-            fontWeight="800"
+            fontWeight="700"
             sx={{ color: "#1e293b", letterSpacing: "-1px" }}
           >
             {t("admin.blacklistTitle")}
@@ -264,14 +265,16 @@ export default function BlacklistManager() {
               <InputBase
                 placeholder={t("admin.searchLabs")}
                 fullWidth
-                sx={{ fontSize: "15px", fontWeight: "500" }}
+                sx={{ fontSize: "15px", fontWeight: "400" }}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </Paper>
-            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "#64748b" }} />
-            </IconButton>
+            <NotificationBell
+              className="admin-notification-button"
+              iconColor="#64748b"
+              loadNotifications={false}
+            />
             <Divider
               orientation="vertical"
               flexItem
@@ -281,12 +284,12 @@ export default function BlacklistManager() {
               <Box sx={{ textAlign: "right" }}>
                 <Typography
                   variant="subtitle2"
-                  fontWeight="800"
+                  fontWeight="700"
                   color="#1e293b"
                 >
                   {t("common.systemAdmin")}
                 </Typography>
-                <Typography variant="caption" fontWeight="600" color="#94a3b8">
+                <Typography variant="caption" fontWeight="500" color="#94a3b8">
                   {t("common.administrator")}
                 </Typography>
               </Box>
@@ -338,7 +341,7 @@ export default function BlacklistManager() {
                 >
                   <Typography
                     fontSize="13px"
-                    fontWeight="600"
+                    fontWeight="500"
                     color="#64748b"
                     sx={{ pl: 0.5 }}
                   >
@@ -368,7 +371,7 @@ export default function BlacklistManager() {
 
                   <Typography
                     sx={{ mt: 1.5, color: "#1e293b" }}
-                    fontWeight="700"
+                    fontWeight="600"
                     fontSize="18px"
                   >
                     {t("common.systemAdmin")}
@@ -381,7 +384,7 @@ export default function BlacklistManager() {
                       mt: 2,
                       borderRadius: 20,
                       textTransform: "none",
-                      fontWeight: "700",
+                      fontWeight: "600",
                       fontSize: "13px",
                       px: 2.5,
                       py: 0.6,
@@ -417,7 +420,7 @@ export default function BlacklistManager() {
                     <Settings sx={{ fontSize: 20, color: "#64748b" }} />
                     <Typography
                       fontSize="13px"
-                      fontWeight="700"
+                      fontWeight="600"
                       color="#1e293b"
                     >
                       {t("common.settings")}
@@ -439,7 +442,7 @@ export default function BlacklistManager() {
                     <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
                     <Typography
                       fontSize="13px"
-                      fontWeight="700"
+                      fontWeight="600"
                       color="#ef4444"
                     >
                       {t("common.logout")}
@@ -464,7 +467,7 @@ export default function BlacklistManager() {
                   mb: 5,
                 }}
               >
-                <Typography variant="h6" fontWeight="700" color="#64748b">
+                <Typography variant="h6" fontWeight="600" color="#64748b">
                   {blacklist.length} {t("admin.programsBlocked")}
                 </Typography>
                 <Button
@@ -474,7 +477,7 @@ export default function BlacklistManager() {
                   onClick={handleOpenAdd}
                   sx={{
                     bgcolor: "#ef4444",
-                    fontWeight: "700",
+                    fontWeight: "600",
                     textTransform: "none",
                     borderRadius: 3,
                     px: 3,
@@ -510,7 +513,7 @@ export default function BlacklistManager() {
                   }}
                 >
                   <Block sx={{ color: "#ef4444", fontSize: 22 }} />
-                  <Typography variant="h6" fontWeight="800" color="#1e293b">
+                  <Typography variant="h6" fontWeight="700" color="#1e293b">
                     {t("admin.blockedProgramHeading")}
                   </Typography>
                 </Box>
@@ -531,7 +534,7 @@ export default function BlacklistManager() {
                             align={i === 4 ? "right" : "left"}
                             sx={{
                               color: "#64748b",
-                              fontWeight: "800",
+                              fontWeight: "700",
                               py: 2,
                               borderBottom: "1px solid #e2e8f0",
                             }}
@@ -547,7 +550,7 @@ export default function BlacklistManager() {
                           <TableCell
                             colSpan={5}
                             align="center"
-                            sx={{ py: 6, color: "#94a3b8", fontWeight: "600" }}
+                            sx={{ py: 6, color: "#94a3b8", fontWeight: "500" }}
                           >
                             {t("common.loading")}
                           </TableCell>
@@ -557,7 +560,7 @@ export default function BlacklistManager() {
                           <TableCell
                             colSpan={5}
                             align="center"
-                            sx={{ py: 6, color: "#94a3b8", fontWeight: "600" }}
+                            sx={{ py: 6, color: "#94a3b8", fontWeight: "500" }}
                           >
                             {searchQuery
                               ? `${t("admin.noMatchingUsers")}: "${searchQuery}"`
@@ -578,7 +581,7 @@ export default function BlacklistManager() {
                             <TableCell
                               sx={{
                                 color: "#cbd5e1",
-                                fontWeight: "700",
+                                fontWeight: "600",
                                 width: 50,
                               }}
                             >
@@ -609,7 +612,7 @@ export default function BlacklistManager() {
                                 <Box>
                                   <Typography
                                     variant="subtitle2"
-                                    fontWeight="800"
+                                    fontWeight="700"
                                     color="#1e293b"
                                   >
                                     {item.app_name || t("admin.unknownProgram")}
@@ -620,7 +623,7 @@ export default function BlacklistManager() {
                                     sx={{
                                       bgcolor: "#fef2f2",
                                       color: "#ef4444",
-                                      fontWeight: "700",
+                                      fontWeight: "600",
                                       fontSize: "10px",
                                       height: 18,
                                       mt: 0.3,
@@ -634,7 +637,7 @@ export default function BlacklistManager() {
                             <TableCell
                               sx={{
                                 color: "#64748b",
-                                fontWeight: "500",
+                                fontWeight: "400",
                                 maxWidth: 400,
                               }}
                             >
@@ -654,15 +657,11 @@ export default function BlacklistManager() {
                             <TableCell
                               sx={{
                                 color: "#94a3b8",
-                                fontWeight: "600",
+                                fontWeight: "500",
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {item.created_at
-                                ? new Date(item.created_at).toLocaleDateString(
-                                    "en-GB",
-                                  )
-                                : "-"}
+                              {formatDate(item.created_at, t("common.locale"), { fallback: "-" })}
                             </TableCell>
 
                             {/* Actions */}
@@ -720,7 +719,7 @@ export default function BlacklistManager() {
       >
         <DialogTitle
           sx={{
-            fontWeight: "800",
+            fontWeight: "700",
             color: "#0f172a",
             display: "flex",
             alignItems: "center",
@@ -755,11 +754,11 @@ export default function BlacklistManager() {
             onChange={(e) =>
               setFormData({ ...formData, description: e.target.value })
             }
-            placeholder="e.g. ห้ามใช้โปรแกรมโหลดไฟล์ละเมิดลิขสิทธิ์"
+            placeholder={t("admin.blockedProgramPlaceholder")}
             sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           {formError && (
-            <Typography variant="caption" color="error" fontWeight="600">
+            <Typography variant="caption" color="error" fontWeight="500">
               {formError}
             </Typography>
           )}
@@ -768,7 +767,7 @@ export default function BlacklistManager() {
         <DialogActions sx={{ pb: 1, pr: 2, gap: 1 }}>
           <Button
             onClick={() => setOpenDialog(false)}
-            sx={{ color: "#64748b", fontWeight: "700", textTransform: "none" }}
+            sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
           >
             {t("common.cancel")}
           </Button>
@@ -779,7 +778,7 @@ export default function BlacklistManager() {
             startIcon={isEditing ? <Save /> : <Add />}
             sx={{
               bgcolor: "#ef4444",
-              fontWeight: "700",
+              fontWeight: "600",
               borderRadius: 3,
               textTransform: "none",
               "&:hover": { bgcolor: "#dc2626" },

@@ -15,20 +15,19 @@ import os
 import platform
 import sys
 import threading
-import uuid
 from typing import Any, Callable, Optional
 
 import requests
 
 from agent_device import load_device_registration, save_device_registration
-
-
-DEFAULT_API_URL = "https://h0sh1na-smart-lab-backend.hf.space"
-DEFAULT_AGENT_VERSION = os.getenv("SMART_LAB_AGENT_VERSION", "source")
-
-
-class LabSetupError(RuntimeError):
-    """A safe, user-facing provisioning error."""
+from device_registration import (
+    DEFAULT_AGENT_VERSION,
+    DEFAULT_API_URL,
+    LabSetupError,
+    build_device_payload_for_api,
+    normalize_api_url,
+    register_device_as_admin,
+)
 
 
 def _response_detail(response: requests.Response) -> str:
@@ -50,10 +49,6 @@ def _raise_for_api_error(response: requests.Response, expected: set[int]) -> Non
         return
     detail = _response_detail(response) or f"HTTP {response.status_code}"
     raise LabSetupError(detail)
-
-
-def normalize_api_url(api_url: str) -> str:
-    return str(api_url or "").strip().rstrip("/")
 
 
 def login_admin(
@@ -117,101 +112,6 @@ def list_active_labs(
         if isinstance(row, dict) and str(row.get("status") or "").lower() == "active"
     ]
     return sorted(active_labs, key=lambda row: str(row.get("code") or ""))
-
-
-def create_enrollment_code(
-    api_url: str,
-    access_token: str,
-    lab_id: int,
-    *,
-    client: Any = requests,
-    timeout: int = 20,
-) -> str:
-    """Create a short-lived code through the existing Admin API."""
-
-    try:
-        response = client.post(
-            f"{normalize_api_url(api_url)}/admin/lab-devices/enrollment-codes",
-            headers={"Authorization": f"Bearer {access_token}"},
-            json={"lab_id": lab_id, "expires_in_minutes": 5},
-            timeout=timeout,
-        )
-    except requests.RequestException as exc:
-        raise LabSetupError(f"สร้างรหัสลงทะเบียนไม่สำเร็จ: {exc}") from exc
-
-    _raise_for_api_error(response, {200, 201})
-    try:
-        code = str(response.json().get("enrollment_code") or "").strip()
-    except (AttributeError, ValueError):
-        code = ""
-    if not code:
-        raise LabSetupError("Backend ไม่ได้ส่ง Enrollment Code กลับมา")
-    return code
-
-
-def _device_mac() -> str:
-    return ":".join(f"{byte:02x}" for byte in uuid.getnode().to_bytes(6, "big"))
-
-
-def build_device_payload(
-    saved_registration: Optional[dict[str, Any]],
-    device_name: str,
-    agent_version: str = DEFAULT_AGENT_VERSION,
-) -> dict[str, str]:
-    saved = saved_registration or {}
-    device_id = str(saved.get("device_id") or "").strip() or uuid.uuid4().hex
-    resolved_name = device_name.strip() or platform.node() or "Smart Lab workstation"
-    return {
-        "device_id": device_id,
-        "device_name": resolved_name,
-        "device_mac": _device_mac(),
-        "agent_version": agent_version.strip()[:64] or "source",
-    }
-
-
-def register_device_with_code(
-    api_url: str,
-    enrollment_code: str,
-    device_payload: dict[str, str],
-    *,
-    client: Any = requests,
-    timeout: int = 20,
-) -> dict[str, Any]:
-    """Exchange the one-time code for the credential consumed by the Agent."""
-
-    form_data = {"enrollment_code": enrollment_code, **device_payload}
-    try:
-        response = client.post(
-            f"{normalize_api_url(api_url)}/agent/register-device",
-            data=form_data,
-            timeout=timeout,
-        )
-    except requests.RequestException as exc:
-        raise LabSetupError(f"ลงทะเบียนเครื่องไม่สำเร็จ: {exc}") from exc
-
-    _raise_for_api_error(response, {200, 201})
-    try:
-        result = response.json()
-    except ValueError as exc:
-        raise LabSetupError("Backend ส่งผลลัพธ์การลงทะเบียนไม่ถูกต้อง") from exc
-
-    device = result.get("device") or {}
-    lab = device.get("lab") or {}
-    device_token = str(result.get("device_token") or "").strip()
-    if not device_token:
-        raise LabSetupError("Backend ไม่ได้ส่ง Device Token กลับมา")
-
-    return {
-        "device_id": result.get("device_id") or device_payload["device_id"],
-        "device_token": device_token,
-        "lab_id": lab.get("id"),
-        "lab_code": lab.get("code"),
-        "lab_name": lab.get("name"),
-        "device_name": device.get("device_name") or device_payload["device_name"],
-        "device_mac": device.get("device_mac") or device_payload["device_mac"],
-        "agent_version": device.get("agent_version") or device_payload["agent_version"],
-        "registered_at": device.get("created_at"),
-    }
 
 
 class LabSetupApp:
@@ -368,9 +268,17 @@ class LabSetupApp:
         device_name = self.device_name_var.get().strip()
 
         def operation() -> tuple[dict[str, Any], Any]:
-            code = create_enrollment_code(api_url, access_token, lab_id)
-            payload = build_device_payload(load_device_registration(), device_name)
-            registration = register_device_with_code(api_url, code, payload)
+            payload = build_device_payload_for_api(
+                load_device_registration(),
+                api_url,
+                device_name,
+            )
+            registration = register_device_as_admin(
+                api_url,
+                access_token,
+                lab_id,
+                payload,
+            )
             path = save_device_registration(registration)
             return registration, path
 
@@ -425,13 +333,19 @@ def launch_qt(api_url: str, device_name: str) -> int:
 
         def __init__(self, operation: Callable[[], Any]) -> None:
             super().__init__()
-            self.operation = operation
+            self.operation: Optional[Callable[[], Any]] = operation
 
         def run(self) -> None:
+            operation = self.operation
+            self.operation = None
+            if operation is None:
+                return
             try:
-                self.finished.emit(self.operation())
+                self.finished.emit(operation())
             except Exception as exc:  # Keep errors inside the UI.
                 self.failed.emit(str(exc))
+            finally:
+                operation = None
 
     class LabSetupWindow(QWidget):
         def __init__(self) -> None:
@@ -719,9 +633,17 @@ def launch_qt(api_url: str, device_name: str) -> int:
             selected_device_name = self.device_name_edit.text().strip()
 
             def operation() -> tuple[dict[str, Any], Any]:
-                code = create_enrollment_code(api_url_value, access_token, lab_id)
-                payload = build_device_payload(load_device_registration(), selected_device_name)
-                registration = register_device_with_code(api_url_value, code, payload)
+                payload = build_device_payload_for_api(
+                    load_device_registration(),
+                    api_url_value,
+                    selected_device_name,
+                )
+                registration = register_device_as_admin(
+                    api_url_value,
+                    access_token,
+                    lab_id,
+                    payload,
+                )
                 path = save_device_registration(registration)
                 return registration, path
 
@@ -824,6 +746,7 @@ def run_cli(api_url: str, device_name: str) -> int:
 
     try:
         token = login_admin(api_url, email, password)
+        password = ""
         labs = list_active_labs(api_url, token)
         if not labs:
             print("ไม่พบ Lab ที่มีสถานะ active", file=sys.stderr)
@@ -837,9 +760,17 @@ def run_cli(api_url: str, device_name: str) -> int:
             print("หมายเลข Lab ไม่ถูกต้อง", file=sys.stderr)
             return 1
 
-        enrollment_code = create_enrollment_code(api_url, token, int(labs[selected]["id"]))
-        payload = build_device_payload(load_device_registration(), device_name)
-        registration = register_device_with_code(api_url, enrollment_code, payload)
+        payload = build_device_payload_for_api(
+            load_device_registration(),
+            api_url,
+            device_name,
+        )
+        registration = register_device_as_admin(
+            api_url,
+            token,
+            int(labs[selected]["id"]),
+            payload,
+        )
         path = save_device_registration(registration)
     except (ValueError, EOFError):
         print("ข้อมูลที่กรอกไม่ถูกต้อง", file=sys.stderr)

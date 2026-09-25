@@ -26,6 +26,9 @@
   --text-dark: #17202a;
   --text-gray: #52606d;
   --text-muted: #64748b;
+  --booking-calendar-disabled: #667085;
+  --booking-calendar-disabled-bg: #eef2f0;
+  --booking-calendar-disabled-border: #d8ddd8;
 
   --border-light: #d8ddd8;
   --focus-ring: #f59e0b;
@@ -48,8 +51,7 @@
   --surface-neutral: #f1f5f9;
   --info-color: #1d4ed8;
   --neutral-color: #64748b;
-  --font-family-ui: "Ruwudu", sans-serif;
-  --font-size-step: 0px;
+  --font-family-ui: "Kanit", sans-serif;
 
   /* --- Dimensions & Radius --- */
   /* Shape scale: controls, surfaces, and dialogs share these values. */
@@ -83,6 +85,9 @@
   --text-dark: #f8fafc;
   --text-gray: #cbd5e1;
   --text-muted: #cbd5e1;
+  --booking-calendar-disabled: #b7c4d3;
+  --booking-calendar-disabled-bg: #1b2635;
+  --booking-calendar-disabled-border: #3a4758;
 
   --border-light: #3a4758;
   --focus-ring: #fbbf24;
@@ -105,26 +110,12 @@
   --neutral-color: #cbd5e1;
 }
 
-html[lang="th"] {
-  --font-family-ui: "Noto Sans Thai", "Ruwudu", sans-serif;
-}
-
-html[lang="en"] {
-  --font-family-ui: "Ruwudu", sans-serif;
-  --font-size-step: 1px;
-  --sidebar-font-size: 15px;
-}
-
 /* Keep the inline wrapper used by the booking view layout-neutral. Font size
  * and line-height now come from the shared typography system in App.jsx. */
 .font-baseline-text {
   display: inline;
   line-height: inherit;
-}
-
-html[lang="en"] .font-baseline-text {
-  position: relative;
-  top: 0.26em;
+  vertical-align: baseline;
 }
 
 /* CSS Reset พื้นฐาน */
@@ -137,7 +128,8 @@ html[lang="en"] .font-baseline-text {
 body {
   margin: 0;
   padding: 0;
-  font-size: calc(1rem + var(--font-size-step));
+  font-size: 1rem;
+  font-weight: 300;
   font-family: var(--font-family-ui);
   line-height: 1.4;
   background-color: var(--bg-color);
@@ -202,7 +194,7 @@ option,
 
 .login-banner-title {
   font-size: 4rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-dark);
   line-height: 1.1;
   margin: 0;
@@ -230,7 +222,7 @@ option,
 
 .login-title {
   font-size: 1.6rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-dark);
   margin: 0 0 0.5rem 0;
   letter-spacing: -0.5px;
@@ -341,7 +333,7 @@ option,
   color: #94a3b8;
   text-decoration: none;
   font-family: var(--font-family-ui);
-  font-weight: 600;
+  font-weight: 500;
   font-size: var(--sidebar-font-size);
   line-height: 1.25;
   cursor: pointer;
@@ -358,7 +350,7 @@ option,
 .menu-item.active {
   background-color: var(--card-bg);
   color: var(--brand-color);
-  font-weight: 700;
+  font-weight: 600;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
@@ -395,12 +387,28 @@ option,
   color: var(--text-dark);
 }
 
-html[lang="en"] .search-bar input {
-  font-size: 15px;
+/* Align the glyph inside the native search input without moving the rounded
+ * search control itself. */
+.search-bar input {
+  position: relative;
+  top: 2px;
 }
 
 .search-bar input::placeholder {
   color: var(--text-muted);
+}
+
+.profile-avatar {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-initial {
+  display: inline-block;
+  line-height: 1;
+  position: relative;
+  top: 1px;
 }
 
 /* ==========================================================================
@@ -650,9 +658,14 @@ html[lang="en"] .search-bar input {
   text-align: center;
 }
 
+.history-empty-state {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
+}
+
 .status-chip {
   border-radius: var(--radius-pill) !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
 }
 
 .status-chip--info {
@@ -741,7 +754,7 @@ textarea:focus-visible,
   padding: 0 12px;
   color: var(--text-muted);
   font-size: 0.68rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -756,20 +769,6 @@ textarea:focus-visible,
 .admin-navigation .MuiButton-root {
   min-height: 42px;
   padding: 8px 12px;
-}
-
-/* Ruwudu has a taller Latin glyph box than the surrounding controls. Keep
- * every app layout's geometry unchanged and correct only the visual baseline
- * of text, so labels sit optically centered instead of appearing to float. */
-html[lang="en"] .app-layout .MuiTypography-root,
-html[lang="en"] .app-layout .font-baseline-text {
-  position: relative;
-  top: 0.26em;
-}
-
-html[lang="en"] .app-layout .MuiTableCell-root {
-  line-height: 1.5;
-  vertical-align: middle;
 }
 
 .admin-navigation .MuiButton-startIcon {
@@ -803,7 +802,7 @@ html[lang="en"] .app-layout .MuiTableCell-root {
   font-size: var(--sidebar-font-size);
   border-radius: var(--sidebar-active-radius);
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 500;
   transition: background-color 0.2s, color 0.2s, transform 0.2s;
 }
 
@@ -814,7 +813,7 @@ html[lang="en"] .app-layout .MuiTableCell-root {
 }
 
 .admin-sidebar .MuiButton-root.active {
-  font-weight: 700;
+  font-weight: 600;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
@@ -1018,6 +1017,72 @@ html[lang="en"] .app-layout .MuiTableCell-root {
   color: var(--text-gray) !important;
 }
 
+.booking-calendar-day {
+  border: 1px solid transparent !important;
+  border-radius: 50% !important;
+  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.booking-calendar-day--selectable:not(.Mui-disabled) {
+  color: var(--brand-color) !important;
+  background-color: var(--brand-soft) !important;
+  border-color: var(--brand-color) !important;
+}
+
+.booking-calendar-day--selectable:not(.Mui-disabled):hover {
+  color: var(--brand-contrast) !important;
+  background-color: var(--brand-color) !important;
+}
+
+.booking-calendar-day--selected:not(.Mui-disabled) {
+  color: var(--brand-contrast) !important;
+  background-color: var(--brand-color) !important;
+  border-color: var(--brand-color) !important;
+}
+
+.booking-calendar-day--selected:not(.Mui-disabled):hover {
+  background-color: var(--brand-hover) !important;
+}
+
+.booking-calendar-day--unavailable.Mui-disabled {
+  color: var(--booking-calendar-disabled) !important;
+  background-color: var(--booking-calendar-disabled-bg) !important;
+  border-color: var(--booking-calendar-disabled-border) !important;
+  opacity: 1 !important;
+}
+
+.booking-calendar-day-number.MuiTypography-root {
+  color: inherit !important;
+}
+
+.booking-time-slot.MuiButton-root {
+  color: var(--text-dark) !important;
+  background-color: var(--surface-subtle) !important;
+  border: 1px solid var(--border-light) !important;
+}
+
+.booking-time-slot.MuiButton-outlined:not(.Mui-disabled):hover {
+  color: var(--brand-color) !important;
+  background-color: var(--brand-soft) !important;
+  border-color: var(--brand-color) !important;
+}
+
+.booking-time-slot.MuiButton-contained {
+  color: var(--brand-contrast) !important;
+  background-color: var(--brand-color) !important;
+  border-color: var(--brand-color) !important;
+}
+
+.booking-time-slot.MuiButton-contained:hover {
+  background-color: var(--brand-hover) !important;
+}
+
+.booking-time-slot.MuiButton-root.Mui-disabled {
+  color: var(--text-muted) !important;
+  background-color: var(--surface-subtle) !important;
+  border: 1px dashed var(--border-light) !important;
+}
+
 .data-table-shell .MuiTableBody-root .MuiTableRow-root {
   background-color: var(--card-bg);
 }
@@ -1113,6 +1178,15 @@ html[lang="en"] .app-layout .MuiTableCell-root {
   border-color: var(--brand-color);
 }
 
+:root[data-theme="dark"] .MuiMenu-paper .MuiMenuItem-root {
+  color: var(--text-dark) !important;
+}
+
+:root[data-theme="dark"] .MuiMenu-paper .MuiMenuItem-root:hover,
+:root[data-theme="dark"] .MuiMenu-paper .MuiMenuItem-root.Mui-selected {
+  background-color: var(--brand-soft) !important;
+}
+
 :root[data-theme="dark"] .MuiInputLabel-root,
 :root[data-theme="dark"] .MuiFormHelperText-root {
   color: var(--text-gray);
@@ -1152,8 +1226,30 @@ html[lang="en"] .app-layout .MuiTableCell-root {
   color: var(--text-gray) !important;
 }
 
-:root[data-theme="dark"] .app-layout .MuiButton-root:not(.MuiButton-contained):not(.MuiButton-colorError):not(.MuiButton-colorWarning):not(.MuiButton-colorSuccess) {
+:root[data-theme="dark"] .app-layout .MuiButton-root:not(.booking-time-slot):not(.MuiButton-contained):not(.MuiButton-colorError):not(.MuiButton-colorWarning):not(.MuiButton-colorSuccess) {
   color: var(--brand-color) !important;
+}
+
+:root[data-theme="dark"] .app-layout .booking-time-slot.MuiButton-outlined:not(.Mui-disabled) {
+  color: var(--text-dark) !important;
+  background-color: var(--surface-subtle) !important;
+  border-color: var(--border-light) !important;
+}
+
+:root[data-theme="dark"] .app-layout .booking-time-slot.MuiButton-outlined:not(.Mui-disabled):hover {
+  color: var(--brand-color) !important;
+  background-color: var(--brand-soft) !important;
+  border-color: var(--brand-color) !important;
+}
+
+:root[data-theme="dark"] .app-layout .booking-time-slot.MuiButton-root.Mui-disabled {
+  color: var(--text-muted) !important;
+  background-color: var(--surface-subtle) !important;
+  border: 1px dashed var(--border-light) !important;
+}
+
+:root[data-theme="dark"] .app-layout .booking-calendar-day .booking-calendar-day-number.MuiTypography-root {
+  color: inherit !important;
 }
 
 :root[data-theme="dark"] .app-layout .MuiInputBase-input::placeholder {

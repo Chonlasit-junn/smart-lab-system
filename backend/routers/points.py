@@ -1,8 +1,9 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,7 @@ import models
 from database import get_db
 from routers.users import get_current_user
 from profile_storage import get_profile_image_url
+from time_utils import LAB_TIMEZONE, UTC, as_lab_naive, as_utc, utc_now
 
 router = APIRouter(tags=["Point System"])
 
@@ -21,7 +23,7 @@ ADMIN_TEST_RESET_POINTS = MAX_POINTS
 TEST_BAN_MARKER = "[admin_test]"
 NO_SHOW_GRACE = timedelta(minutes=15)
 MAX_EVENT_ID_LENGTH = 256
-BUSINESS_TIMEZONE = timezone(timedelta(hours=7))
+BUSINESS_TIMEZONE = LAB_TIMEZONE
 
 # ── กฎการเปลี่ยนคะแนน ────────────────────────────────────────────────────────
 POINT_RULES = {
@@ -92,7 +94,7 @@ class PointPolicyUpdate(BaseModel):
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return utc_now()
 
 
 def _business_today() -> date:
@@ -100,25 +102,27 @@ def _business_today() -> date:
 
 
 def _business_date(value: datetime) -> date:
-    return _as_aware(value).astimezone(BUSINESS_TIMEZONE).date()
+    return _as_business_aware(value).astimezone(BUSINESS_TIMEZONE).date()
 
 
 def _business_now_naive() -> datetime:
-    return _now_utc().astimezone(BUSINESS_TIMEZONE).replace(tzinfo=None)
+    return as_lab_naive(_now_utc())
 
 
 def _as_aware(value: Optional[datetime]) -> Optional[datetime]:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
+    """Normalize a value read from a UTC database timestamp column."""
+
+    return as_utc(value, naive_timezone=UTC)
+
+
+def _as_business_aware(value: Optional[datetime]) -> Optional[datetime]:
+    """Normalize an event timestamp, including legacy Lab-local values."""
+
+    return as_utc(value, naive_timezone=BUSINESS_TIMEZONE)
 
 
 def _as_naive(value: datetime) -> datetime:
-    if value.tzinfo is not None:
-        return value.astimezone().replace(tzinfo=None)
-    return value
+    return as_lab_naive(value)
 
 
 def _clamp_score(value: Optional[int]) -> int:
@@ -468,7 +472,7 @@ def apply_point_event(
     record.points = after
     record.updated_at = _now_utc()
 
-    event_time = _as_aware(effective_at) or _now_utc()
+    event_time = _as_business_aware(effective_at) or _now_utc()
     score_date = _business_date(event_time)
     daily_record = get_or_create_daily_score(user_id, score_date, db)
     daily_before = _clamp_score(daily_record.score)
@@ -543,7 +547,7 @@ def ensure_daily_bonus(
     if _clamp_score(current_record.points) == 0:
         return {"skipped": True, "reason": "zero_points"}
 
-    event_time = _as_aware(effective_at) or _now_utc()
+    event_time = _as_business_aware(effective_at) or _now_utc()
     score_date = _business_date(event_time).isoformat()
     return apply_point_event(
         user_id,
@@ -556,6 +560,69 @@ def ensure_daily_bonus(
         commit=commit,
         policy=policy,
     )
+
+
+def ensure_daily_bonuses_for_users(
+    user_ids: list[int],
+    db: Session,
+    effective_at: Optional[datetime] = None,
+    policy: Optional[models.PointPolicy] = None,
+) -> None:
+    """Apply today's bonus only to users who still need it.
+
+    Admin list pages process many users at once. Preloading pending requests,
+    point rows, and today's daily events avoids repeating the same read query
+    for every user who has already received today's bonus. Users who still
+    need a bonus continue through the existing locked, idempotent write path.
+    """
+    unique_user_ids = list(dict.fromkeys(user_ids))
+    if not unique_user_ids:
+        return
+
+    event_time = _as_business_aware(effective_at) or _now_utc()
+    score_date = _business_date(event_time)
+    pending_user_ids = {
+        user_id
+        for (user_id,) in db.query(models.PointRequest.user_id).filter(
+            models.PointRequest.user_id.in_(unique_user_ids),
+            models.PointRequest.status == "pending",
+        ).distinct().all()
+    }
+    completed_bonus_user_ids = {
+        user_id
+        for (user_id,) in db.query(models.PointLog.user_id).filter(
+            models.PointLog.user_id.in_(unique_user_ids),
+            models.PointLog.reason == "daily_bonus",
+            models.PointLog.score_date == score_date,
+        ).distinct().all()
+    }
+    point_rows = {
+        record.user_id: record
+        for record in db.query(models.UserPoints).filter(
+            models.UserPoints.user_id.in_(unique_user_ids),
+        ).all()
+    }
+
+    for user_id in unique_user_ids:
+        record = point_rows.get(user_id)
+        if record is None:
+            record = get_or_create_points(user_id, db)
+            point_rows[user_id] = record
+
+        if user_id in pending_user_ids or user_id in completed_bonus_user_ids:
+            continue
+        if _clamp_score(record.points) == 0:
+            continue
+
+        # Reuse the existing event implementation for the write path. It
+        # re-checks the deterministic event id under the row lock, keeping
+        # concurrent dashboard requests idempotent.
+        ensure_daily_bonus(
+            user_id,
+            db,
+            effective_at=event_time,
+            policy=policy,
+        )
 
 
 def deduct_points(
@@ -844,10 +911,23 @@ def reconcile_no_shows(
 def get_all_user_points(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    search: Optional[str] = Query(None, max_length=100),
+    filter_mode: str = Query("all", alias="filter", pattern="^(all|low|banned|allowed)$"),
+    sort_by: str = Query("pointsAsc", pattern="^(pointsAsc|pointsDesc|name)$"),
 ):
     """Return the current point status for every user for the Admin dashboard."""
     if not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="Admin access required.")
+
+    # Keep direct unit-test calls and internal callers compatible with the
+    # FastAPI Query defaults used by the HTTP endpoint.
+    page_number = page if isinstance(page, int) else 1
+    page_limit = page_size if isinstance(page_size, int) else 25
+    search_value = search if isinstance(search, str) else None
+    filter_value = filter_mode if isinstance(filter_mode, str) else "all"
+    sort_value = sort_by if isinstance(sort_by, str) else "pointsAsc"
 
     policy = get_or_create_point_policy(db)
     mark_due_no_shows(db, policy=policy)
@@ -887,13 +967,53 @@ def get_all_user_points(
             for request, user in request_rows
         }
 
-    result = []
+    ensure_daily_bonuses_for_users(
+        user_ids,
+        db,
+        effective_at=_now_utc(),
+        policy=policy,
+    )
+
+    point_records = {}
     for user, point_record in rows:
-        ensure_daily_bonus(user.id, db, policy=policy)
-        point_record = get_or_create_points(user.id, db)
+        # Reuse the ORM-loaded point row instead of querying it again for the
+        # response. Missing legacy rows are created by the bulk preloader.
+        if point_record is None:
+            point_record = db.get(models.UserPoints, user.id)
+            if point_record is None:
+                point_record = get_or_create_points(user.id, db)
+        point_records[user.id] = point_record
+
+    ban_until_by_user = {}
+    daily_score_by_user = {}
+    if user_ids:
+        active_bans = db.query(
+            models.BanRecord.user_id,
+            func.max(models.BanRecord.ban_until),
+        ).filter(
+            models.BanRecord.user_id.in_(user_ids),
+            models.BanRecord.ban_until > _now_utc(),
+        ).group_by(models.BanRecord.user_id).all()
+        ban_until_by_user = dict(active_bans)
+
+        daily_scores = db.query(
+            models.UserDailyScore.user_id,
+            models.UserDailyScore.score,
+        ).filter(
+            models.UserDailyScore.user_id.in_(user_ids),
+            models.UserDailyScore.score_date == today,
+        ).all()
+        daily_score_by_user = {
+            user_id: _clamp_score(score)
+            for user_id, score in daily_scores
+        }
+
+    result = []
+    for user, _ in rows:
+        point_record = point_records[user.id]
         points = _clamp_score(point_record.points if point_record else MAX_POINTS)
-        ban_until = is_user_banned(user.id, db)
-        daily_score = _get_daily_score(user.id, today, db)
+        ban_until = ban_until_by_user.get(user.id)
+        daily_score = daily_score_by_user.get(user.id, MAX_POINTS)
         request_row = pending_requests.get(user.id)
         result.append({
             "user_id": user.id,
@@ -915,10 +1035,40 @@ def get_all_user_points(
             "updated_at": point_record.updated_at if point_record else None,
         })
 
-    scores = [item["points"] for item in result]
+    warning_threshold = _policy_value(policy, "warning_threshold")
+    all_scores = [item["points"] for item in result]
+    normalized_search = (search_value or "").strip().casefold()
+    filtered_result = [
+        item for item in result
+        if (
+            not normalized_search
+            or normalized_search in (
+                f"{item['name']} {item['email']} {item['user_id']}"
+            ).casefold()
+        )
+        and (
+            filter_value == "all"
+            or (filter_value == "low" and item["points"] <= warning_threshold)
+            or (filter_value == "banned" and item["is_banned"])
+            or (filter_value == "allowed" and item["booking_allowed"])
+        )
+    ]
+    if sort_value == "pointsDesc":
+        filtered_result.sort(key=lambda item: item["points"], reverse=True)
+    elif sort_value == "name":
+        filtered_result.sort(key=lambda item: item["name"].casefold())
+    else:
+        filtered_result.sort(key=lambda item: item["points"])
+
+    total = len(filtered_result)
+    paged_result = filtered_result[(page_number - 1) * page_limit:page_number * page_limit]
     db.commit()
     return {
-        "data": result,
+        "data": paged_result,
+        "page": page_number,
+        "page_size": page_limit,
+        "total": total,
+        "has_more": page_number * page_limit < total,
         "score_date": today,
         "points_warning_threshold": _policy_value(policy, "warning_threshold"),
         "point_request_amount": _policy_value(policy, "point_request_amount"),
@@ -928,9 +1078,9 @@ def get_all_user_points(
         ],
         "summary": {
             "total_users": len(result),
-            "average_points": round(sum(scores) / len(scores), 1) if scores else 0,
+            "average_points": round(sum(all_scores) / len(all_scores), 1) if all_scores else 0,
             "low_point_users": sum(
-                item["points"] <= _policy_value(policy, "warning_threshold") for item in result
+                item["points"] <= warning_threshold for item in result
             ),
             "banned_users": sum(item["is_banned"] for item in result),
             "booking_allowed": sum(item["booking_allowed"] for item in result),

@@ -215,7 +215,7 @@ class UsageViolation(Base):
         nullable=True,
     )
     program_name = Column(String, nullable=False)
-    detected_at = Column(DateTime, server_default=func.now(), nullable=False)
+    detected_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     reason = Column(Text, nullable=True)
     action_taken = Column(String, nullable=False, default="logout")
     event_id = Column(String, nullable=True, index=True)

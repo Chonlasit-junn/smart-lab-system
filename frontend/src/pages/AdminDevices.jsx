@@ -5,14 +5,9 @@ import {
   Box,
   Button,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   FormControl,
   IconButton,
-  InputLabel,
   MenuItem,
   Paper,
   Select,
@@ -23,15 +18,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from "@mui/material";
 import {
   Close,
   Computer,
-  ContentCopy,
   Logout,
-  Notifications,
   Person,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
@@ -39,7 +31,9 @@ import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
+import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -48,14 +42,6 @@ const STATUS_LABELS = {
   maintenance: "maintenance",
   revoked: "revoked",
 };
-
-function formatDate(value, locale = "th-TH") {
-  if (!value) return "";
-  return new Date(value).toLocaleString(locale, {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
 
 export default function AdminDevices() {
   const navigate = useNavigate();
@@ -66,10 +52,6 @@ export default function AdminDevices() {
   const [labs, setLabs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [openEnrollment, setOpenEnrollment] = useState(false);
-  const [selectedLabId, setSelectedLabId] = useState("");
-  const [expiresInMinutes, setExpiresInMinutes] = useState(10);
-  const [enrollmentCode, setEnrollmentCode] = useState(null);
   const [savingDeviceId, setSavingDeviceId] = useState(null);
   const [notice, setNotice] = useState({ open: false, message: "", severity: "success" });
 
@@ -88,49 +70,16 @@ export default function AdminDevices() {
       setDevices(devicesResponse.data?.data || []);
       setLabs(labsResponse.data?.data || []);
     } catch (requestError) {
-      setError(requestError.response?.data?.detail || "ไม่สามารถโหลดข้อมูลเครื่องได้");
+      setError(requestError.response?.data?.detail || t("common.error"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     document.title = `${t("admin.devicesTitle")} | Smart Lab Admin`;
     fetchData();
   }, [fetchData, t]);
-
-  const handleCreateEnrollment = async () => {
-    if (!selectedLabId) {
-      showNotice(t("admin.chooseLabFirst"), "warning");
-      return;
-    }
-    try {
-      const response = await axios.post(
-        `${API_URL}/admin/lab-devices/enrollment-codes`,
-        { lab_id: Number(selectedLabId), expires_in_minutes: Number(expiresInMinutes) },
-        authConfig(),
-      );
-      setEnrollmentCode(response.data);
-    } catch (requestError) {
-      showNotice(requestError.response?.data?.detail || "สร้างรหัสลงทะเบียนไม่สำเร็จ", "error");
-    }
-  };
-
-  const handleCopyCode = async () => {
-    if (!enrollmentCode?.enrollment_code) return;
-    try {
-      await navigator.clipboard.writeText(enrollmentCode.enrollment_code);
-      showNotice(t("admin.copied"));
-    } catch {
-      showNotice(t("admin.copyFailed"), "warning");
-    }
-  };
-
-  const handleCloseEnrollment = () => {
-    setOpenEnrollment(false);
-    setEnrollmentCode(null);
-    setSelectedLabId("");
-  };
 
   const handleSaveDevice = async (device) => {
     try {
@@ -178,8 +127,8 @@ export default function AdminDevices() {
             <Computer sx={{ color: "white", fontSize: 28 }} />
           </Box>
           <Box>
-            <Typography variant="h6" fontWeight="800" sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}>Smart Lab</Typography>
-            <Typography variant="caption" sx={{ color: "#64748b", fontWeight: "500", display: "block", mt: -0.5 }}>Admin Dashboard</Typography>
+            <Typography variant="h6" fontWeight="700" sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}>Smart Lab</Typography>
+            <Typography variant="caption" sx={{ color: "#64748b", fontWeight: "400", display: "block", mt: -0.5 }}>{t("common.adminDashboard")}</Typography>
           </Box>
         </Box>
         <AdminNavigation />
@@ -187,13 +136,17 @@ export default function AdminDevices() {
 
       <Box className="main-area admin-main-area" sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden" }}>
         <Box className="top-header admin-top-header" sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 6, py: 1, bgcolor: "white", borderBottom: "1px solid #e2e8f0" }}>
-          <Typography variant="h5" fontWeight="800" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>{t("admin.devicesTitle")}</Typography>
+          <Typography variant="h5" fontWeight="700" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>{t("admin.devicesTitle")}</Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}><Notifications sx={{ color: "#64748b" }} /></IconButton>
+            <NotificationBell
+              className="admin-notification-button"
+              iconColor="#64748b"
+              loadNotifications={false}
+            />
             <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
             <Box sx={{ textAlign: "right" }}>
-              <Typography variant="subtitle2" fontWeight="800" color="#1e293b">{t("common.systemAdmin")}</Typography>
-              <Typography variant="caption" fontWeight="600" color="#94a3b8">{t("common.administrator")}</Typography>
+              <Typography variant="subtitle2" fontWeight="700" color="#1e293b">{t("common.systemAdmin")}</Typography>
+              <Typography variant="caption" fontWeight="500" color="#94a3b8">{t("common.administrator")}</Typography>
             </Box>
             <IconButton onClick={(event) => setAnchorEl(event.currentTarget)} sx={{ p: 0.8 }}>
               <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}><Person sx={{ fontSize: 20 }} /></Avatar>
@@ -204,10 +157,9 @@ export default function AdminDevices() {
         <Box className="content-area admin-content-area page-content" sx={{ p: { xs: 2, md: 5 }, flex: 1 }}>
           <Box className="page-header" sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" }, gap: 2, mb: 3, flexDirection: { xs: "column", md: "row" } }}>
             <Box>
-              <Typography variant="h4" fontWeight="800" color="#0f172a">{t("admin.deviceHeading")}</Typography>
+              <Typography variant="h4" fontWeight="700" color="#0f172a">{t("admin.deviceHeading")}</Typography>
               <Typography color="#64748b" sx={{ mt: 0.5 }}>{t("admin.deviceSubtitle")}</Typography>
             </Box>
-            <Button variant="contained" startIcon={<Computer />} onClick={() => setOpenEnrollment(true)} sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700, px: 2.5 }}>{t("admin.createEnrollment")}</Button>
           </Box>
 
           {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
@@ -216,12 +168,12 @@ export default function AdminDevices() {
               <Table sx={{ minWidth: 980 }}>
                 <TableHead sx={{ bgcolor: "#f8fafc" }}>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 800 }}>{t("admin.machine")}</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>{t("user.lab")}</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>{t("common.status")}</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>{t("admin.agent")}</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>{t("admin.lastSignal")}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 800 }}>{t("admin.manage")}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t("admin.machine")}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t("user.lab")}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t("common.status")}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t("admin.agent")}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{t("admin.lastSignal")}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>{t("admin.manage")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -232,7 +184,7 @@ export default function AdminDevices() {
                   ) : devices.map((device) => (
                     <TableRow key={device.id} hover>
                       <TableCell>
-                        <Typography fontWeight={700} color="#1e293b">{device.device_name}</Typography>
+                        <Typography fontWeight={600} color="#1e293b">{device.device_name}</Typography>
                         <Typography variant="caption" color="#94a3b8">{device.device_id}</Typography>
                         <Typography variant="caption" display="block" color="#94a3b8">{device.device_mac || t("common.noMac")}</Typography>
                       </TableCell>
@@ -249,7 +201,7 @@ export default function AdminDevices() {
                         </Select>
                       </TableCell>
                       <TableCell>{device.agent_version || t("common.source")}</TableCell>
-                      <TableCell>{formatDate(device.last_seen_at, t("common.locale")) || t("common.noSignal")}</TableCell>
+                      <TableCell>{formatDateTime(device.last_seen_at, t("common.locale"), { fallback: "" }) || t("common.noSignal")}</TableCell>
                       <TableCell align="right">
                         <Button size="small" variant="outlined" disabled={savingDeviceId === device.id} onClick={() => handleSaveDevice(device)} sx={{ textTransform: "none", borderRadius: 2 }}>
                           {savingDeviceId === device.id ? t("admin.savingDevice") : t("admin.saveDevice")}
@@ -263,39 +215,6 @@ export default function AdminDevices() {
           </Paper>
         </Box>
       </Box>
-
-      <Dialog open={openEnrollment} onClose={handleCloseEnrollment} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800 }}>{t("admin.enrollmentTitle")}</DialogTitle>
-        <DialogContent>
-          {!enrollmentCode ? (
-            <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
-              <FormControl fullWidth>
-                <InputLabel>Lab</InputLabel>
-                <Select label="Lab" value={selectedLabId} onChange={(event) => setSelectedLabId(event.target.value)}>
-                  {labs.filter((lab) => lab.status === "active").map((lab) => <MenuItem key={lab.id} value={lab.id}>{lab.code} — {lab.name}</MenuItem>)}
-                </Select>
-              </FormControl>
-                <TextField select label={t("admin.enrollmentAge")} value={expiresInMinutes} onChange={(event) => setExpiresInMinutes(event.target.value)}>
-                <MenuItem value={10}>10 {t("common.minutes")}</MenuItem>
-                <MenuItem value={30}>30 {t("common.minutes")}</MenuItem>
-                <MenuItem value={60}>60 {t("common.minutes")}</MenuItem>
-              </TextField>
-              <Alert severity="info">{t("admin.oneTimeCode")}</Alert>
-            </Box>
-          ) : (
-            <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
-              <Alert severity="success">{t("admin.generatedFor")} {enrollmentCode.lab?.code} — {enrollmentCode.lab?.name}</Alert>
-              <TextField label="Enrollment Code" value={enrollmentCode.enrollment_code} InputProps={{ readOnly: true }} fullWidth />
-              <Button variant="outlined" startIcon={<ContentCopy />} onClick={handleCopyCode} sx={{ textTransform: "none" }}>{t("admin.copyCode")}</Button>
-              <Typography variant="body2" color="#64748b">{t("admin.expiresAt")}: {formatDate(enrollmentCode.expires_at, t("common.locale"))} · {t("admin.setupCommand")}</Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={handleCloseEnrollment} sx={{ textTransform: "none" }}>{enrollmentCode ? t("common.close") : t("common.cancel")}</Button>
-          {!enrollmentCode && <Button variant="contained" onClick={handleCreateEnrollment} sx={{ textTransform: "none" }}>{t("admin.createCode")}</Button>}
-        </DialogActions>
-      </Dialog>
 
       <Snackbar open={notice.open} autoHideDuration={3500} onClose={() => setNotice((current) => ({ ...current, open: false }))}>
         <Alert severity={notice.severity} onClose={() => setNotice((current) => ({ ...current, open: false }))}>{notice.message}</Alert>

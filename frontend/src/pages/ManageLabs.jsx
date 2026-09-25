@@ -34,7 +34,6 @@ import {
 } from "@mui/material";
 import {
   Search,
-  Notifications,
   Logout,
   Computer,
   Person,
@@ -54,6 +53,7 @@ import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
+import NotificationBell from "../components/NotificationBell";
 
 // นำเข้า MUI DatePicker
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -82,6 +82,8 @@ const SLOT_OPTIONS = [
   { value: 3, label: "14:30 - 16:50" },
   { value: 4, label: "17:00 - 19:20" },
 ];
+
+const getDayLabel = (day, t) => t(`admin.weekday${day}`);
 
 // ============================================================================
 // 3. MAIN COMPONENT
@@ -184,35 +186,35 @@ export default function ManageLabs() {
       setNewLab({ name: "", code: "", capacity: 40, location: "" });
       fetchLabs();
     } catch (error) {
-      alert(error.response?.data?.detail || "Create lab failed");
+      alert(error.response?.data?.detail || t("admin.createFailed"));
     }
   };
 
   const handleUpdateLab = async () => {
     try {
       await axios.put(`${API_URL}/admin/labs/${activeLab.id}`, editFormData, authConfig());
-      alert("Updated successfully!");
+      alert(t("admin.updateSucceeded"));
       fetchLabs();
     } catch (error) {
-      alert(error.response?.data?.detail || "Update failed");
+      alert(error.response?.data?.detail || t("admin.updateFailed"));
     }
   };
 
   const handleDeleteLab = async () => {
     if (
       !window.confirm(
-        `⚠️ Are you sure you want to permanently delete ${activeLab.code}?\nThis will also delete all associated schedules. This action cannot be undone.`,
+        `${t("admin.confirmDeleteLabPrefix")} ${activeLab.code}?\n${t("admin.confirmDeleteLabSuffix")}`,
       )
     )
       return;
 
     try {
       await axios.delete(`${API_URL}/admin/labs/${activeLab.id}`, authConfig());
-      alert("Lab deleted successfully!");
+      alert(t("admin.deleteSucceeded"));
       handleGoBack();
       fetchLabs();
     } catch (error) {
-      alert(`Delete failed: ${error.response?.data?.detail || error.message}`);
+      alert(`${t("admin.deleteFailed")}: ${error.response?.data?.detail || error.message}`);
     }
   };
 
@@ -307,11 +309,11 @@ export default function ManageLabs() {
       !scheduleFormData.valid_from ||
       !scheduleFormData.valid_until
     ) {
-      return alert("Missing required fields");
+      return alert(t("admin.missingRequiredFields"));
     }
 
     if (scheduleFormData.valid_from > scheduleFormData.valid_until) {
-      return alert("The schedule end date must be on or after the start date.");
+      return alert(t("admin.invalidScheduleDates"));
     }
 
     try {
@@ -328,18 +330,18 @@ export default function ManageLabs() {
       setOpenScheduleDialog(false);
       fetchSchedules(activeLab.id);
     } catch (error) {
-      alert(`Operation failed: ${error.response?.data?.detail}`);
+      alert(`${t("admin.operationFailed")}: ${error.response?.data?.detail || ""}`);
     }
   };
 
   const handleDeleteSchedule = async (scheduleId) => {
-    if (!window.confirm("Are you sure you want to delete this schedule?"))
+    if (!window.confirm(t("admin.deleteScheduleConfirmation")))
       return;
     try {
       await axios.delete(`${API_URL}/admin/schedules/${scheduleId}`, authConfig());
       fetchSchedules(activeLab.id);
     } catch {
-      alert("Delete failed");
+      alert(t("admin.deleteFailed"));
     }
   };
 
@@ -387,7 +389,7 @@ export default function ManageLabs() {
           <Box>
             <Typography
               variant="h6"
-              fontWeight="800"
+              fontWeight="700"
               sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}
             >
               Smart Lab
@@ -396,12 +398,12 @@ export default function ManageLabs() {
               variant="caption"
               sx={{
                 color: "#64748b",
-                fontWeight: "500",
+                fontWeight: "400",
                 display: "block",
                 mt: -0.5,
               }}
             >
-              Admin Dashboard
+              {t("common.adminDashboard")}
             </Typography>
           </Box>
         </Box>
@@ -435,7 +437,7 @@ export default function ManageLabs() {
         >
           <Typography
             variant="h5"
-            fontWeight="800"
+            fontWeight="700"
             sx={{ color: "#1e293b", letterSpacing: "-1px" }}
           >
             {viewMode === "list" ? t("admin.manageLabsTitle") : t("common.details")}
@@ -457,12 +459,14 @@ export default function ManageLabs() {
               <InputBase
                 placeholder={t("admin.searchLabs")}
                 fullWidth
-                sx={{ fontSize: "15px", fontWeight: "500" }}
+                sx={{ fontSize: "15px", fontWeight: "400" }}
               />
             </Paper>
-            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "#64748b" }} />
-            </IconButton>
+            <NotificationBell
+              className="admin-notification-button"
+              iconColor="#64748b"
+              loadNotifications={false}
+            />
             <Divider
               orientation="vertical"
               flexItem
@@ -472,12 +476,12 @@ export default function ManageLabs() {
               <Box sx={{ textAlign: "right" }}>
                 <Typography
                   variant="subtitle2"
-                  fontWeight="800"
+                  fontWeight="700"
                   color="#1e293b"
                 >
                   {currentUser?.name || t("common.systemAdmin")}
                 </Typography>
-                <Typography variant="caption" fontWeight="600" color="#94a3b8">
+                <Typography variant="caption" fontWeight="500" color="#94a3b8">
                   {t("common.administrator")}
                 </Typography>
               </Box>
@@ -529,7 +533,7 @@ export default function ManageLabs() {
                 >
                   <Typography
                     fontSize="13px"
-                    fontWeight="600"
+                    fontWeight="500"
                     color="#64748b"
                     sx={{ pl: 0.5 }}
                   >
@@ -559,7 +563,7 @@ export default function ManageLabs() {
 
                   <Typography
                     sx={{ mt: 1.5, color: "#1e293b" }}
-                    fontWeight="700"
+                    fontWeight="600"
                     fontSize="18px"
                   >
                     {currentUser?.name || t("common.systemAdmin")}
@@ -575,7 +579,7 @@ export default function ManageLabs() {
                       mt: 2,
                       borderRadius: 20,
                       textTransform: "none",
-                      fontWeight: "700",
+                      fontWeight: "600",
                       fontSize: "13px",
                       px: 2.5,
                       py: 0.6,
@@ -611,7 +615,7 @@ export default function ManageLabs() {
                     <Settings sx={{ fontSize: 20, color: "#64748b" }} />
                     <Typography
                       fontSize="13px"
-                      fontWeight="700"
+                      fontWeight="600"
                       color="#1e293b"
                     >
                       {t("common.settings")}
@@ -633,7 +637,7 @@ export default function ManageLabs() {
                     <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
                     <Typography
                       fontSize="13px"
-                      fontWeight="700"
+                      fontWeight="600"
                       color="#ef4444"
                     >
                       {t("common.logout")}
@@ -660,8 +664,8 @@ export default function ManageLabs() {
                     mb: 4,
                   }}
                 >
-                  <Typography variant="h6" fontWeight="700" color="#64748b">
-                    All Laboratory Rooms
+                  <Typography variant="h6" fontWeight="600" color="#64748b">
+                    {t("admin.allLaboratoryRooms")}
                   </Typography>
                   <Button
                     variant="contained"
@@ -670,7 +674,7 @@ export default function ManageLabs() {
                     onClick={() => setOpenCreateDialog(true)}
                     sx={{
                       bgcolor: "#3b82f6",
-                      fontWeight: "700",
+                      fontWeight: "600",
                       textTransform: "none",
                       borderRadius: 3,
                       px: 3,
@@ -682,7 +686,7 @@ export default function ManageLabs() {
                       },
                     }}
                   >
-                    Add New Lab
+                    {t("admin.addLab")}
                   </Button>
                 </Box>
 
@@ -747,7 +751,7 @@ export default function ManageLabs() {
                           >
                             <Typography
                               variant="h5"
-                              fontWeight="800"
+                              fontWeight="700"
                               color="#1e293b"
                               sx={{
                                 minWidth: 0,
@@ -760,7 +764,7 @@ export default function ManageLabs() {
                             </Typography>
                             <Chip
                               label={
-                                lab.status === "active" ? "Active" : "Disabled"
+                                lab.status === "active" ? t("common.active") : t("admin.disabled")
                               }
                               sx={{
                                 bgcolor:
@@ -771,7 +775,7 @@ export default function ManageLabs() {
                                   lab.status === "active"
                                     ? "#16a34a"
                                     : "#ef4444",
-                                fontWeight: "800",
+                                fontWeight: "700",
                                 fontSize: "12px",
                                 flexShrink: 0,
                               }}
@@ -781,7 +785,7 @@ export default function ManageLabs() {
                           <Typography
                             variant="body2"
                             color="#64748b"
-                            fontWeight="500"
+                            fontWeight="400"
                             className="lab-card-name"
                             title={lab.name}
                             sx={{ mt: 1 }}
@@ -794,7 +798,7 @@ export default function ManageLabs() {
                               display: "flex",
                               justifyContent: "space-between",
                               color: "#94a3b8",
-                              fontWeight: "600",
+                              fontWeight: "500",
                               fontSize: "14px",
                               minWidth: 0,
                             }}
@@ -811,7 +815,7 @@ export default function ManageLabs() {
                                 fontSize="small"
                                 sx={{ color: "#cbd5e1" }}
                               />{" "}
-                              {lab.capacity} Users
+                              {lab.capacity} {t("admin.users")}
                             </Box>
                             <Box
                               sx={{
@@ -844,7 +848,7 @@ export default function ManageLabs() {
                 sx={{
                   mb: 4,
                   color: "#64748b",
-                  fontWeight: "700",
+                  fontWeight: "600",
                   textTransform: "none",
                   transition: "all 0.2s",
                   "&:hover": {
@@ -854,7 +858,7 @@ export default function ManageLabs() {
                   },
                 }}
               >
-                Back to all rooms
+                {t("admin.backToAllRooms")}
               </Button>
 
               <Grid container spacing={5}>
@@ -891,7 +895,7 @@ export default function ManageLabs() {
                       <Box sx={{ p: 4 }}>
                         <Typography
                           variant="h3"
-                          fontWeight="800"
+                          fontWeight="700"
                           color="#1e293b"
                           sx={{ letterSpacing: "-1px" }}
                           gutterBottom
@@ -901,7 +905,7 @@ export default function ManageLabs() {
                         <Typography
                           variant="body1"
                           color="#64748b"
-                          fontWeight="500"
+                          fontWeight="400"
                           sx={{ mb: 4, lineHeight: 1.6 }}
                         >
                           {activeLab.name}
@@ -928,10 +932,10 @@ export default function ManageLabs() {
                             </Avatar>
                             <Typography
                               variant="subtitle1"
-                              fontWeight="700"
+                              fontWeight="600"
                               color="#334155"
                             >
-                              Capacity: {activeLab.capacity} Users
+                              {t("admin.capacity")}: {activeLab.capacity} {t("admin.users")}
                             </Typography>
                           </Box>
                           <Box
@@ -948,10 +952,10 @@ export default function ManageLabs() {
                             </Avatar>
                             <Typography
                               variant="subtitle1"
-                              fontWeight="700"
+                              fontWeight="600"
                               color="#334155"
                             >
-                              Location: {activeLab.location || "-"}
+                              {t("admin.location")}: {activeLab.location || "-"}
                             </Typography>
                           </Box>
                         </Box>
@@ -985,17 +989,17 @@ export default function ManageLabs() {
                       >
                         <Typography
                           variant="h6"
-                          fontWeight="800"
+                          fontWeight="700"
                           color="#1e293b"
                           sx={{ mb: 3 }}
                         >
-                          Edit Lab Information
+                          {t("admin.editLabInformation")}
                         </Typography>
                         <Grid container spacing={3}>
                           <Grid item xs={12} sm={6}>
                             <Typography
                               variant="caption"
-                              fontWeight="700"
+                              fontWeight="600"
                               color="#94a3b8"
                               sx={{
                                 mb: 1,
@@ -1003,7 +1007,7 @@ export default function ManageLabs() {
                                 textTransform: "uppercase",
                               }}
                             >
-                              Lab Code
+                              {t("admin.labCode")}
                             </Typography>
                             <TextField
                               fullWidth
@@ -1024,7 +1028,7 @@ export default function ManageLabs() {
                           <Grid item xs={12} sm={6}>
                             <Typography
                               variant="caption"
-                              fontWeight="700"
+                              fontWeight="600"
                               color="#94a3b8"
                               sx={{
                                 mb: 1,
@@ -1032,7 +1036,7 @@ export default function ManageLabs() {
                                 textTransform: "uppercase",
                               }}
                             >
-                              Lab Name
+                              {t("admin.labName")}
                             </Typography>
                             <TextField
                               fullWidth
@@ -1053,7 +1057,7 @@ export default function ManageLabs() {
                           <Grid item xs={12} sm={6}>
                             <Typography
                               variant="caption"
-                              fontWeight="700"
+                              fontWeight="600"
                               color="#94a3b8"
                               sx={{
                                 mb: 1,
@@ -1061,7 +1065,7 @@ export default function ManageLabs() {
                                 textTransform: "uppercase",
                               }}
                             >
-                              Capacity
+                              {t("admin.capacity")}
                             </Typography>
                             <TextField
                               type="number"
@@ -1083,7 +1087,7 @@ export default function ManageLabs() {
                           <Grid item xs={12} sm={6}>
                             <Typography
                               variant="caption"
-                              fontWeight="700"
+                              fontWeight="600"
                               color="#94a3b8"
                               sx={{
                                 mb: 1,
@@ -1091,7 +1095,7 @@ export default function ManageLabs() {
                                 textTransform: "uppercase",
                               }}
                             >
-                              Location
+                              {t("admin.location")}
                             </Typography>
                             <TextField
                               fullWidth
@@ -1125,14 +1129,14 @@ export default function ManageLabs() {
                             startIcon={<Delete />}
                             onClick={handleDeleteLab}
                             sx={{
-                              fontWeight: "700",
+                              fontWeight: "600",
                               borderRadius: 3,
                               textTransform: "none",
                               borderWidth: 2,
                               "&:hover": { borderWidth: 2, bgcolor: "#fef2f2" },
                             }}
                           >
-                            Delete Lab
+                            {t("admin.deleteLab")}
                           </Button>
                           <Button
                             variant="contained"
@@ -1142,7 +1146,7 @@ export default function ManageLabs() {
                             sx={{
                               bgcolor: "#0f172a",
                               color: "white",
-                              fontWeight: "700",
+                              fontWeight: "600",
                               px: 4,
                               py: 1.2,
                               borderRadius: 3,
@@ -1150,7 +1154,7 @@ export default function ManageLabs() {
                               "&:hover": { bgcolor: "#334155" },
                             }}
                           >
-                            Save Changes
+                            {t("admin.saveChanges")}
                           </Button>
                         </Box>
                       </Paper>
@@ -1172,22 +1176,22 @@ export default function ManageLabs() {
                         <Box>
                           <Typography
                             variant="subtitle1"
-                            fontWeight="800"
+                            fontWeight="700"
                             color="#1e293b"
                           >
                             {activeLab.status === "active"
-                              ? "Disable this laboratory"
-                              : "Enable this laboratory"}
+                              ? t("admin.disableLaboratory")
+                              : t("admin.enableLaboratory")}
                           </Typography>
                           <Typography
                             variant="body2"
                             color="#64748b"
-                            fontWeight="500"
+                            fontWeight="400"
                             sx={{ mt: 0.5 }}
                           >
                             {activeLab.status === "active"
-                              ? "Suspend bookings for this room."
-                              : "Allow bookings for this room."}
+                              ? t("admin.suspendRoomBookings")
+                              : t("admin.allowRoomBookings")}
                           </Typography>
                         </Box>
                         <Button
@@ -1202,7 +1206,7 @@ export default function ManageLabs() {
                           }
                           onClick={handleToggleStatus}
                           sx={{
-                            fontWeight: "700",
+                            fontWeight: "600",
                             textTransform: "none",
                             borderRadius: 3,
                             px: 3,
@@ -1215,8 +1219,8 @@ export default function ManageLabs() {
                           }}
                         >
                           {activeLab.status === "active"
-                            ? "Disable Access"
-                            : "Enable Access"}
+                            ? t("admin.disableAccess")
+                            : t("admin.enableAccess")}
                         </Button>
                       </Paper>
 
@@ -1242,18 +1246,17 @@ export default function ManageLabs() {
                           <Box>
                             <Typography
                               variant="h6"
-                              fontWeight="800"
+                              fontWeight="700"
                               color="#1e293b"
                             >
-                              Class Schedules
+                              {t("admin.classSchedules")}
                             </Typography>
                             <Typography
                               variant="body2"
                               color="#94a3b8"
-                              fontWeight="500"
+                              fontWeight="400"
                             >
-                              Slots added here will be locked for student
-                              booking.
+                              {t("admin.classSchedulesHint")}
                             </Typography>
                           </Box>
                           <Button
@@ -1262,7 +1265,7 @@ export default function ManageLabs() {
                             startIcon={<Add />}
                             onClick={handleOpenAddSchedule}
                             sx={{
-                              fontWeight: "700",
+                              fontWeight: "600",
                               borderRadius: 3,
                               textTransform: "none",
                               px: 2,
@@ -1271,7 +1274,7 @@ export default function ManageLabs() {
                               color: "#0f172a",
                             }}
                           >
-                            Add Class
+                            {t("admin.addClass")}
                           </Button>
                         </Box>
 
@@ -1282,12 +1285,12 @@ export default function ManageLabs() {
                             <TableHead>
                               <TableRow sx={{ bgcolor: "#f8fafc" }}>
                                 {[
-                                  "Day",
-                                  "Time Slot",
-                                  "Course",
-                                  "Instructor",
-                                  "Term",
-                                  "Action",
+                                  t("admin.dayOfWeek"),
+                                  t("admin.timeSlot"),
+                                  t("admin.course"),
+                                  t("admin.instructor"),
+                                  t("admin.term"),
+                                  t("admin.action"),
                                 ].map((h, i) => (
                                   <TableCell
                                     key={h}
@@ -1295,7 +1298,7 @@ export default function ManageLabs() {
                                     sx={{
                                       borderBottom: "1px solid #e2e8f0",
                                       color: "#64748b",
-                                      fontWeight: "800",
+                                      fontWeight: "700",
                                       py: 2,
                                     }}
                                   >
@@ -1313,7 +1316,7 @@ export default function ManageLabs() {
                                     sx={{
                                       py: 4,
                                       color: "#94a3b8",
-                                      fontWeight: "500",
+                                      fontWeight: "400",
                                       borderBottom: "none",
                                     }}
                                   >
@@ -1332,23 +1335,23 @@ export default function ManageLabs() {
                                   >
                                     <TableCell
                                       sx={{
-                                        fontWeight: "700",
+                                        fontWeight: "600",
                                         color: "#334155",
                                       }}
                                     >
-                                      {sch.day_of_week}
+                                      {getDayLabel(sch.day_of_week, t)}
                                     </TableCell>
                                     <TableCell
                                       sx={{
                                         color: "#64748b",
-                                        fontWeight: "600",
+                                        fontWeight: "500",
                                       }}
                                     >
                                       {getSlotDisplayLabel(sch.start_time)}
                                     </TableCell>
                                     <TableCell
                                       sx={{
-                                        fontWeight: "700",
+                                        fontWeight: "600",
                                         color: "#334155",
                                       }}
                                     >
@@ -1357,7 +1360,7 @@ export default function ManageLabs() {
                                     <TableCell
                                       sx={{
                                         color: "#64748b",
-                                        fontWeight: "500",
+                                        fontWeight: "400",
                                       }}
                                     >
                                       {sch.instructor_name}
@@ -1365,7 +1368,7 @@ export default function ManageLabs() {
                                     <TableCell
                                       sx={{
                                         color: "#64748b",
-                                        fontWeight: "500",
+                                        fontWeight: "400",
                                       }}
                                     >
                                       {sch.semester}/{sch.academic_year}
@@ -1430,14 +1433,14 @@ export default function ManageLabs() {
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: "800", color: "#0f172a" }}>
-          Create New Lab
+        <DialogTitle sx={{ fontWeight: "700", color: "#0f172a" }}>
+          {t("admin.createNewLab")}
         </DialogTitle>
         <DialogContent
           sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 2 }}
         >
           <TextField
-            label="Lab Code"
+            label={t("admin.labCode")}
             fullWidth
             variant="outlined"
             size="small"
@@ -1446,7 +1449,7 @@ export default function ManageLabs() {
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           <TextField
-            label="Lab Name"
+            label={t("admin.labName")}
             fullWidth
             variant="outlined"
             size="small"
@@ -1455,7 +1458,7 @@ export default function ManageLabs() {
             sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           <TextField
-            label="Capacity"
+            label={t("admin.capacity")}
             type="number"
             fullWidth
             variant="outlined"
@@ -1467,7 +1470,7 @@ export default function ManageLabs() {
             sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           <TextField
-            label="Location"
+            label={t("admin.location")}
             fullWidth
             variant="outlined"
             size="small"
@@ -1479,9 +1482,9 @@ export default function ManageLabs() {
         <DialogActions sx={{ pb: 1, pr: 2 }}>
           <Button
             onClick={() => setOpenCreateDialog(false)}
-            sx={{ color: "#64748b", fontWeight: "700", textTransform: "none" }}
+            sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleCreateLab}
@@ -1489,12 +1492,12 @@ export default function ManageLabs() {
             disableElevation
             sx={{
               bgcolor: "#0f172a",
-              fontWeight: "700",
+              fontWeight: "600",
               borderRadius: 3,
               textTransform: "none",
             }}
           >
-            Create Lab
+            {t("admin.createLab")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1512,14 +1515,14 @@ export default function ManageLabs() {
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: "800", color: "#0f172a" }}>
-          {isEditingSchedule ? "Edit Class Schedule" : "Add Class Schedule"}
+        <DialogTitle sx={{ fontWeight: "700", color: "#0f172a" }}>
+          {isEditingSchedule ? t("admin.editClassSchedule") : t("admin.addClassSchedule")}
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
           <Grid container spacing={2.5} sx={{ mt: 0.5 }}>
             <Grid item xs={6}>
               <TextField
-                label="Course Code"
+                label={t("admin.courseCode")}
                 fullWidth
                 size="small"
                 value={scheduleFormData.course_code}
@@ -1534,7 +1537,7 @@ export default function ManageLabs() {
             </Grid>
             <Grid item xs={6}>
               <TextField
-                label="Course Name"
+                label={t("admin.courseName")}
                 fullWidth
                 size="small"
                 value={scheduleFormData.course_name}
@@ -1549,7 +1552,7 @@ export default function ManageLabs() {
             </Grid>
             <Grid item xs={12}>
               <TextField
-                label="Instructor Name"
+                label={t("admin.instructorName")}
                 fullWidth
                 size="small"
                 value={scheduleFormData.instructor_name}
@@ -1569,10 +1572,10 @@ export default function ManageLabs() {
                 size="small"
                 sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
               >
-                <InputLabel>Day of Week</InputLabel>
+                <InputLabel>{t("admin.dayOfWeek")}</InputLabel>
                 <Select
                   value={scheduleFormData.day_of_week}
-                  label="Day of Week"
+                  label={t("admin.dayOfWeek")}
                   onChange={(e) =>
                     setScheduleFormData({
                       ...scheduleFormData,
@@ -1582,7 +1585,7 @@ export default function ManageLabs() {
                 >
                   {DAYS_OF_WEEK.map((day) => (
                     <MenuItem key={day} value={day}>
-                      {day}
+                      {getDayLabel(day, t)}
                     </MenuItem>
                   ))}
                 </Select>
@@ -1595,10 +1598,10 @@ export default function ManageLabs() {
                 size="small"
                 sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
               >
-                <InputLabel>Time Slot</InputLabel>
+                <InputLabel>{t("admin.timeSlot")}</InputLabel>
                 <Select
                   value={scheduleFormData.slot_number}
-                  label="Time Slot"
+                  label={t("admin.timeSlot")}
                   onChange={(e) =>
                     setScheduleFormData({
                       ...scheduleFormData,
@@ -1617,7 +1620,7 @@ export default function ManageLabs() {
 
             <Grid item xs={6}>
               <TextField
-                label="Semester"
+                label={t("admin.semester")}
                 fullWidth
                 size="small"
                 value={scheduleFormData.semester}
@@ -1632,7 +1635,7 @@ export default function ManageLabs() {
             </Grid>
             <Grid item xs={6}>
               <TextField
-                label="Academic Year"
+                label={t("admin.academicYear")}
                 fullWidth
                 size="small"
                 value={scheduleFormData.academic_year}
@@ -1649,7 +1652,7 @@ export default function ManageLabs() {
             <LocalizationProvider dateAdapter={AdapterDayjs}>
               <Grid item xs={6}>
                 <DatePicker
-                  label="Valid From"
+                  label={t("admin.validFrom")}
                   format="DD/MM/YYYY"
                   value={
                     scheduleFormData.valid_from
@@ -1673,7 +1676,7 @@ export default function ManageLabs() {
               </Grid>
               <Grid item xs={6}>
                 <DatePicker
-                  label="Valid Until"
+                  label={t("admin.validUntil")}
                   format="DD/MM/YYYY"
                   value={
                     scheduleFormData.valid_until
@@ -1703,9 +1706,9 @@ export default function ManageLabs() {
         <DialogActions sx={{ pb: 1, pr: 2 }}>
           <Button
             onClick={() => setOpenScheduleDialog(false)}
-            sx={{ color: "#64748b", fontWeight: "700", textTransform: "none" }}
+            sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleSaveSchedule}
@@ -1713,12 +1716,12 @@ export default function ManageLabs() {
             disableElevation
             sx={{
               bgcolor: "#0f172a",
-              fontWeight: "700",
+              fontWeight: "600",
               borderRadius: 3,
               textTransform: "none",
             }}
           >
-            {isEditingSchedule ? "Update Schedule" : "Save Schedule"}
+            {isEditingSchedule ? t("common.save") : t("admin.saveChanges")}
           </Button>
         </DialogActions>
       </Dialog>

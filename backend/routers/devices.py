@@ -30,6 +30,14 @@ class EnrollmentCodeCreate(BaseModel):
     expires_in_minutes: int = Field(10, ge=5, le=60)
 
 
+class AdminDeviceRegister(BaseModel):
+    lab_id: int
+    device_id: str = Field(..., min_length=1, max_length=128)
+    device_name: str = Field(..., min_length=1, max_length=255)
+    device_mac: Optional[str] = Field(None, max_length=64)
+    agent_version: Optional[str] = Field(None, max_length=64)
+
+
 class LabDeviceUpdate(BaseModel):
     status: Optional[str] = None
     lab_id: Optional[int] = None
@@ -64,6 +72,53 @@ def _serialize_device(device: models.LabDevice, lab: models.Lab) -> dict:
     }
 
 
+def _provision_device(
+    db: Session,
+    lab: models.Lab,
+    device_id: str,
+    device_name: str,
+    device_mac: Optional[str],
+    agent_version: Optional[str],
+    now: datetime,
+) -> tuple[models.LabDevice, str]:
+    existing = db.query(models.LabDevice).filter(
+        models.LabDevice.device_id == device_id,
+    ).with_for_update().first()
+    if existing and existing.status != "revoked" and existing.lab_id != lab.id:
+        raise HTTPException(
+            status_code=409,
+            detail="This device is already assigned to another Lab.",
+        )
+
+    raw_device_token = secrets.token_urlsafe(32)
+    resolved_mac = clean_device_mac(device_mac)
+    resolved_version = (agent_version or "").strip()[:64] or None
+    if existing:
+        existing.lab_id = lab.id
+        existing.device_name = device_name
+        existing.device_mac = resolved_mac
+        existing.status = "active"
+        existing.agent_token_hash = hash_device_token(raw_device_token)
+        existing.agent_version = resolved_version
+        existing.last_seen_at = now
+        device = existing
+    else:
+        device = models.LabDevice(
+            device_id=device_id,
+            lab_id=lab.id,
+            device_name=device_name,
+            device_mac=resolved_mac,
+            status="active",
+            agent_token_hash=hash_device_token(raw_device_token),
+            agent_version=resolved_version,
+            last_seen_at=now,
+        )
+        db.add(device)
+        db.flush()
+
+    return device, raw_device_token
+
+
 @router.post("/admin/lab-devices/enrollment-codes")
 def create_enrollment_code(
     payload: EnrollmentCodeCreate,
@@ -92,6 +147,42 @@ def create_enrollment_code(
         "expires_at": expires_at,
         "expires_in_minutes": payload.expires_in_minutes,
         "lab": {"id": lab.id, "code": lab.code, "name": lab.name},
+    }
+
+
+@router.post("/admin/lab-devices/register", status_code=201)
+def register_device_as_admin(
+    payload: AdminDeviceRegister,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    resolved_device_id = clean_device_id(payload.device_id)
+    resolved_device_name = clean_device_name(payload.device_name)
+    if not resolved_device_id or not resolved_device_name:
+        raise HTTPException(status_code=422, detail="device_id and device_name are required.")
+
+    lab = db.query(models.Lab).filter(models.Lab.id == payload.lab_id).first()
+    if not lab:
+        raise HTTPException(status_code=404, detail="Lab not found.")
+    if lab.status != "active":
+        raise HTTPException(status_code=409, detail="Only an active Lab can enroll devices.")
+
+    device, raw_device_token = _provision_device(
+        db,
+        lab,
+        resolved_device_id,
+        resolved_device_name,
+        payload.device_mac,
+        payload.agent_version,
+        _utc_now(),
+    )
+    db.commit()
+    db.refresh(device)
+    return {
+        "message": "Device registered successfully.",
+        "device_id": device.device_id,
+        "device_token": raw_device_token,
+        "device": _serialize_device(device, lab),
     }
 
 
@@ -191,39 +282,15 @@ def register_device(
     if not lab or lab.status != "active":
         raise HTTPException(status_code=409, detail="The assigned Lab is not active.")
 
-    existing = db.query(models.LabDevice).filter(
-        models.LabDevice.device_id == resolved_device_id,
-    ).with_for_update().first()
-    if existing and existing.status != "revoked" and existing.lab_id != lab.id:
-        raise HTTPException(
-            status_code=409,
-            detail="This device is already assigned to another Lab.",
-        )
-
-    raw_device_token = secrets.token_urlsafe(32)
-    resolved_mac = clean_device_mac(device_mac)
-    if existing:
-        existing.lab_id = lab.id
-        existing.device_name = resolved_device_name
-        existing.device_mac = resolved_mac
-        existing.status = "active"
-        existing.agent_token_hash = hash_device_token(raw_device_token)
-        existing.agent_version = (agent_version or "").strip()[:64] or None
-        existing.last_seen_at = now
-        device = existing
-    else:
-        device = models.LabDevice(
-            device_id=resolved_device_id,
-            lab_id=lab.id,
-            device_name=resolved_device_name,
-            device_mac=resolved_mac,
-            status="active",
-            agent_token_hash=hash_device_token(raw_device_token),
-            agent_version=(agent_version or "").strip()[:64] or None,
-            last_seen_at=now,
-        )
-        db.add(device)
-        db.flush()
+    device, raw_device_token = _provision_device(
+        db,
+        lab,
+        resolved_device_id,
+        resolved_device_name,
+        device_mac,
+        agent_version,
+        now,
+    )
 
     enrollment.used_at = now
     enrollment.used_device_id = resolved_device_id

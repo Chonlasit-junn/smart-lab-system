@@ -94,6 +94,7 @@ Invoke-RestMethod http://127.0.0.1:8000/
 9. `backend/migrations/009_remove_booking_point_requirement.sql`
 10. `backend/migrations/010_database_cleanup.sql`
 11. `backend/migrations/011_lab_device_registration.sql`
+12. `backend/migrations/012_timezone_consistency.sql`
 
 Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม, policy/evidence ของ Agent, การลงทะเบียนเครื่องกับ Lab และจัดโครงสร้าง legacy ให้ตรงกับแอป การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่มหรือลบ column ของตารางเดิมได้ จึงต้องรัน SQL migration แยก
 
@@ -188,32 +189,20 @@ Agent รุ่น source อยู่ที่ `smart-lab-agent/agent.pyw` ส�
 
 ### ลงทะเบียนเครื่องกับ Lab ก่อนใช้งาน
 
-Agent รุ่นปัจจุบันต้องผูกเครื่องกับ Lab ก่อนสร้าง Session โดยให้ Admin เปิดหน้า `/admin/devices`
-เลือก Lab แล้วสร้าง Enrollment Code จากนั้นรันคำสั่งนี้บนเครื่องเป้าหมาย:
-
-```powershell
-cd smart-lab-agent
-py -3.11 provision_device.py `
-  --api-url http://127.0.0.1:8000 `
-  --enrollment-code <รหัสจากหน้า Admin>
-```
-
-สคริปต์จะสร้าง Device ID, แลกเป็น Credential แบบใช้ประจำเครื่อง และบันทึกไว้ที่
-`%LOCALAPPDATA%\SmartLabAgent\device_registration.json` จากนั้นให้ปิดแล้วเปิด Agent ใหม่
-รหัสลงทะเบียนใช้ได้ครั้งเดียวและผูกกับ Lab ที่ Admin เลือกเท่านั้น ไม่ควรส่งรหัสนี้ให้ผู้ใช้ทั่วไป
-
-หากไม่ต้องการเปิดเว็บไซต์ ให้เปิดโปรแกรม `lab_setup.pyw` บนเครื่องเป้าหมายแทน
-(ดับเบิลคลิกไฟล์ได้เลย) หรือรันจาก source:
+Agent ต้องลงทะเบียนเครื่องและเลือก Lab ก่อนสร้าง Session ให้เปิด **Register This Computer**
+จาก Start Menu หลังติดตั้ง MSI หรือเปิด wizard จาก source:
 
 ```powershell
 cd smart-lab-agent
 py -3.11 lab_setup.py
 ```
 
-โปรแกรมจะให้ Admin Login, เลือก Lab ที่มีสถานะ `active` และลงทะเบียนเครื่องให้อัตโนมัติ
-โดยใช้ API เดิมของระบบ รหัสผ่านและ Access Token จะอยู่ในหน่วยความจำเท่านั้น ไม่ถูกบันทึกลงเครื่อง
-ส่วน Device Token จะถูกบันทึกไว้ที่ `%LOCALAPPDATA%\SmartLabAgent\device_registration.json`
-จากนั้นให้ปิดแล้วเปิด Agent ใหม่ก่อนเริ่มใช้งาน
+กรอก Backend URL, Admin email และ password แล้วกดโหลดรายชื่อ Lab เพื่อเลือก Lab ที่มีสถานะ
+`active` การลงทะเบียนใช้ Admin session โดยตรง ไม่ต้องสร้างหรือคัดลอกรหัสจากหน้าเว็บ
+รหัสผ่านและ Access Token ไม่ถูกบันทึกลงเครื่อง ส่วน Device Token จะถูกบันทึกไว้ที่
+`%LOCALAPPDATA%\SmartLabAgent\device_registration.json` จากนั้นให้ปิดแล้วเปิด Agent ใหม่
+ก่อนเริ่มใช้งาน Backend ที่ deploy ต้องมี endpoint `POST /admin/lab-devices/register`
+รองรับก่อนลงทะเบียนด้วย wizard เวอร์ชันนี้
 
 โปรแกรมใช้ PyQt6 ที่มีอยู่ใน Agent และมีโหมดหน้าจอคำสั่งสำรองกรณีเครื่องยังไม่มี PyQt6:
 
@@ -415,15 +404,40 @@ npm run build
 
 ```text
 backend/
-  main.py
-  models.py
-  routers/agent.py
-  routers/gatekeeper.py
-  migrations/
+  main.py, models.py, database.py
+  routers/                 # API endpoints
+  migrations/              # SQL migrations (เรียงตามเลข)
+  tests/                   # Backend tests
+  runtime/                 # ไฟล์ runtime ในเครื่อง เช่น uploads (ไม่ commit)
+
 frontend/
+  src/
+    components/             # UI components ที่ใช้ซ้ำ
+    context/                # React contexts
+    pages/                  # หน้าของแอป
+    utils/                  # Utilities
+  public/                   # Static assets
+  tests/                    # Frontend tests
+  dist/                     # Vite build output (สร้างใหม่ได้, ไม่ commit)
+  node_modules/             # Dependencies (ติดตั้งใหม่ได้, ไม่ commit)
+
 smart-lab-agent/
-  agent.pyw
+  agent.pyw                 # Agent entry point
+  installer/                # MSI build script, template และคู่มือ
+  tests/                    # Agent tests
+  build_msi/<build-id>/     # ไฟล์ระหว่าง build (ไม่ commit)
+  dist_msi/<build-id>/      # MSI ที่ build แล้ว; เก็บรุ่นที่ต้องการแจกจ่าย
+
 gatekeeper/
   smart_gatekeeper.py
-  Silent-Face-Anti-Spoofing/
+  device_registration.py
+  tests/                    # Gatekeeper tests
+  Silent-Face-Anti-Spoofing/ # Vendored anti-spoofing code และ model files
+  runtime/                  # Runtime data (ไม่ commit)
+  known_faces/              # Face data ในเครื่อง (ไม่ commit)
+
+# Local-only environments / generated data
+backend/venv/  gatekeeper/venv/  smart-lab-agent/venv/
 ```
+
+โฟลเดอร์ `runtime/`, `known_faces/`, `venv/`, `node_modules/`, `dist/`, `build/`, `build_msi/` และ `dist_msi/` เป็นข้อมูลเฉพาะเครื่องหรือผลลัพธ์ที่สร้างใหม่ได้ โดยมีข้อยกเว้นคือ MSI ใน `dist_msi/` ที่ต้องการเก็บไว้แจกจ่าย ไม่ควรย้าย runtime data หรือ environment ระหว่างส่วนของระบบ เพราะแต่ละแอปคาดหวัง path ของตัวเอง

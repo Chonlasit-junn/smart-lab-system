@@ -24,9 +24,9 @@ import {
   Popover,
   Divider,
   Chip,
+  Pagination,
 } from "@mui/material";
 import {
-  Notifications,
   EventNote,
   Assignment,
   History,
@@ -45,6 +45,8 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
+import { formatDate } from "../utils/dateFormat";
+import NotificationBell from "../components/NotificationBell";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -56,6 +58,9 @@ export default function Reserved() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState(null);
 
@@ -66,26 +71,19 @@ export default function Reserved() {
       const token = localStorage.getItem("access_token");
       const response = await axios.get(
         `${API_URL}/bookings/user/${currentUser.email}`,
-        { headers: { Authorization: `Bearer ${token}` } },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { scope: "upcoming", page, page_size: PAGE_SIZE },
+        },
       );
-      const allBookings = response.data.data;
-
-      const todayMidnight = new Date();
-      todayMidnight.setHours(0, 0, 0, 0);
-
-      const upcomingOnly = allBookings.filter((booking) => {
-        const bookingDate = new Date(booking.booking_date);
-        bookingDate.setHours(0, 0, 0, 0);
-        return bookingDate.getTime() >= todayMidnight.getTime();
-      });
-
-      setBookings(upcomingOnly);
+      setBookings(response.data?.data || []);
+      setTotal(Number(response.data?.total) || 0);
     } catch (error) {
       console.error("[API Error] Failed to fetch bookings:", error);
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, page]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -122,11 +120,6 @@ export default function Reserved() {
     setBookingToCancel(null);
   };
 
-  const formatDate = (dateString) => {
-    const options = { day: "numeric", month: "short", year: "numeric" };
-    return new Date(dateString).toLocaleDateString("en-GB", options);
-  };
-
   // Add Popover State & Handlers
   const [anchorEl, setAnchorEl] = useState(null);
   const openUserMenu = Boolean(anchorEl);
@@ -153,11 +146,11 @@ export default function Reserved() {
         <div className="sidebar-logo">
           <Computer sx={{ fontSize: 40, color: "#1877f2" }} />
           <div>
-            <Typography variant="h6" fontWeight="bold" lineHeight={1.2}>
+            <Typography variant="h6" fontWeight="600" lineHeight={1.2}>
               Smart Lab
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              Reserve Lab to use
+              {t("common.brandTagline")}
             </Typography>
           </div>
         </div>
@@ -201,7 +194,7 @@ export default function Reserved() {
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="800"
+              fontWeight="700"
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
@@ -216,9 +209,7 @@ export default function Reserved() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <IconButton className="header-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "#111827" }} />
-            </IconButton>
+            <NotificationBell />
             {currentUser ? (
               <Box
                 sx={{
@@ -236,7 +227,7 @@ export default function Reserved() {
                 >
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                   >
                     {currentUser.name}
@@ -293,7 +284,7 @@ export default function Reserved() {
                   >
                     <Typography
                       fontSize="13px"
-                      fontWeight="600"
+                      fontWeight="500"
                       color="#64748b"
                       sx={{ pl: 0.5 }}
                     >
@@ -322,10 +313,10 @@ export default function Reserved() {
 
                     <Typography
                       sx={{ mt: 1.5, color: "#1e293b" }}
-                      fontWeight="700"
+                      fontWeight="600"
                       fontSize="18px"
                     >
-                      Hi, {currentUser.name}
+                      {t("common.greeting")}, {currentUser.name}
                     </Typography>
 
                     <Button
@@ -338,7 +329,7 @@ export default function Reserved() {
                         mt: 2,
                         borderRadius: 20,
                         textTransform: "none",
-                        fontWeight: "700",
+                        fontWeight: "600",
                         fontSize: "13px",
                         px: 2.5,
                         py: 0.6,
@@ -377,7 +368,7 @@ export default function Reserved() {
                       <Settings sx={{ fontSize: 20, color: "#64748b" }} />
                       <Typography
                         fontSize="13px"
-                        fontWeight="700"
+                        fontWeight="600"
                         color="#1e293b"
                       >
                         {t("common.settings")}
@@ -399,7 +390,7 @@ export default function Reserved() {
                       <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
                       <Typography
                         fontSize="13px"
-                        fontWeight="700"
+                        fontWeight="600"
                         color="#ef4444"
                       >
                         {t("common.logout")}
@@ -429,7 +420,7 @@ export default function Reserved() {
                 >
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                     color="textSecondary"
                   >
@@ -469,7 +460,7 @@ export default function Reserved() {
             >
               <Typography
                 variant="h6"
-                fontWeight="700"
+                fontWeight="600"
                 color="#0f172a"
                 sx={{ mb: 3 }}
               >
@@ -477,13 +468,14 @@ export default function Reserved() {
               </Typography>
 
               {bookings.length > 0 ? (
+                <>
                 <TableContainer>
                   <Table sx={{ minWidth: 600 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell
                           sx={{
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             borderBottom: "1px solid #e2e8f0",
                             color: "#0f172a",
                           }}
@@ -492,7 +484,7 @@ export default function Reserved() {
                         </TableCell>
                         <TableCell
                           sx={{
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             borderBottom: "1px solid #e2e8f0",
                             color: "#0f172a",
                           }}
@@ -501,7 +493,7 @@ export default function Reserved() {
                         </TableCell>
                         <TableCell
                           sx={{
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             borderBottom: "1px solid #e2e8f0",
                             color: "#0f172a",
                           }}
@@ -510,7 +502,7 @@ export default function Reserved() {
                         </TableCell>
                         <TableCell
                           sx={{
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             borderBottom: "1px solid #e2e8f0",
                             color: "#0f172a",
                           }}
@@ -537,7 +529,7 @@ export default function Reserved() {
                             {row.lab_code}
                           </TableCell>
                           <TableCell sx={{ color: "#475569" }}>
-                            {formatDate(row.booking_date)}
+                            {formatDate(row.booking_date, t("common.locale"))}
                           </TableCell>
                           <TableCell sx={{ color: "#475569" }}>
                             {row.start_time} - {row.end_time}
@@ -590,6 +582,17 @@ export default function Reserved() {
                     </TableBody>
                   </Table>
                 </TableContainer>
+                {total > PAGE_SIZE && (
+                  <Box sx={{ display: "flex", justifyContent: "center", pt: 3 }}>
+                    <Pagination
+                      count={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+                      page={page}
+                      onChange={(_, nextPage) => setPage(nextPage)}
+                      color="primary"
+                    />
+                  </Box>
+                )}
+                </>
               ) : (
                 <Box
                   className="reservation-empty-state"
@@ -615,7 +618,7 @@ export default function Reserved() {
         onClose={handleCloseCancelDialog}
         PaperProps={{ sx: { borderRadius: 3, p: 1, minWidth: "350px" } }}
       >
-        <DialogTitle sx={{ fontWeight: "bold", color: "#0f172a" }}>
+        <DialogTitle sx={{ fontWeight: "600", color: "#0f172a" }}>
           {t("user.cancelReservation")}
         </DialogTitle>
         <DialogContent>
@@ -626,7 +629,7 @@ export default function Reserved() {
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button
             onClick={handleCloseCancelDialog}
-            sx={{ color: "#64748b", fontWeight: "bold", textTransform: "none" }}
+            sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
           >
             {t("user.keepReservation")}
           </Button>
@@ -636,7 +639,7 @@ export default function Reserved() {
             sx={{
               bgcolor: "#ef4444",
               color: "white",
-              fontWeight: "bold",
+              fontWeight: "600",
               textTransform: "none",
               boxShadow: "none",
               "&:hover": { bgcolor: "#dc2626", boxShadow: "none" },

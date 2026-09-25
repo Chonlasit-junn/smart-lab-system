@@ -46,6 +46,14 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
+import { formatDateTime } from "../utils/dateFormat";
+import { getPointReasonLabel } from "../utils/pointReason";
+import {
+  getLabCalendarDate,
+  getLabDateReference,
+  getLabNowParts,
+  getLabNowReference,
+} from "../utils/labTime";
 import SupportModal from "./SupportModal";
 
 // API Endpoint configuration
@@ -65,16 +73,6 @@ const SLOT_TIMES = {
   2: { hours: 12, minutes: 0 },
   3: { hours: 14, minutes: 30 },
   4: { hours: 17, minutes: 0 },
-};
-
-// Mapping for point log reasons -> Thai display labels (kept in sync with Profile.jsx)
-const POINT_REASON_LABELS = {
-  daily_bonus: "Daily bonus",
-  no_show: "ไม่มาตามการจอง",
-  forbidden_app: "ใช้โปรแกรมต้องห้าม",
-  late_cancel: "ยกเลิกการจองกระชั้นชิด",
-  complete_session: "จบการใช้งานปกติ",
-  admin_grant: "Admin อนุมัติเพิ่มคะแนน",
 };
 
 // Admin point actions stay available in the Profile audit history, but do not
@@ -121,7 +119,7 @@ export default function Booking() {
 
   // Selection States
   const [selectedRoom, setSelectedRoom] = useState(null);
-  const [currentDateObj, setCurrentDateObj] = useState(new Date());
+  const [currentDateObj, setCurrentDateObj] = useState(getLabCalendarDate);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
 
@@ -138,11 +136,9 @@ export default function Booking() {
       setLabs(response.data.data);
     } catch (error) {
       console.error("[API Error] Failed to fetch labs:", error);
-      alert(
-        "Error: Unable to fetch lab data. Please check backend connection.",
-      );
+      alert(t("user.unableToFetchLabs"));
     }
-  }, []);
+  }, [t]);
 
   // Fetch labs on component mount
   useEffect(() => {
@@ -173,7 +169,7 @@ export default function Booking() {
         if (cancelled) return;
         console.error("[API Error] Failed to fetch point status:", error);
         setPointStatus(null);
-        setPointsError("ไม่สามารถตรวจสอบคะแนนได้ จึงยังไม่อนุญาตให้จอง");
+        setPointsError(t("user.unableToCheckPoints"));
       })
       .finally(() => {
         if (!cancelled) setPointsLoading(false);
@@ -182,7 +178,7 @@ export default function Booking() {
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.email]);
+  }, [currentUser?.email, t]);
 
   // Fetch recent point-change history to populate the notification bell.
   useEffect(() => {
@@ -239,7 +235,7 @@ export default function Booking() {
       setAvailability(response.data.slots);
     } catch (error) {
       console.error("[API Error] Failed to fetch availability:", error);
-      alert("Error: Failed to retrieve schedule. Please refresh the page.");
+      alert(t("user.unableToFetchSchedule"));
       setAvailability(null);
     }
   };
@@ -263,8 +259,12 @@ export default function Booking() {
   // Date Math for Calendar Rendering
   const currentYear = currentDateObj.getFullYear();
   const currentMonth = currentDateObj.getMonth();
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const firstDayOfMonthJS = new Date(currentYear, currentMonth, 1).getDay();
+  const daysInMonth = new Date(
+    Date.UTC(currentYear, currentMonth + 1, 0),
+  ).getUTCDate();
+  const firstDayOfMonthJS = new Date(
+    Date.UTC(currentYear, currentMonth, 1),
+  ).getUTCDay();
 
   // Shift Sunday (0) to the end to start the calendar on Monday
   const emptySlots = firstDayOfMonthJS === 0 ? 6 : firstDayOfMonthJS - 1;
@@ -291,28 +291,34 @@ export default function Booking() {
   const checkSlotTimeValidity = (slotNumber) => {
     if (!selectedDate) return "valid";
 
-    const selectedDateObj = new Date(currentYear, currentMonth, selectedDate);
-    selectedDateObj.setHours(0, 0, 0, 0);
-
-    const todayMidnight = new Date();
-    todayMidnight.setHours(0, 0, 0, 0);
-
-    if (selectedDateObj.getTime() > todayMidnight.getTime()) return "valid";
-
-    const slotTimeObj = new Date(currentYear, currentMonth, selectedDate);
-    slotTimeObj.setHours(
-      SLOT_TIMES[slotNumber].hours,
-      SLOT_TIMES[slotNumber].minutes,
-      0,
-      0,
+    const { year: labYear, month: labMonth, day: labDay } = getLabNowParts();
+    const selectedDateReference = getLabDateReference(
+      currentYear,
+      currentMonth,
+      selectedDate,
+    );
+    const todayReference = getLabDateReference(
+      labYear,
+      labMonth - 1,
+      labDay,
     );
 
-    const now = new Date();
+    if (selectedDateReference > todayReference) return "valid";
 
-    if (slotTimeObj.getTime() <= now.getTime()) return "passed";
+    const slotTimeReference = getLabDateReference(
+      currentYear,
+      currentMonth,
+      selectedDate,
+      SLOT_TIMES[slotNumber].hours,
+      SLOT_TIMES[slotNumber].minutes,
+    );
+    const nowReference = getLabNowReference();
 
-    const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    if (slotTimeObj.getTime() < twoHoursFromNow.getTime()) return "too_close";
+    if (slotTimeReference <= nowReference) return "passed";
+
+    if (slotTimeReference < nowReference + 2 * 60 * 60 * 1000) {
+      return "too_close";
+    }
 
     return "valid";
   };
@@ -376,7 +382,7 @@ export default function Booking() {
         lab_id: selectedRoom.id,
         booking_date: dateStr,
         slot_number: selectedTimeSlot,
-        purpose: "General Usage", // 🌟 กำหนดค่าเริ่มต้นให้ไปเลยโดยที่ผู้ใช้ไม่ต้องพิมพ์
+        purpose: t("user.generalUsagePurpose"),
         total_participants: 1,
       };
 
@@ -389,8 +395,8 @@ export default function Booking() {
       const detail = error.response?.data?.detail;
       const errMsg =
         (typeof detail === "string" ? detail : detail?.message) ||
-        "Failed to confirm booking";
-      alert(`Booking Failed: ${errMsg}`);
+        t("user.bookingFailed");
+      alert(`${t("user.bookingFailed")}: ${errMsg}`);
     }
   };
 
@@ -424,7 +430,7 @@ export default function Booking() {
       const message =
         typeof detail === "string"
           ? detail
-          : "ไม่สามารถส่งคำขอเพิ่มคะแนนได้ กรุณาลองใหม่อีกครั้ง";
+            : t("user.pointRequestFailed");
       alert(message);
     } finally {
       setPointRequestLoading(false);
@@ -476,20 +482,21 @@ export default function Booking() {
     () =>
       visiblePointLogs.map((log) => {
         const isPositive = log.change > 0;
-        const reasonLabel = POINT_REASON_LABELS[log.reason] || log.reason;
+        const reasonLabel = getPointReasonLabel(log.reason, t);
         return {
           id: log.id,
-          title: `${reasonLabel} ${isPositive ? "+" : ""}${log.change} คะแนน`,
+          title: `${reasonLabel} ${isPositive ? "+" : ""}${log.change} ${t("common.points")}`,
           subtitle: log.note || "—",
-          time: log.created_at
-            ? new Date(log.created_at).toLocaleString("th-TH")
-            : "—",
+          time: formatDateTime(log.created_at, t("common.locale"), {
+            fallback: "—",
+            includeSeconds: true,
+          }),
           color: isPositive ? "#16a34a" : "#dc2626",
           iconText: isPositive ? "+" : "-",
           unread: log.id > lastSeenLogId,
         };
       }),
-    [visiblePointLogs, lastSeenLogId],
+    [visiblePointLogs, lastSeenLogId, t],
   );
 
   // ============================================================================
@@ -497,11 +504,13 @@ export default function Booking() {
   // ============================================================================
 
   // Date validation setup for calendar rendering
-  const todayMidnightForCalendar = new Date();
-  todayMidnightForCalendar.setHours(0, 0, 0, 0);
-  const maxDateMidnight = new Date();
-  maxDateMidnight.setHours(0, 0, 0, 0);
-  maxDateMidnight.setDate(maxDateMidnight.getDate() + 2); // Max booking window = 2 days
+  const { year: labYear, month: labMonth, day: labDay } = getLabNowParts();
+  const todayMidnightForCalendar = getLabDateReference(
+    labYear,
+    labMonth - 1,
+    labDay,
+  );
+  const maxDateMidnight = todayMidnightForCalendar + 2 * 24 * 60 * 60 * 1000;
 
   // ============================================================================
   // 8. RENDER UI
@@ -521,11 +530,11 @@ export default function Booking() {
         <div className="sidebar-logo">
           <Computer sx={{ fontSize: 40, color: "#1877f2" }} />
           <div>
-            <Typography variant="h6" fontWeight="bold" lineHeight={1.2}>
+            <Typography variant="h6" fontWeight="600" lineHeight={1.2}>
               <span className="font-baseline-text">Smart Lab</span>
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              <span className="font-baseline-text">Reserve Lab to use</span>
+              <span className="font-baseline-text">{t("common.brandTagline")}</span>
             </Typography>
           </div>
         </div>
@@ -571,7 +580,7 @@ export default function Booking() {
             </IconButton>
             <Typography
               variant="h5"
-              fontWeight="800"
+              fontWeight="700"
               color="#111827"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
@@ -610,7 +619,7 @@ export default function Booking() {
               </Badge>
             </IconButton>
 
-            {/* Notification Popover (UI only, ยังไม่มีข้อมูลจริง) */}
+            {/* Notification Popover */}
             <Popover
               anchorEl={notifAnchorEl}
               open={openNotifMenu}
@@ -624,8 +633,9 @@ export default function Booking() {
                   maxWidth: "92vw",
                   maxHeight: 520,
                   borderRadius: 3,
-                  bgcolor: "#FFFFFF",
-                  color: "#0f172a",
+                  bgcolor: "var(--card-bg)",
+                  color: "var(--text-dark)",
+                  border: "1px solid var(--border-light)",
                   boxShadow: "0 20px 45px rgba(15,23,42,0.35)",
                   overflow: "hidden",
                   display: "flex",
@@ -644,7 +654,7 @@ export default function Booking() {
                   flexShrink: 0,
                 }}
               >
-                <Typography fontSize="16px" fontWeight="700">
+                <Typography fontSize="16px" fontWeight="600">
                   {t("common.notifications")}
                 </Typography>
               </Box>
@@ -653,7 +663,7 @@ export default function Booking() {
               <Box sx={{ overflowY: "auto", px: 1, pb: 1 }}>
                 {notifications.length === 0 ? (
                   <Box sx={{ py: 4, textAlign: "center" }}>
-                    <Typography fontSize="13px" sx={{ color: "#64748b" }}>
+                    <Typography fontSize="13px" sx={{ color: "var(--text-gray)" }}>
                       {t("common.noNotifications")}
                     </Typography>
                   </Box>
@@ -669,7 +679,7 @@ export default function Booking() {
                         py: 1,
                         borderRadius: 2,
                         cursor: "pointer",
-                        "&:hover": { bgcolor: "rgba(0, 0, 0, 0.04)" },
+                        "&:hover": { bgcolor: "var(--surface-subtle)" },
                       }}
                     >
                       {/* Unread dot */}
@@ -702,9 +712,9 @@ export default function Booking() {
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography
                           fontSize="13.5px"
-                          fontWeight="600"
+                          fontWeight="500"
                           sx={{
-                            color: "#1e293b",
+                            color: "var(--text-dark)",
                             display: "-webkit-box",
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: "vertical",
@@ -715,13 +725,13 @@ export default function Booking() {
                         </Typography>
                         <Typography
                           fontSize="12px"
-                          sx={{ color: "#475569", mt: 0.3 }}
+                          sx={{ color: "var(--text-gray)", mt: 0.3 }}
                         >
                           {n.subtitle}
                         </Typography>
                         <Typography
                           fontSize="12px"
-                          sx={{ color: "#64748b", mt: 0.3 }}
+                          sx={{ color: "var(--text-muted)", mt: 0.3 }}
                         >
                           {n.time}
                         </Typography>
@@ -750,7 +760,7 @@ export default function Booking() {
                 >
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                   >
                     <span className="font-baseline-text">{currentUser.name}</span>
@@ -766,6 +776,7 @@ export default function Booking() {
                   sx={{ p: 0.5, "&:hover": { bgcolor: "#f1f5f9" } }}
                 >
                   <Avatar
+                    className="profile-avatar"
                     sx={{
                       bgcolor: "#111827",
                       width: 36,
@@ -773,7 +784,9 @@ export default function Booking() {
                       boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                     }}
                   >
-                    {currentUser.initial || currentUser.name?.charAt(0)}
+                    <span className="avatar-initial">
+                      {currentUser.initial || currentUser.name?.charAt(0)}
+                    </span>
                   </Avatar>
                 </IconButton>
 
@@ -807,7 +820,7 @@ export default function Booking() {
                   >
                     <Typography
                       fontSize="13px"
-                      fontWeight="600"
+                      fontWeight="500"
                       color="#64748b"
                       sx={{ pl: 0.5 }}
                     >
@@ -821,6 +834,7 @@ export default function Booking() {
                   {/* Profile Main Body */}
                   <Box sx={{ textAlign: "center", px: 3, pb: 3, pt: 0.5 }}>
                     <Avatar
+                      className="profile-avatar profile-avatar--large"
                       sx={{
                         bgcolor: "#0f172a",
                         width: 84,
@@ -831,15 +845,17 @@ export default function Booking() {
                           "0 0 0 4px #eff6ff, 0 8px 20px rgba(59,130,246,0.25)",
                       }}
                     >
-                      {currentUser.initial || currentUser.name?.charAt(0)}
+                      <span className="avatar-initial">
+                        {currentUser.initial || currentUser.name?.charAt(0)}
+                      </span>
                     </Avatar>
 
                     <Typography
                       sx={{ mt: 1.5, color: "#1e293b" }}
-                      fontWeight="700"
+                      fontWeight="600"
                       fontSize="18px"
                     >
-                      Hi, {currentUser.name}
+                      {t("common.greeting")}, {currentUser.name}
                     </Typography>
 
                     <Button
@@ -852,7 +868,7 @@ export default function Booking() {
                         mt: 2,
                         borderRadius: 20,
                         textTransform: "none",
-                        fontWeight: "700",
+                        fontWeight: "600",
                         fontSize: "13px",
                         px: 2.5,
                         py: 0.6,
@@ -864,7 +880,7 @@ export default function Booking() {
                         },
                       }}
                     >
-                      Manage your Account
+                      {t("common.manageAccount")}
                     </Button>
                   </Box>
 
@@ -891,10 +907,10 @@ export default function Booking() {
                       <Settings sx={{ fontSize: 20, color: "#64748b" }} />
                       <Typography
                         fontSize="13px"
-                        fontWeight="700"
+                        fontWeight="600"
                         color="#1e293b"
                       >
-                        Setting
+                        {t("common.settings")}
                       </Typography>
                     </Box>
                     <Box
@@ -913,10 +929,10 @@ export default function Booking() {
                       <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
                       <Typography
                         fontSize="13px"
-                        fontWeight="700"
+                        fontWeight="600"
                         color="#ef4444"
                       >
-                        Log out
+                        {t("common.logout")}
                       </Typography>
                     </Box>
                   </Box>
@@ -943,7 +959,7 @@ export default function Booking() {
                 >
                   <Typography
                     variant="subtitle2"
-                    fontWeight="bold"
+                    fontWeight="600"
                     lineHeight={1.2}
                     color="textSecondary"
                   >
@@ -972,7 +988,7 @@ export default function Booking() {
               <Box>
                 <Typography
                   variant="h6"
-                  fontWeight="700"
+                  fontWeight="600"
                   color="#64748b"
                   sx={{ mb: 3 }}
                 >
@@ -1026,7 +1042,7 @@ export default function Booking() {
                             >
                               <Typography
                                 variant="h5"
-                                fontWeight="bold"
+                                fontWeight="600"
                                 color="#1e293b"
                               >
                                 <span className="font-baseline-text">{room.code}</span>
@@ -1052,7 +1068,7 @@ export default function Booking() {
                                       : "error"
                                   }
                                   size="small"
-                                  sx={{ fontWeight: "bold" }}
+                                  sx={{ fontWeight: "600" }}
                                 />
                               </span>
                             </Box>
@@ -1087,7 +1103,7 @@ export default function Booking() {
                                 }}
                               >
                                 <PeopleAlt fontSize="small" />
-                                <Typography variant="body2" fontWeight="bold">
+                                <Typography variant="body2" fontWeight="600">
                                   <span className="font-baseline-text">
                                     {room.capacity} {t("user.users")}
                                   </span>
@@ -1126,7 +1142,7 @@ export default function Booking() {
                         <Typography
                           variant="h6"
                           color="textSecondary"
-                          fontWeight="bold"
+                          fontWeight="600"
                         >
                           {t("user.noLabsMatching")} "{searchQuery}"
                         </Typography>
@@ -1144,7 +1160,7 @@ export default function Booking() {
                             mt: 2,
                             borderRadius: 2,
                             textTransform: "none",
-                            fontWeight: "bold",
+                            fontWeight: "600",
                           }}
                         >
                           {t("user.clearSearch")}
@@ -1183,7 +1199,7 @@ export default function Booking() {
                       mb: 2,
                       color: "#64748b",
                       textTransform: "none",
-                      fontWeight: "bold",
+                      fontWeight: "600",
                       transition: "all 0.2s",
                       "&:hover": {
                         color: "#0f172a",
@@ -1218,7 +1234,7 @@ export default function Booking() {
                     <Box sx={{ p: 4 }}>
                       <Typography
                         variant="h4"
-                        fontWeight="bold"
+                        fontWeight="600"
                         color="#0f172a"
                         sx={{ mb: 1 }}
                       >
@@ -1246,7 +1262,7 @@ export default function Booking() {
                           <Avatar sx={{ bgcolor: "#f1f5f9", color: "#64748b" }}>
                             <PeopleAlt />
                           </Avatar>
-                          <Typography fontWeight="bold">
+                          <Typography fontWeight="600">
                             {t("user.capacity")}: {selectedRoom.capacity} {t("user.users")}
                           </Typography>
                         </Box>
@@ -1256,7 +1272,7 @@ export default function Booking() {
                           <Avatar sx={{ bgcolor: "#f1f5f9", color: "#64748b" }}>
                             <PcIcon />
                           </Avatar>
-                          <Typography fontWeight="bold">
+                          <Typography fontWeight="600">
                             {t("user.location")}: {selectedRoom.location || "-"}
                           </Typography>
                         </Box>
@@ -1292,7 +1308,7 @@ export default function Booking() {
                         mb: 2,
                       }}
                     >
-                      <Typography variant="h6" fontWeight="bold">
+                      <Typography variant="h6" fontWeight="600">
                           1. {t("user.selectDate")}
                       </Typography>
                       <Chip
@@ -1301,7 +1317,7 @@ export default function Booking() {
                         sx={{
                           bgcolor: "#eff6ff",
                           color: "#2563eb",
-                          fontWeight: "bold",
+                          fontWeight: "600",
                         }}
                       />
                     </Box>
@@ -1324,7 +1340,7 @@ export default function Booking() {
                       >
                         <Typography
                           variant="h6"
-                          fontWeight="bold"
+                          fontWeight="600"
                           color="#1e293b"
                         >
                           {monthName} {currentYear}
@@ -1347,12 +1363,12 @@ export default function Booking() {
                           textAlign: "center",
                         }}
                       >
-                        {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map(
+                        {t("user.weekdaysShort").map(
                           (day) => (
                             <Typography
                               key={day}
                               variant="caption"
-                              fontWeight="bold"
+                              fontWeight="600"
                               color="#94a3b8"
                               sx={{ mb: 1 }}
                             >
@@ -1369,56 +1385,99 @@ export default function Booking() {
                           const dayNumber = i + 1;
                           const isSelected = dayNumber === selectedDate;
 
-                          const iterationDate = new Date(
+                          const iterationDate = getLabDateReference(
                             currentYear,
                             currentMonth,
                             dayNumber,
                           );
-                          iterationDate.setHours(0, 0, 0, 0);
                           const isPastDate =
-                            iterationDate.getTime() <
-                            todayMidnightForCalendar.getTime();
+                            iterationDate < todayMidnightForCalendar;
                           const isTooFarDate =
-                            iterationDate.getTime() > maxDateMidnight.getTime();
+                            iterationDate > maxDateMidnight;
                           const isDisabledDate = isPastDate || isTooFarDate;
 
                           return (
                             <IconButton
                               key={dayNumber}
+                              className={`booking-calendar-day ${
+                                isSelected
+                                  ? "booking-calendar-day--selected"
+                                  : isDisabledDate
+                                    ? "booking-calendar-day--unavailable"
+                                    : "booking-calendar-day--selectable"
+                              }`}
+                              aria-label={`${dayNumber} ${monthName} ${currentYear}, ${t(
+                                isDisabledDate
+                                  ? "user.dateOutsideBookingWindow"
+                                  : "user.dateSelectable",
+                              )}`}
                               onClick={() => handleSelectDate(dayNumber)}
                               disabled={isDisabledDate}
                               sx={{
                                 width: { xs: 32, sm: 40 },
                                 height: { xs: 32, sm: 40 },
                                 margin: "auto",
-                                bgcolor: isSelected ? "#3b82f6" : "transparent",
-                                color: isSelected
-                                  ? "white"
-                                  : isDisabledDate
-                                    ? "#cbd5e1"
-                                    : "#334155",
-                                transition: "all 0.2s",
-                                "&:hover": {
-                                  bgcolor: isDisabledDate
-                                    ? "transparent"
-                                    : isSelected
-                                      ? "#2563eb"
-                                      : "#f1f5f9",
-                                  transform: isDisabledDate
-                                    ? "none"
-                                    : "scale(1.1)",
-                                },
+                                padding: 0,
                               }}
                             >
                               <Typography
+                                className="booking-calendar-day-number"
                                 variant="body2"
-                                fontWeight={isSelected ? "bold" : "normal"}
+                                fontWeight={isSelected || !isDisabledDate ? 600 : 300}
                               >
                                 {dayNumber}
                               </Typography>
                             </IconButton>
                           );
                         })}
+                      </Box>
+                      <Box
+                        role="note"
+                        aria-label={`${t("user.dateSelectable")}; ${t(
+                          "user.dateOutsideBookingWindow",
+                        )}`}
+                        sx={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          gap: { xs: 1.5, sm: 3 },
+                          mt: 2.5,
+                          pt: 2,
+                          borderTop: "1px solid var(--border-light)",
+                        }}
+                      >
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Box
+                            aria-hidden="true"
+                            sx={{
+                              width: 16,
+                              height: 16,
+                              flexShrink: 0,
+                              borderRadius: "50%",
+                              bgcolor: "var(--brand-soft)",
+                              border: "1px solid var(--brand-color)",
+                            }}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            {t("user.dateSelectable")}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Box
+                            aria-hidden="true"
+                            sx={{
+                              width: 16,
+                              height: 16,
+                              flexShrink: 0,
+                              borderRadius: "50%",
+                              bgcolor: "var(--surface-subtle)",
+                              border: "1px solid var(--border-light)",
+                            }}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            {t("user.dateOutsideBookingWindow")}
+                          </Typography>
+                        </Box>
                       </Box>
                     </Paper>
                   </Box>
@@ -1434,7 +1493,7 @@ export default function Booking() {
                           mb: 2,
                         }}
                       >
-                        <Typography variant="h6" fontWeight="bold">
+                        <Typography variant="h6" fontWeight="600">
                           2. {t("user.selectTime")}
                         </Typography>
                         <Chip
@@ -1443,7 +1502,7 @@ export default function Booking() {
                           sx={{
                             bgcolor: "#fff7ed",
                             color: "#d97706",
-                            fontWeight: "bold",
+                            fontWeight: "600",
                           }}
                         />
                       </Box>
@@ -1474,7 +1533,9 @@ export default function Booking() {
                             return (
                               <Grid item xs={12} sm={6} key={slotNumber}>
                                 <Button
+                                  className="booking-time-slot"
                                   fullWidth
+                                  aria-pressed={isSelected}
                                   onClick={() =>
                                     isAvailable &&
                                     isTimeValid &&
@@ -1486,32 +1547,31 @@ export default function Booking() {
                                   disabled={isDisabled}
                                   sx={{
                                     py: 2,
-                                    borderRadius: 3,
-                                    fontWeight: "bold",
+                                    borderRadius: "var(--radius-control)",
+                                    fontWeight: "600",
                                     textTransform: "none",
                                     fontSize: "15px",
                                     display: "flex",
                                     flexDirection: "column",
-                                    borderColor:
-                                      !isDisabled && !isSelected
-                                        ? "#cbd5e1"
-                                        : "transparent",
+                                    borderColor: "var(--border-light)",
                                     color: isSelected
-                                      ? "white"
+                                      ? "var(--brand-contrast)"
                                       : isDisabled
-                                        ? "#94a3b8"
-                                        : "#334155",
+                                        ? "var(--text-muted)"
+                                        : "var(--text-dark)",
                                     bgcolor: isSelected
-                                      ? "#3b82f6"
-                                      : isDisabled
-                                        ? "#f8fafc"
-                                        : "white",
+                                      ? "var(--brand-color)"
+                                      : "var(--surface-subtle)",
                                     "&:hover": {
-                                      borderColor: "#3b82f6",
+                                      borderColor: !isDisabled
+                                        ? "var(--brand-color)"
+                                        : "var(--border-light)",
                                       bgcolor:
                                         !isDisabled && !isSelected
-                                          ? "#eff6ff"
-                                          : "",
+                                          ? "var(--brand-soft)"
+                                          : isSelected
+                                            ? "var(--brand-hover)"
+                                            : "var(--surface-subtle)",
                                     },
                                   }}
                                 >
@@ -1521,7 +1581,7 @@ export default function Booking() {
                                   <span
                                     style={{
                                       fontSize: "12px",
-                                      fontWeight: "normal",
+                                      fontWeight: "300",
                                       marginTop: "4px",
                                     }}
                                   >
@@ -1567,7 +1627,7 @@ export default function Booking() {
                           alignItems: "center",
                         }}
                       >
-                        <Typography variant="h6" fontWeight="bold">
+                        <Typography variant="h6" fontWeight="600">
                           3. {t("user.confirmYourBooking")}
                         </Typography>
                       </Box>
@@ -1585,17 +1645,17 @@ export default function Booking() {
                         >
                           <Box>
                             <Typography>
-                              จองห้องไม่ได้: {pointStatus.booking_block_reason}
+                              {t("user.bookingBlockedByPolicy")}
                             </Typography>
                             {Number(pointStatus.points) === 0 &&
                               (pointStatus.point_request?.status ===
                               "pending" ? (
                                 <Typography variant="body2" sx={{ mt: 0.5 }}>
-                                  ส่งคำขอเพิ่ม{" "}
+                                  {t("user.pointRequestSentPrefix")} {" "}
                                   {pointStatus.point_request.requested_points ||
                                     pointStatus.point_request_amount ||
                                     10}{" "}
-                                  คะแนนแล้ว กรุณารอ Admin พิจารณา
+                                  {t("user.requestSubmitted")}
                                 </Typography>
                               ) : (
                                 <Button
@@ -1612,12 +1672,12 @@ export default function Booking() {
                                     borderColor: "currentColor",
                                     color: "inherit",
                                     textTransform: "none",
-                                    fontWeight: "700",
+                                    fontWeight: "600",
                                   }}
                                 >
                                   {pointRequestLoading
-                                    ? "กำลังส่งคำขอ..."
-                                    : `ติดต่อ Admin เพื่อขอเพิ่ม ${pointStatus.point_request_amount || 10} คะแนน`}
+                                    ? t("user.sendingRequest")
+                                    : `${t("user.contactAdmin")} ${pointStatus.point_request_amount || 10} ${t("common.points")}`}
                                 </Button>
                               ))}
                           </Box>
@@ -1643,13 +1703,13 @@ export default function Booking() {
                           <Typography
                             variant="caption"
                             color="textSecondary"
-                            fontWeight="bold"
+                            fontWeight="600"
                           >
                             {t("user.yourSelection")}
                           </Typography>
                           <Typography
                             variant="h6"
-                            fontWeight="bold"
+                            fontWeight="600"
                             color="#0c4a6e"
                           >
                             {selectedRoom?.code} • {monthNameShort}{" "}
@@ -1677,7 +1737,7 @@ export default function Booking() {
                             px: 4,
                             py: 1.5,
                             borderRadius: 3,
-                            fontWeight: "bold",
+                            fontWeight: "600",
                             width: { xs: "100%", sm: "auto" },
                             transition: "all 0.2s",
                             "&:hover": {
@@ -1735,7 +1795,7 @@ export default function Booking() {
           </Box>
           <Typography
             variant="h5"
-            fontWeight="800"
+            fontWeight="700"
             color="#0f172a"
             gutterBottom
           >
@@ -1746,12 +1806,11 @@ export default function Booking() {
             color="#64748b"
             sx={{ mb: 3, lineHeight: 1.6 }}
           >
-            {t("user.reservationConfirmed")} <strong>{selectedRoom?.code}</strong> on{" "}
-            <strong>
-              {monthNameShort} {selectedDate}
-            </strong>{" "}
-            at <strong>{SLOT_DISPLAY_MAPPING[selectedTimeSlot]}</strong> has
-            been successfully confirmed.
+            {t("user.reservationConfirmed")} <strong>{selectedRoom?.code}</strong>
+            <br />
+            {t("user.bookingDate")}: <strong>{monthNameShort} {selectedDate}</strong>
+            <br />
+            {t("user.bookingTime")}: <strong>{SLOT_DISPLAY_MAPPING[selectedTimeSlot]}</strong>
           </Typography>
           <Button
             fullWidth
@@ -1760,7 +1819,7 @@ export default function Booking() {
             sx={{
               borderRadius: 3,
               py: 1.5,
-              fontWeight: "700",
+              fontWeight: "600",
               fontSize: "1rem",
               bgcolor: "#0f172a",
               textTransform: "none",

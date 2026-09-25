@@ -103,12 +103,8 @@ export default function Login() {
 
         {/* ฝั่งซ้าย: banner */}
         <div className="login-banner">
-          <h1 className="login-banner-title">
-            {lang === 'th' ? (
-              <>สำรวจห้องแล็บ<br />ที่คุณ<br /><span style={{ color: 'var(--brand-color)' }}>ต้องการ</span></>
-            ) : (
-              <>Explore<br />the labs<br /><span style={{ color: 'var(--brand-color)' }}>you need.</span></>
-            )}
+          <h1 className="login-banner-title" style={{ whiteSpace: 'pre-line' }}>
+            {t.bannerHeadline}
           </h1>
         </div>
 
@@ -121,7 +117,7 @@ export default function Login() {
               <Alert
                 severity={isPending ? 'warning' : 'error'}
                 icon={isPending ? <HourglassEmptyIcon fontSize="inherit" /> : undefined}
-                sx={{ mb: 3, borderRadius: '8px', fontWeight: '600' }}
+                sx={{ mb: 3, borderRadius: '8px', fontWeight: '500' }}
               >
                 {apiError}
               </Alert>
@@ -169,7 +165,7 @@ export default function Login() {
               variant="contained"
               disabled={loading}
               sx={{
-                height: '48px', fontSize: '1.1rem', fontWeight: 'bold',
+                height: '48px', fontSize: '1.1rem', fontWeight: '600',
                 borderRadius: '24px', textTransform: 'none',
                 backgroundColor: 'var(--brand-color)',
                 color: 'var(--brand-contrast)',
@@ -194,7 +190,7 @@ export default function Login() {
               variant="outlined"
               onClick={() => navigate('/register')}
               sx={{
-                height: '48px', fontSize: '1.05rem', fontWeight: 'bold',
+                height: '48px', fontSize: '1.05rem', fontWeight: '600',
                 borderRadius: '24px', textTransform: 'none',
                 color: 'var(--brand-color)', borderColor: 'var(--brand-color)',
                 '&:hover': { borderColor: 'var(--brand-hover)', backgroundColor: 'var(--brand-soft)' },

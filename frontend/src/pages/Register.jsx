@@ -69,10 +69,10 @@ export default function Register() {
     try {
       const response = await axios.post(`${API_URL}/request-otp`, { email: formData.email });
       setAccountType(response.data.account_type);
-      setSuccess(response.data.message);
+      setSuccess(t.otpSent);
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Connection error. Please try again.');
+      setError(err.response?.data?.detail || t.connectionError);
     } finally {
       setLoading(false);
     }
@@ -85,10 +85,10 @@ export default function Register() {
     setLoading(true); setError(''); setSuccess('');
     try {
       await axios.post(`${API_URL}/verify-otp`, { email: formData.email, otp: formData.otp });
-      setSuccess(lang === 'th' ? 'ยืนยัน OTP สำเร็จ' : 'OTP Verified Successfully.');
+      setSuccess(t.otpVerified);
       setStep(3);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid OTP. Please try again.');
+      setError(err.response?.data?.detail || t.invalidOtp);
     } finally {
       setLoading(false);
     }
@@ -126,13 +126,13 @@ export default function Register() {
     }
 
     try {
-      const response = await axios.post(`${API_URL}/register`, submitData, {
+      await axios.post(`${API_URL}/register`, submitData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      alert(response.data.message);
+      alert(t.registrationSuccess);
       navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed. Please contact support.');
+      setError(err.response?.data?.detail || t.registrationFailed);
     } finally {
       setLoading(false);
     }
@@ -191,15 +191,34 @@ export default function Register() {
 
   // shared input styles
   const inputSx = {
-    '& .MuiOutlinedInput-root': { borderRadius: '10px' },
-    '& .MuiInputLabel-root': { fontSize: '0.95rem' },
+    '& .MuiOutlinedInput-root': {
+      borderRadius: '10px',
+      color: 'var(--text-dark)',
+      backgroundColor: 'var(--surface-elevated)',
+    },
+    '& .MuiOutlinedInput-input': { color: 'var(--text-dark)' },
+    '& .MuiInputLabel-root': {
+      fontSize: '0.95rem',
+      color: 'var(--text-gray)',
+    },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--brand-color)' },
+    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--border-light)' },
+    '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': {
+      borderColor: 'var(--brand-color)',
+    },
+    '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
+      borderColor: 'var(--brand-color)',
+    },
+    '& .MuiInputBase-input.Mui-disabled': {
+      WebkitTextFillColor: 'var(--text-gray)',
+    },
   };
   const primaryBtnSx = {
-    height: '52px', fontSize: '0.95rem', fontWeight: 600,
+    height: '52px', fontSize: '0.95rem', fontWeight: 500,
     borderRadius: '10px', textTransform: 'none', letterSpacing: '0.3px',
   };
   const outlinedBtnSx = {
-    height: '52px', fontSize: '0.95rem', fontWeight: 600,
+    height: '52px', fontSize: '0.95rem', fontWeight: 500,
     borderRadius: '10px', textTransform: 'none', borderWidth: '1.5px', letterSpacing: '0.3px',
   };
 
@@ -208,7 +227,7 @@ export default function Register() {
     import.meta.env.DEV ? (
       <Box sx={{ mt: 3, pt: 2, borderTop: '1px dashed #f59e0b' }}>
         <Button fullWidth variant="outlined" size="small" onClick={onClick}
-          sx={{ color: '#d97706', borderColor: '#f59e0b', textTransform: 'none', fontWeight: 'bold', borderRadius: 2 }}>
+          sx={{ color: '#d97706', borderColor: '#f59e0b', textTransform: 'none', fontWeight: '600', borderRadius: 2 }}>
           ⚡ {label}
         </Button>
       </Box>
@@ -228,7 +247,7 @@ export default function Register() {
           {loading ? <CircularProgress size={24} color="inherit" /> : t.reqOtpBtn}
         </Button>
       </form>
-      <DevBypass onClick={bypassStep1} label="DEV: Skip to Step 2" />
+      <DevBypass onClick={bypassStep1} label={t.devSkipStep2} />
     </>
   );
 
@@ -249,7 +268,7 @@ export default function Register() {
           </Button>
         </Box>
       </form>
-      <DevBypass onClick={bypassStep2} label="DEV: Skip to Step 3" />
+      <DevBypass onClick={bypassStep2} label={t.devSkipStep3} />
     </>
   );
 
@@ -269,13 +288,13 @@ export default function Register() {
           value={formData.email} disabled sx={{ mb: 2.5, ...inputSx }} />
 
         {accountType === 'student' && (
-          <Box sx={{ px: 2.5, pt: 2, pb: 2.5, mb: 2.5, bgcolor: '#f0f7ff', borderRadius: '10px', border: '1px solid #cce3ff' }}>
-            <Typography variant="caption" color="primary" fontWeight="bold" sx={{ fontSize: '0.85rem' }}>{t.uniDetails}</Typography>
+          <Box sx={{ px: 2.5, pt: 2, pb: 2.5, mb: 2.5, bgcolor: 'var(--surface-info)', borderRadius: 'var(--radius-control)', border: '1px solid var(--border-light)' }}>
+            <Typography variant="caption" fontWeight="600" sx={{ fontSize: '0.85rem', color: 'var(--brand-color)' }}>{t.uniDetails}</Typography>
             <TextField fullWidth label={t.studentId} name="student_id" size="small"
-              value={formData.student_id} onChange={handleChange} sx={{ mt: 1.5, mb: 2, bgcolor: 'white', ...inputSx }} />
+              value={formData.student_id} onChange={handleChange} sx={{ mt: 1.5, mb: 2, ...inputSx }} />
 
             {/* คณะ */}
-            <FormControl fullWidth size="small" sx={{ mb: 2, bgcolor: 'white', ...inputSx }}>
+            <FormControl fullWidth size="small" sx={{ mb: 2, ...inputSx }}>
               <InputLabel>{t.selectFaculty}</InputLabel>
               <Select
                 value={selectedFaculty}
@@ -294,7 +313,7 @@ export default function Register() {
             </FormControl>
 
             {/* สาขา — แสดงเมื่อเลือกคณะแล้ว */}
-            <FormControl fullWidth size="small" disabled={!selectedFaculty} sx={{ bgcolor: 'white', ...inputSx }}>
+            <FormControl fullWidth size="small" disabled={!selectedFaculty} sx={inputSx}>
               <InputLabel>{t.selectDepartment}</InputLabel>
               <Select
                 value={selectedDepartment}
@@ -307,19 +326,19 @@ export default function Register() {
                   </MenuItem>
                 ))}
               </Select>
-              {!selectedFaculty && <FormHelperText>{lang === 'th' ? 'เลือกคณะก่อน' : 'Select a faculty first'}</FormHelperText>}
+              {!selectedFaculty && <FormHelperText>{t.selectFacultyFirst}</FormHelperText>}
             </FormControl>
           </Box>
         )}
 
         {accountType === 'general' && (
-          <Box sx={{ px: 2.5, pt: 2, pb: 2.5, mb: 2.5, bgcolor: '#fff5f5', borderRadius: '10px', border: '1px solid #ffd6d6' }}>
-            <Typography variant="caption" color="error" fontWeight="bold" sx={{ fontSize: '0.85rem' }}>{t.guestDetails}</Typography>
+          <Box sx={{ px: 2.5, pt: 2, pb: 2.5, mb: 2.5, bgcolor: 'var(--surface-danger)', borderRadius: 'var(--radius-control)', border: '1px solid var(--border-light)' }}>
+            <Typography variant="caption" fontWeight="600" sx={{ fontSize: '0.85rem', color: 'var(--danger-color)' }}>{t.guestDetails}</Typography>
             <TextField fullWidth label={t.phoneNum} name="phone" size="small" type="tel"
-              value={formData.phone} onChange={handleChange} sx={{ mt: 1.5, mb: 1.5, bgcolor: 'white', ...inputSx }} />
+              value={formData.phone} onChange={handleChange} sx={{ mt: 1.5, mb: 1.5, ...inputSx }} />
             <FormControlLabel
               control={<Checkbox checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} color="error" size="small" />}
-              label={<Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.85rem', lineHeight: 1.5 }}>{t.consentText}</Typography>}
+              label={<Typography variant="body2" sx={{ fontSize: '0.85rem', lineHeight: 1.5, color: 'var(--text-gray)' }}>{t.consentText}</Typography>}
               sx={{ alignItems: 'flex-start' }}
             />
           </Box>
@@ -344,7 +363,7 @@ export default function Register() {
           {t.nextFaceSetup}
         </Button>
       </form>
-      <DevBypass onClick={bypassStep3} label="DEV: Skip to Step 4" />
+      <DevBypass onClick={bypassStep3} label={t.devSkipStep4} />
     </>
   );
 
@@ -359,7 +378,7 @@ export default function Register() {
           {imagePreview ? (
             <Box sx={{ position: 'relative', display: 'inline-block' }}>
               <img
-                src={imagePreview} alt="Face Capture"
+                src={imagePreview} alt={t.faceCaptureAlt}
                 style={{ width: '180px', height: '180px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #e2e8f0', display: 'block' }}
               />
               <IconButton
@@ -386,14 +405,14 @@ export default function Register() {
             variant="outlined" fullWidth color="success"
             startIcon={<CameraAltIcon />}
             onClick={() => setOpenCamera(true)}
-            sx={{ height: '48px', borderRadius: '10px', textTransform: 'none', fontWeight: 'bold', fontSize: '0.9rem' }}
+            sx={{ height: '48px', borderRadius: '10px', textTransform: 'none', fontWeight: '600', fontSize: '0.9rem' }}
           >
             {t.openCam}
           </Button>
           <Button
             variant="outlined" component="label" fullWidth
             startIcon={<CloudUploadIcon />}
-            sx={{ height: '48px', borderRadius: '10px', textTransform: 'none', fontWeight: 'bold', fontSize: '0.9rem' }}
+            sx={{ height: '48px', borderRadius: '10px', textTransform: 'none', fontWeight: '600', fontSize: '0.9rem' }}
           >
             {t.uploadImg}
             <input hidden accept="image/*" type="file" onChange={handleImageUpload} />
@@ -424,7 +443,7 @@ export default function Register() {
         </Box>
 
       </form>
-      <DevBypass onClick={bypassStep4} label="DEV: Generate mock face image" />
+      <DevBypass onClick={bypassStep4} label={t.devGenerateFace} />
     </>
   );
 
@@ -464,7 +483,7 @@ export default function Register() {
 
       {/* กล้องถ่ายภาพ dialog */}
       <Dialog open={openCamera} onClose={() => setOpenCamera(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ textAlign: 'center', fontWeight: 'bold' }}>{t.camTitle}</DialogTitle>
+        <DialogTitle sx={{ textAlign: 'center', fontWeight: '600' }}>{t.camTitle}</DialogTitle>
         <DialogContent sx={{ p: 0, position: 'relative' }}>
           <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg"
             videoConstraints={videoConstraints} style={{ width: '100%', height: '100%', display: 'block' }} />

@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -301,6 +301,13 @@ class PointSystemTests(unittest.TestCase):
         self.session.commit()
 
         self.assertEqual(points._highest_ban_days(10, policy), 7)
+
+    def test_naive_effective_time_uses_the_lab_calendar(self):
+        # No-offset values from legacy Lab flows represent UTC+7 wall time,
+        # not UTC. This boundary must remain on the same Lab calendar date.
+        event_time = datetime(2026, 9, 22, 0, 30)
+
+        self.assertEqual(points._business_date(event_time), date(2026, 9, 22))
 
 
 if __name__ == "__main__":

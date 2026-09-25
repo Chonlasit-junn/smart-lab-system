@@ -3,7 +3,6 @@ import {
   Computer,
   Logout,
   Menu as MenuIcon,
-  Notifications,
   Person,
   Settings,
 } from "@mui/icons-material";
@@ -20,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import AdminNavigation from "./AdminNavigation";
+import NotificationBell from "./NotificationBell";
 
 export default function AdminShell({ title, children }) {
   const navigate = useNavigate();
@@ -56,11 +56,11 @@ export default function AdminShell({ title, children }) {
             <Computer sx={{ color: "white", fontSize: 28 }} />
           </Box>
           <Box>
-            <Typography variant="h6" fontWeight="800" className="admin-brand-title">
+            <Typography variant="h6" fontWeight="700" className="admin-brand-title">
               Smart Lab
             </Typography>
             <Typography variant="caption" className="admin-brand-subtitle">
-              Admin Dashboard
+              {t("common.adminDashboard")}
             </Typography>
           </Box>
         </Box>
@@ -74,25 +74,27 @@ export default function AdminShell({ title, children }) {
             <IconButton
               className="admin-menu-toggle"
               onClick={() => setIsSidebarOpen(true)}
-              aria-label="เปิดเมนูผู้ดูแลระบบ"
+              aria-label={t("common.openMenu")}
             >
               <MenuIcon />
             </IconButton>
-            <Typography variant="h5" fontWeight="800" className="admin-page-heading">
+            <Typography variant="h5" fontWeight="700" className="admin-page-heading">
               {title}
             </Typography>
           </Box>
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
-              <Notifications />
-            </IconButton>
+            <NotificationBell
+              className="admin-notification-button"
+              iconColor="#64748b"
+              loadNotifications={false}
+            />
             <Divider orientation="vertical" flexItem className="admin-header-divider" />
             <Box className="admin-user-summary">
-              <Typography variant="subtitle2" fontWeight="800">
-                {currentUser?.name || "System Admin"}
+              <Typography variant="subtitle2" fontWeight="700">
+                {currentUser?.name || t("common.systemAdmin")}
               </Typography>
-              <Typography variant="caption" fontWeight="600">
+              <Typography variant="caption" fontWeight="500">
                 {currentUser?.role || t("common.administrator")}
               </Typography>
             </Box>

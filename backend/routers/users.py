@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -57,8 +57,16 @@ router = APIRouter(tags=["Users"])
 def get_all_users(
     _admin: models.User = Depends(require_admin_user),
     db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
 ):
-    users = db.query(models.User).order_by(models.User.id.asc()).all()
+    page_number = page if isinstance(page, int) else 1
+    page_limit = page_size if isinstance(page_size, int) else 50
+    query = db.query(models.User)
+    total = query.order_by(None).count()
+    users = query.order_by(models.User.id.asc()).offset(
+        (page_number - 1) * page_limit
+    ).limit(page_limit).all()
     return {
         "data": [
             {
@@ -70,7 +78,11 @@ def get_all_users(
                 "created_at": user.created_at,
             }
             for user in users
-        ]
+        ],
+        "page": page_number,
+        "page_size": page_limit,
+        "total": total,
+        "has_more": page_number * page_limit < total,
     }
 
 @router.get("/users/me")

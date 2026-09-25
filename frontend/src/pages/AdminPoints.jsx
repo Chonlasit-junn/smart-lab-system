@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -23,6 +23,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  Pagination,
 } from "@mui/material";
 import {
   Assessment,
@@ -47,7 +48,9 @@ import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import AdminUserDetailsDialog from "../components/AdminUserDetailsDialog";
 import AdminNavigation from "../components/AdminNavigation";
+import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
+import NotificationBell from "../components/NotificationBell";
 import {
   buildTestPointEndpoint,
   canRunTestPointAction,
@@ -90,36 +93,12 @@ const getScoreColor = (score, warningThreshold = DEFAULT_WARNING_THRESHOLD) => {
   return "#10b981";
 };
 
-const formatDate = (value) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-const formatDateTime = (value) => {
-  if (!value) return "ยังไม่มีข้อมูล";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "ยังไม่มีข้อมูล";
-  return date.toLocaleString("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const getRoleLabel = (role) =>
+const getRoleLabel = (role, t) =>
   ({
-    admin: "Admin",
-    student: "Student",
-    guest: "Guest",
-  })[role] || "Guest";
+    admin: t("admin.userDetails.roleAdministrator"),
+    student: t("admin.userDetails.roleStudent"),
+    guest: t("admin.userDetails.roleGuest"),
+  })[role] || t("admin.userDetails.roleGuest");
 
 const getRoleColor = (role) =>
   ({
@@ -143,6 +122,7 @@ const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
 };
 
 export default function AdminPoints() {
+  const PAGE_SIZE = 25;
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { t } = useLanguage();
@@ -153,8 +133,11 @@ export default function AdminPoints() {
   const [warningThreshold, setWarningThreshold] = useState(DEFAULT_WARNING_THRESHOLD);
   const [scoreDate, setScoreDate] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("pointsAsc");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
@@ -171,7 +154,7 @@ export default function AdminPoints() {
   const fetchPoints = useCallback(async () => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อนดูคะแนนผู้ใช้");
+      setError(t("admin.adminLoginRequired"));
       setLoading(false);
       return;
     }
@@ -181,6 +164,13 @@ export default function AdminPoints() {
       setError("");
       const response = await axios.get(`${API_URL}/admin/points`, {
         headers: { Authorization: `Bearer ${token}` },
+        params: {
+          page,
+          page_size: PAGE_SIZE,
+          search: searchTerm || undefined,
+          filter,
+          sort_by: sortBy,
+        },
       });
       const payload = response.data || {};
       const nextWarningThreshold = Number.isFinite(Number(payload.points_warning_threshold))
@@ -189,24 +179,36 @@ export default function AdminPoints() {
       const userRows = (Array.isArray(payload.data) ? payload.data : []).filter((user) => user.role !== "admin");
       const pendingPointRequests = Array.isArray(payload.point_requests) ? payload.point_requests : [];
       setRows(userRows);
-      setSummary(buildSummary(userRows, nextWarningThreshold, pendingPointRequests.length));
+      setSummary(payload.summary || buildSummary(userRows, nextWarningThreshold, pendingPointRequests.length));
       setWarningThreshold(nextWarningThreshold);
       setScoreDate(payload.score_date || null);
       setPointRequests(pendingPointRequests);
+      setTotal(Number(payload.total) || 0);
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
       setError(
-        typeof detail === "string" ? detail : "ไม่สามารถโหลดคะแนนของผู้ใช้ได้",
+        typeof detail === "string" ? detail : t("admin.loadUserPointsFailed"),
       );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filter, page, searchTerm, sortBy, t]);
 
   useEffect(() => {
     document.title = `${t("admin.pointsTitle")} | Smart Lab Admin`;
+  }, [t]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchTerm(searchQuery.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
     fetchPoints();
-  }, [fetchPoints, t]);
+  }, [fetchPoints]);
 
   const handleLogout = () => {
     setAnchorEl(null);
@@ -223,7 +225,7 @@ export default function AdminPoints() {
     setDetailOpen(true);
 
     if (!token) {
-      setDetailError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อนดูข้อมูลผู้ใช้");
+      setDetailError(t("admin.userDetailLoginRequired"));
       return;
     }
 
@@ -241,7 +243,7 @@ export default function AdminPoints() {
       setDetailError(
         typeof detail === "string"
           ? detail
-          : "ไม่สามารถโหลดข้อมูลและประวัติของผู้ใช้ได้",
+          : t("admin.loadUserDetailFailed"),
       );
     } finally {
       setDetailLoading(false);
@@ -256,7 +258,7 @@ export default function AdminPoints() {
   const handlePointRequestAction = async (requestId, action) => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อนจัดการคำขอเพิ่มคะแนน");
+      setError(t("admin.pointRequestLoginRequired"));
       return;
     }
 
@@ -276,7 +278,7 @@ export default function AdminPoints() {
       setError(
         typeof detail === "string"
           ? detail
-          : "ไม่สามารถจัดการคำขอเพิ่มคะแนนได้",
+          : t("admin.pointRequestActionFailed"),
       );
     } finally {
       setRequestActionId(null);
@@ -286,7 +288,7 @@ export default function AdminPoints() {
   const handleTestDeduction = async (user) => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อนทดสอบการลดคะแนน");
+      setError(t("admin.testDeductionLoginRequired"));
       return;
     }
     if (
@@ -299,7 +301,7 @@ export default function AdminPoints() {
       return;
     if (
       !window.confirm(
-        `ต้องการลดคะแนนของ ${user.name || `User #${user.user_id}`} จำนวน 10 คะแนนเพื่อทดสอบหรือไม่?`,
+        `${t("admin.testDeductionConfirmPrefix")} ${user.name || `${t("common.user")} #${user.user_id}`} ${t("admin.testDeductionConfirmSuffix")}`,
       )
     ) {
       return;
@@ -319,7 +321,7 @@ export default function AdminPoints() {
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
       setError(
-        typeof detail === "string" ? detail : "ไม่สามารถทดสอบการลดคะแนนได้",
+        typeof detail === "string" ? detail : t("admin.testDeductionFailed"),
       );
     } finally {
       setTestDeductionId(null);
@@ -329,7 +331,7 @@ export default function AdminPoints() {
   const handleTestReset = async (user) => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setError("กรุณาเข้าสู่ระบบด้วยบัญชี Admin ก่อน Reset คะแนนทดสอบ");
+      setError(t("admin.testResetLoginRequired"));
       return;
     }
     if (
@@ -342,7 +344,7 @@ export default function AdminPoints() {
       return;
     if (
       !window.confirm(
-        `ต้องการคืนคะแนนของ ${user.name || `User #${user.user_id}`} กลับเป็น 100 เพื่อเริ่มการทดสอบใหม่หรือไม่?`,
+        `${t("admin.testResetConfirmPrefix")} ${user.name || `${t("common.user")} #${user.user_id}`} ${t("admin.testResetConfirmSuffix")}`,
       )
     ) {
       return;
@@ -362,39 +364,18 @@ export default function AdminPoints() {
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
       setError(
-        typeof detail === "string" ? detail : "ไม่สามารถ Reset คะแนนทดสอบได้",
+        typeof detail === "string" ? detail : t("admin.testResetFailed"),
       );
     } finally {
       setTestResetId(null);
     }
   };
 
-  const filteredRows = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const visibleRows = rows.filter((user) => {
-      if (user.role === "admin") return false;
-      const searchableText =
-        `${user.name || ""} ${user.email || ""} ${user.user_id || ""}`.toLowerCase();
-      if (query && !searchableText.includes(query)) return false;
-      if (filter === "low" && Number(user.points) > warningThreshold) return false;
-      if (filter === "banned" && !user.is_banned) return false;
-      if (filter === "allowed" && !user.booking_allowed) return false;
-      return true;
-    });
-
-    return [...visibleRows].sort((first, second) => {
-      if (sortBy === "pointsDesc") return second.points - first.points;
-      if (sortBy === "name")
-        return (first.name || "").localeCompare(second.name || "");
-      return first.points - second.points;
-    });
-  }, [filter, rows, searchQuery, sortBy, warningThreshold]);
-
   const statCards = [
     {
       label: t("admin.allUsers"),
       value: summary.total_users,
-      helper: "บัญชีในระบบ",
+      helper: t("admin.accountsInSystem"),
       color: "var(--brand-color)",
       icon: <Group />,
     },
@@ -415,7 +396,7 @@ export default function AdminPoints() {
     {
       label: t("admin.bannedUsers"),
       value: summary.banned_users,
-      helper: "มี Ban ที่ยังใช้งาน",
+      helper: t("admin.activeBans"),
       color: "#ef4444",
       icon: <Lock />,
     },
@@ -469,7 +450,7 @@ export default function AdminPoints() {
           <Box>
             <Typography
               variant="h6"
-              fontWeight="800"
+              fontWeight="700"
               sx={{ color: "var(--text-dark)", letterSpacing: "-0.5px" }}
             >
               Smart Lab
@@ -478,12 +459,12 @@ export default function AdminPoints() {
               variant="caption"
               sx={{
                 color: "var(--text-muted)",
-                fontWeight: "500",
+                fontWeight: "400",
                 display: "block",
                 mt: -0.5,
               }}
             >
-              Admin Dashboard
+              {t("common.adminDashboard")}
             </Typography>
           </Box>
         </Box>
@@ -517,15 +498,17 @@ export default function AdminPoints() {
         >
           <Typography
             variant="h5"
-            fontWeight="800"
+            fontWeight="700"
             sx={{ color: "var(--text-dark)", letterSpacing: "-1px" }}
           >
             {t("admin.pointsTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton className="admin-notification-button" aria-label={t("common.notifications")}>
-              <Notifications sx={{ color: "var(--text-muted)" }} />
-            </IconButton>
+            <NotificationBell
+              className="admin-notification-button"
+              iconColor="var(--text-muted)"
+              loadNotifications={false}
+            />
             <Divider
               orientation="vertical"
               flexItem
@@ -540,12 +523,12 @@ export default function AdminPoints() {
               >
                 <Typography
                   variant="subtitle2"
-                  fontWeight="800"
+                  fontWeight="700"
                   color="var(--text-dark)"
                 >
                   {t("common.systemAdmin")}
                 </Typography>
-                <Typography variant="caption" fontWeight="600" color="var(--text-muted)">
+                <Typography variant="caption" fontWeight="500" color="var(--text-muted)">
                   {t("common.administrator")}
                 </Typography>
               </Box>
@@ -583,7 +566,7 @@ export default function AdminPoints() {
                     pt: 1.5,
                   }}
                 >
-                  <Typography fontSize="13px" fontWeight="600" color="var(--text-muted)">
+                  <Typography fontSize="13px" fontWeight="500" color="var(--text-muted)">
                     admin@smartlab.ac.th
                   </Typography>
                   <IconButton
@@ -602,7 +585,7 @@ export default function AdminPoints() {
                     sx={{
                       justifyContent: "flex-start",
                       color: "var(--danger-color)",
-                      fontWeight: "700",
+                      fontWeight: "600",
                       textTransform: "none",
                       borderRadius: 2,
                     }}
@@ -630,17 +613,17 @@ export default function AdminPoints() {
             <Box className="page-header__copy">
               <Typography
                 variant="h4"
-                fontWeight="800"
+                fontWeight="700"
                 color="var(--text-dark)"
                 sx={{ letterSpacing: "-1px" }}
               >
                 {t("admin.userPointsHeading")}
               </Typography>
               <Typography variant="body2" color="var(--text-gray)" sx={{ mt: 0.75 }}>
-                ตรวจสอบ{t("admin.accumulatedPoints")} {t("admin.dailyPoints")} และ{t("admin.bookingRights")}ของทุกบัญชี
+                {t("admin.pointsPageDescription")}
               </Typography>
               <Typography variant="caption" color="var(--text-muted)" sx={{ display: "block", mt: 0.5 }}>
-                {t("admin.pointSummaryDate")} {formatDate(scoreDate)} · การจองขึ้นกับสถานะ Ban เท่านั้น
+                {t("admin.pointSummaryDate")} {formatDate(scoreDate, t("common.locale"))} · {t("admin.bookingDependsOnBan")}
               </Typography>
             </Box>
             <Button
@@ -651,7 +634,7 @@ export default function AdminPoints() {
               sx={{
                 borderRadius: 3,
                 textTransform: "none",
-                fontWeight: "700",
+                fontWeight: "600",
                 borderColor: "var(--border-light)",
                 color: "var(--brand-color)",
               }}
@@ -673,8 +656,8 @@ export default function AdminPoints() {
               sx={{ mb: 3, borderRadius: 3, alignItems: "flex-start" }}
             >
               <Box sx={{ width: "100%" }}>
-                <Typography fontWeight="800" color="var(--warning-color)" sx={{ mb: 1 }}>
-                  {t("admin.pointRequests")} {pointRequests.length} รายการ
+                <Typography fontWeight="700" color="var(--warning-color)" sx={{ mb: 1 }}>
+                  {t("admin.pointRequests")} {pointRequests.length} {t("admin.pointRequestsCount")}
                 </Typography>
                 <Box
                   sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}
@@ -696,19 +679,18 @@ export default function AdminPoints() {
                       <Box sx={{ minWidth: 0 }}>
                         <Typography
                           variant="body2"
-                          fontWeight="800"
+                          fontWeight="700"
                           color="var(--text-dark)"
                         >
-                          {request.name || `User #${request.user_id}`} · ขอเพิ่ม{" "}
-                          {request.requested_points || 10} คะแนน
+                          {request.name || `${t("common.user")} #${request.user_id}`} · {t("admin.requestPoints")} {request.requested_points || 10} {t("common.points")}
                         </Typography>
                         <Typography
                           variant="caption"
                           color="var(--text-gray)"
                           sx={{ overflowWrap: "anywhere" }}
                         >
-                          {request.email || `User ID #${request.user_id}`} ·
-                          ส่งคำขอเมื่อ {formatDateTime(request.created_at)}
+                          {request.email || `${t("common.userId")} #${request.user_id}`} ·
+                          {t("admin.requestSentAt")} {formatDateTime(request.created_at, t("common.locale"))}
                         </Typography>
                       </Box>
                       <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
@@ -724,7 +706,7 @@ export default function AdminPoints() {
                           sx={{
                             borderRadius: 2,
                             textTransform: "none",
-                            fontWeight: "800",
+                            fontWeight: "700",
                             boxShadow: "none",
                           }}
                         >
@@ -742,7 +724,7 @@ export default function AdminPoints() {
                           sx={{
                             borderRadius: 2,
                             textTransform: "none",
-                            fontWeight: "800",
+                            fontWeight: "700",
                           }}
                         >
                           {t("common.failed")}
@@ -790,12 +772,12 @@ export default function AdminPoints() {
                 <Box sx={{ minWidth: 0 }}>
                   <Typography
                     variant="caption"
-                    fontWeight="700"
+                    fontWeight="600"
                     color="var(--text-gray)"
                   >
                     {card.label}
                   </Typography>
-                  <Typography variant="h5" fontWeight="800" color="var(--text-dark)">
+                  <Typography variant="h5" fontWeight="700" color="var(--text-dark)">
                     {card.value}
                   </Typography>
                   <Typography variant="caption" color="var(--text-muted)" noWrap>
@@ -843,7 +825,7 @@ export default function AdminPoints() {
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder={t("admin.searchUsers")}
-                  sx={{ fontSize: "14px", fontWeight: "500" }}
+                  sx={{ fontSize: "14px", fontWeight: "400" }}
                   inputProps={{ "aria-label": t("admin.searchUsers") }}
                 />
               </Box>
@@ -853,7 +835,10 @@ export default function AdminPoints() {
                   labelId="points-filter-label"
                   value={filter}
                   label={t("admin.pointFilter")}
-                  onChange={(event) => setFilter(event.target.value)}
+                  onChange={(event) => {
+                    setFilter(event.target.value);
+                    setPage(1);
+                  }}
                 >
                   <MenuItem value="all">{t("admin.allUsersFilter")}</MenuItem>
                   <MenuItem value="low">{t("admin.lowPoints")}</MenuItem>
@@ -867,7 +852,10 @@ export default function AdminPoints() {
                   labelId="points-sort-label"
                   value={sortBy}
                   label={t("admin.pointSort")}
-                  onChange={(event) => setSortBy(event.target.value)}
+                  onChange={(event) => {
+                    setSortBy(event.target.value);
+                    setPage(1);
+                  }}
                 >
                   <MenuItem value="pointsAsc">{t("admin.pointsAscending")}</MenuItem>
                   <MenuItem value="pointsDesc">{t("admin.pointsDescending")}</MenuItem>
@@ -905,19 +893,19 @@ export default function AdminPoints() {
                   <TableHead>
                     <TableRow sx={{ bgcolor: "var(--surface-subtle)" }}>
                       <TableCell
-                        sx={{ color: "var(--text-gray)", fontWeight: "800", py: 2 }}
+                        sx={{ color: "var(--text-gray)", fontWeight: "700", py: 2 }}
                       >
                         {t("common.user")}
                       </TableCell>
                       <TableCell
-                        sx={{ color: "var(--text-gray)", fontWeight: "800", py: 2 }}
+                        sx={{ color: "var(--text-gray)", fontWeight: "700", py: 2 }}
                       >
-                        Role
+                        {t("common.role")}
                       </TableCell>
                       <TableCell
                         sx={{
                           color: "var(--text-gray)",
-                          fontWeight: "800",
+                          fontWeight: "700",
                           py: 2,
                           minWidth: 190,
                         }}
@@ -927,7 +915,7 @@ export default function AdminPoints() {
                       <TableCell
                         sx={{
                           color: "var(--text-gray)",
-                          fontWeight: "800",
+                          fontWeight: "700",
                           py: 2,
                           minWidth: 140,
                         }}
@@ -935,40 +923,40 @@ export default function AdminPoints() {
                         {t("admin.dailyPoints")}
                       </TableCell>
                       <TableCell
-                        sx={{ color: "var(--text-gray)", fontWeight: "800", py: 2 }}
+                        sx={{ color: "var(--text-gray)", fontWeight: "700", py: 2 }}
                       >
                         {t("admin.bookingRights")}
                       </TableCell>
                       <TableCell
-                        sx={{ color: "var(--text-gray)", fontWeight: "800", py: 2 }}
+                        sx={{ color: "var(--text-gray)", fontWeight: "700", py: 2 }}
                       >
                         {t("admin.lastUpdated")}
                       </TableCell>
                       <TableCell
                         sx={{
                           color: "var(--text-gray)",
-                          fontWeight: "800",
+                          fontWeight: "700",
                           py: 2,
                           whiteSpace: "nowrap",
                         }}
                       >
-                        การจัดการ
+                        {t("common.actions")}
                       </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredRows.length === 0 ? (
+                    {rows.length === 0 ? (
                       <TableRow>
                         <TableCell
                           colSpan={7}
                           align="center"
                           sx={{ py: 8, color: "var(--text-muted)" }}
                         >
-                          ไม่พบข้อมูลผู้ใช้ตามเงื่อนไขที่เลือก
+                          {t("admin.pointsTableEmpty")}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredRows.map((user) => {
+                      rows.map((user) => {
                         const points = Math.max(0, Math.min(100, Number(user.points) || 0));
                         const dailyScore = Math.max(0, Math.min(100, Number(user.daily_score) || 0));
                         const scoreColor = getScoreColor(points, warningThreshold);
@@ -1000,7 +988,7 @@ export default function AdminPoints() {
                                     width: 40,
                                     height: 40,
                                     fontSize: "14px",
-                                    fontWeight: "800",
+                                    fontWeight: "700",
                                   }}
                                 >
                                   {getInitials(user)}
@@ -1008,11 +996,11 @@ export default function AdminPoints() {
                                 <Box sx={{ minWidth: 0 }}>
                                   <Typography
                                     variant="subtitle2"
-                                    fontWeight="800"
+                                    fontWeight="700"
                                     color="var(--text-dark)"
                                     noWrap
                                   >
-                                    {user.name || "ไม่ระบุชื่อ"}
+                                    {user.name || t("common.unknownName")}
                                   </Typography>
                                   <Typography
                                     variant="caption"
@@ -1023,19 +1011,19 @@ export default function AdminPoints() {
                                     {user.email}
                                   </Typography>
                                   <Typography variant="caption" color="var(--text-muted)">
-                                    ID #{user.user_id}
+                                    {t("common.userId")} #{user.user_id}
                                   </Typography>
                                 </Box>
                               </Box>
                             </TableCell>
                             <TableCell>
                               <Chip
-                                label={getRoleLabel(user.role)}
+                                label={getRoleLabel(user.role, t)}
                                 size="small"
                                 sx={{
                                   bgcolor: roleColor.bgcolor,
                                   color: roleColor.color,
-                                  fontWeight: "800",
+                                  fontWeight: "700",
                                 }}
                               />
                             </TableCell>
@@ -1050,20 +1038,20 @@ export default function AdminPoints() {
                                   }}
                                 >
                                   <Typography
-                                    fontWeight="800"
+                                    fontWeight="700"
                                     color={scoreColor}
                                     className="theme-colored"
                                   >
                                     {points}/100
                                   </Typography>
                                   <Typography variant="caption" color="var(--text-muted)">
-                                    เตือนเมื่อ ≤ {warningThreshold}
+                                    {t("admin.warningWhenAtMost")} {warningThreshold}
                                   </Typography>
                                 </Box>
                                 <LinearProgress
                                   variant="determinate"
                                   value={points}
-                                  aria-label={`คะแนนสะสม ${points} จาก 100`}
+                                  aria-label={`${t("admin.accumulatedPoints")} ${points} / 100`}
                                   sx={{
                                     height: 7,
                                     borderRadius: 4,
@@ -1078,13 +1066,13 @@ export default function AdminPoints() {
                             </TableCell>
                             <TableCell>
                               <Box sx={{ minWidth: 115 }}>
-                                <Typography fontWeight="800" color="var(--text-dark)">
+                                <Typography fontWeight="700" color="var(--text-dark)">
                                   {dailyScore}/100
                                 </Typography>
                                 <LinearProgress
                                   variant="determinate"
                                   value={dailyScore}
-                                  aria-label={`คะแนนวันนี้ ${dailyScore} จาก 100`}
+                                  aria-label={`${t("admin.dailyPoints")} ${dailyScore} / 100`}
                                   sx={{
                                     mt: 0.75,
                                     height: 6,
@@ -1117,8 +1105,8 @@ export default function AdminPoints() {
                                   }
                                   label={
                                     user.booking_allowed
-                                      ? "จองได้"
-                                      : "จองไม่ได้"
+                                      ? t("admin.bookingAllowed")
+                                      : t("admin.bookingBanned")
                                   }
                                   size="small"
                                   sx={{
@@ -1128,7 +1116,7 @@ export default function AdminPoints() {
                                     color: user.booking_allowed
                                       ? "#047857"
                                       : "#b91c1c",
-                                    fontWeight: "800",
+                                    fontWeight: "700",
                                     "& .MuiChip-icon": {
                                       color: "inherit",
                                       fontSize: 16,
@@ -1139,10 +1127,10 @@ export default function AdminPoints() {
                                   <Typography
                                     variant="caption"
                                     color="var(--danger-color)"
-                                    fontWeight="700"
+                                    fontWeight="600"
                                     className="theme-colored"
                                   >
-                                    Ban ถึง {formatDate(user.ban_until)}
+                                    {t("common.bannedUntil")} {formatDate(user.ban_until, t("common.locale"))}
                                   </Typography>
                                 )}
                               </Box>
@@ -1154,7 +1142,7 @@ export default function AdminPoints() {
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {formatDateTime(user.updated_at)}
+                              {formatDateTime(user.updated_at, t("common.locale"))}
                             </TableCell>
                             <TableCell>
                               <Box
@@ -1184,13 +1172,13 @@ export default function AdminPoints() {
                                   sx={{
                                     borderRadius: 2.5,
                                     textTransform: "none",
-                                    fontWeight: "700",
+                                    fontWeight: "600",
                                     whiteSpace: "nowrap",
                                   }}
                                 >
                                   {testDeductionId === user.user_id
-                                    ? "กำลังลด..."
-                                    : "ลด 10 แต้ม (ทดสอบ)"}
+                                    ? t("admin.reducingPoints")
+                                    : t("admin.reducePointsTest")}
                                 </Button>
                                 <Button
                                   size="small"
@@ -1211,13 +1199,13 @@ export default function AdminPoints() {
                                   sx={{
                                     borderRadius: 2.5,
                                     textTransform: "none",
-                                    fontWeight: "700",
+                                    fontWeight: "600",
                                     whiteSpace: "nowrap",
                                   }}
                                 >
                                   {testResetId === user.user_id
-                                    ? "กำลัง Reset..."
-                                    : "Reset เป็น 100 (ทดสอบ)"}
+                                    ? t("admin.resettingPoints")
+                                    : t("admin.resetPointsTest")}
                                 </Button>
                                 <Button
                                   size="small"
@@ -1230,11 +1218,11 @@ export default function AdminPoints() {
                                   sx={{
                                     borderRadius: 2.5,
                                     textTransform: "none",
-                                    fontWeight: "700",
+                                    fontWeight: "600",
                                     whiteSpace: "nowrap",
                                   }}
                                 >
-                                  ดูข้อมูล
+                                  {t("admin.viewDetails")}
                                 </Button>
                               </Box>
                             </TableCell>
@@ -1258,12 +1246,21 @@ export default function AdminPoints() {
                   flexWrap: "wrap",
                 }}
               >
-                <Typography variant="caption" color="var(--text-gray)" fontWeight="600">
-                  แสดง {filteredRows.length} จาก {rows.length} ผู้ใช้
-                </Typography>
+                <Typography variant="caption" color="var(--text-gray)" fontWeight="500">
+                   {t("admin.showing")} {rows.length} {t("admin.of")} {total} {t("admin.users")}
+                 </Typography>
                 <Typography variant="caption" color="var(--text-muted)">
-                  คะแนนสูงสุด 100 คะแนน
+                  {t("admin.maxPointsHint")}
                 </Typography>
+                {total > PAGE_SIZE && (
+                  <Pagination
+                    count={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+                    page={page}
+                    onChange={(_, nextPage) => setPage(nextPage)}
+                    color="primary"
+                    size="small"
+                  />
+                )}
               </Box>
             )}
           </Paper>
