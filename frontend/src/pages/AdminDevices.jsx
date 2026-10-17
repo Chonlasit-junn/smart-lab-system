@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -45,8 +45,11 @@ const STATUS_LABELS = {
 
 export default function AdminDevices() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const devicesControllerRef = useRef(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [devices, setDevices] = useState([]);
   const [labs, setLabs] = useState([]);
@@ -60,26 +63,41 @@ export default function AdminDevices() {
   };
 
   const fetchData = useCallback(async () => {
+    devicesControllerRef.current?.abort();
+    const controller = new AbortController();
+    devicesControllerRef.current = controller;
+
     try {
       setLoading(true);
       setError("");
+      const requestConfig = { ...authConfig(), signal: controller.signal };
       const [devicesResponse, labsResponse] = await Promise.all([
-        axios.get(`${API_URL}/admin/lab-devices`, authConfig()),
-        axios.get(`${API_URL}/labs`),
+        axios.get(`${API_URL}/admin/lab-devices`, requestConfig),
+        axios.get(`${API_URL}/labs`, { signal: controller.signal }),
       ]);
+      if (devicesControllerRef.current !== controller) return;
       setDevices(devicesResponse.data?.data || []);
       setLabs(labsResponse.data?.data || []);
     } catch (requestError) {
-      setError(requestError.response?.data?.detail || t("common.error"));
+      if (axios.isCancel(requestError) || devicesControllerRef.current !== controller) return;
+      setError(requestError.response?.data?.detail || tRef.current("common.error"));
     } finally {
-      setLoading(false);
+      if (devicesControllerRef.current === controller) {
+        devicesControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     document.title = `${t("admin.devicesTitle")} | Smart Lab Admin`;
+  }, [t]);
+
+  useEffect(() => {
     fetchData();
-  }, [fetchData, t]);
+  }, [fetchData]);
+
+  useEffect(() => () => devicesControllerRef.current?.abort(), []);
 
   const handleSaveDevice = async (device) => {
     try {
@@ -145,8 +163,8 @@ export default function AdminDevices() {
             />
             <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
             <Box sx={{ textAlign: "right" }}>
-              <Typography variant="subtitle2" fontWeight="700" color="#1e293b">{t("common.systemAdmin")}</Typography>
-              <Typography variant="caption" fontWeight="500" color="#94a3b8">{t("common.administrator")}</Typography>
+              <Typography variant="subtitle2" fontWeight="700" color="#1e293b">{currentUser?.name || "Admin"}</Typography>
+              <Typography variant="caption" fontWeight="500" color="#94a3b8">{currentUser?.role || "Admin"}</Typography>
             </Box>
             <IconButton onClick={(event) => setAnchorEl(event.currentTarget)} sx={{ p: 0.8 }}>
               <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}><Person sx={{ fontSize: 20 }} /></Avatar>

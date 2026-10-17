@@ -92,10 +92,10 @@ export default function AdminShell({ title, children }) {
             <Divider orientation="vertical" flexItem className="admin-header-divider" />
             <Box className="admin-user-summary">
               <Typography variant="subtitle2" fontWeight="700">
-                {currentUser?.name || t("common.systemAdmin")}
+                {currentUser?.name || "Admin"}
               </Typography>
               <Typography variant="caption" fontWeight="500">
-                {currentUser?.role || t("common.administrator")}
+                {currentUser?.role || "Admin"}
               </Typography>
             </Box>
             <IconButton

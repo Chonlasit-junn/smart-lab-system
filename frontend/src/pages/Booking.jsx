@@ -1,7 +1,7 @@
 // ============================================================================
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Box,
   Typography,
@@ -48,6 +48,7 @@ import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import { formatDateTime } from "../utils/dateFormat";
 import { getPointReasonLabel } from "../utils/pointReason";
+import { buildBookingPayload } from "../utils/bookingPayload";
 import {
   getLabCalendarDate,
   getLabDateReference,
@@ -58,7 +59,6 @@ import SupportModal from "./SupportModal";
 
 // API Endpoint configuration
 const API_URL = import.meta.env.VITE_API_URL;
-
 // Mapping for display texts
 const SLOT_DISPLAY_MAPPING = {
   1: "08:40 - 11:00 AM",
@@ -94,6 +94,9 @@ export default function Booking() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const availabilityControllerRef = useRef(null);
 
   // ============================================================================
   // 3. STATE MANAGEMENT
@@ -136,9 +139,9 @@ export default function Booking() {
       setLabs(response.data.data);
     } catch (error) {
       console.error("[API Error] Failed to fetch labs:", error);
-      alert(t("user.unableToFetchLabs"));
+      alert(tRef.current("user.unableToFetchLabs"));
     }
-  }, [t]);
+  }, []);
 
   // Fetch labs on component mount
   useEffect(() => {
@@ -154,6 +157,7 @@ export default function Booking() {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     const token = localStorage.getItem("access_token");
     setPointsLoading(true);
     setPointsError("");
@@ -161,15 +165,16 @@ export default function Booking() {
     axios
       .get(`${API_URL}/users/me/points`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       })
       .then((response) => {
         if (!cancelled) setPointStatus(response.data);
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (cancelled || axios.isCancel(error)) return;
         console.error("[API Error] Failed to fetch point status:", error);
         setPointStatus(null);
-        setPointsError(t("user.unableToCheckPoints"));
+        setPointsError(tRef.current("user.unableToCheckPoints"));
       })
       .finally(() => {
         if (!cancelled) setPointsLoading(false);
@@ -177,8 +182,9 @@ export default function Booking() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [currentUser?.email, t]);
+  }, [currentUser?.email]);
 
   // Fetch recent point-change history to populate the notification bell.
   useEffect(() => {
@@ -187,20 +193,30 @@ export default function Booking() {
       return undefined;
     }
 
+    let cancelled = false;
+    let activeController = null;
     const token = localStorage.getItem("access_token");
 
     // สร้างฟังก์ชันสำหรับดึงประวัติแจ้งเตือน
     const fetchPointLogs = async () => {
+      if (cancelled || activeController) return;
+      const controller = new AbortController();
+      activeController = controller;
       try {
         const response = await axios.get(
           `${API_URL}/users/me/points/logs?limit=10&notifications_only=true`,
           {
             headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
           },
         );
-        setPointLogs(response.data?.data || []);
+        if (!cancelled) setPointLogs(response.data?.data || []);
       } catch (error) {
-        console.error("[API Error] Failed to fetch point logs:", error);
+        if (!cancelled && !axios.isCancel(error)) {
+          console.error("[API Error] Failed to fetch point logs:", error);
+        }
+      } finally {
+        if (activeController === controller) activeController = null;
       }
     };
 
@@ -212,9 +228,13 @@ export default function Booking() {
 
     // 3. ล้าง Interval เมื่อออกจากหน้าเพื่อป้องกัน Memory Leak
     return () => {
+      cancelled = true;
       clearInterval(intervalId);
+      activeController?.abort();
     };
   }, [currentUser?.email]);
+
+  useEffect(() => () => availabilityControllerRef.current?.abort(), []);
 
   /**
    * Fetches availability for a specific lab room on a given date.
@@ -225,18 +245,29 @@ export default function Booking() {
    */
   const fetchAvailability = async (labId, year, monthIndex, dayNumber) => {
     const dateStr = getFormattedDateString(year, monthIndex, dayNumber);
+    availabilityControllerRef.current?.abort();
+    const controller = new AbortController();
+    availabilityControllerRef.current = controller;
     try {
       const response = await axios.get(
         `${API_URL}/labs/${labId}/availability`,
         {
           params: { target_date: dateStr },
+          signal: controller.signal,
         },
       );
-      setAvailability(response.data.slots);
+      if (availabilityControllerRef.current === controller) {
+        setAvailability(response.data.slots);
+      }
     } catch (error) {
+      if (axios.isCancel(error) || availabilityControllerRef.current !== controller) return;
       console.error("[API Error] Failed to fetch availability:", error);
-      alert(t("user.unableToFetchSchedule"));
+      alert(tRef.current("user.unableToFetchSchedule"));
       setAvailability(null);
+    } finally {
+      if (availabilityControllerRef.current === controller) {
+        availabilityControllerRef.current = null;
+      }
     }
   };
 
@@ -331,6 +362,8 @@ export default function Booking() {
    * Clears the current selection states during the booking process.
    */
   const resetSelections = () => {
+    availabilityControllerRef.current?.abort();
+    availabilityControllerRef.current = null;
     setSelectedDate(null);
     setSelectedTimeSlot(null);
     setAvailability(null);
@@ -378,13 +411,11 @@ export default function Booking() {
     );
 
     try {
-      const payload = {
-        lab_id: selectedRoom.id,
-        booking_date: dateStr,
-        slot_number: selectedTimeSlot,
-        purpose: t("user.generalUsagePurpose"),
-        total_participants: 1,
-      };
+      const payload = buildBookingPayload({
+        labId: selectedRoom.id,
+        bookingDate: dateStr,
+        slotNumber: selectedTimeSlot,
+      });
 
       const token = localStorage.getItem("access_token");
       await axios.post(`${API_URL}/bookings`, payload, {

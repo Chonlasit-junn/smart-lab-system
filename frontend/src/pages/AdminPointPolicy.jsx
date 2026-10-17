@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -171,8 +171,11 @@ function PolicyNumberField({ field, value, onChange }) {
 
 export default function AdminPointPolicy() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const policyControllerRef = useRef(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [policy, setPolicy] = useState(() =>
     normalizePointPolicy(DEFAULT_POINT_POLICY),
@@ -186,31 +189,48 @@ export default function AdminPointPolicy() {
   const fetchPolicy = useCallback(async () => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setError(t("admin.policyAdminLoginRequired"));
+      policyControllerRef.current?.abort();
+      policyControllerRef.current = null;
+      setError(tRef.current("admin.policyAdminLoginRequired"));
       setLoading(false);
       return;
     }
+
+    policyControllerRef.current?.abort();
+    const controller = new AbortController();
+    policyControllerRef.current = controller;
 
     try {
       setLoading(true);
       setError("");
       const response = await axios.get(`${API_URL}/admin/points/policy`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
+      if (policyControllerRef.current !== controller) return;
       const data = response.data?.data || {};
       setPolicy(normalizePointPolicy(data));
       setLastUpdated(data.updated_at || null);
     } catch (requestError) {
-      setError(getErrorMessage(requestError, t("admin.loadPolicyFailed")));
+      if (axios.isCancel(requestError) || policyControllerRef.current !== controller) return;
+      setError(getErrorMessage(requestError, tRef.current("admin.loadPolicyFailed")));
     } finally {
-      setLoading(false);
+      if (policyControllerRef.current === controller) {
+        policyControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     document.title = `${t("admin.policyTitle")} | Smart Lab Admin`;
+  }, [t]);
+
+  useEffect(() => {
     fetchPolicy();
-  }, [fetchPolicy, t]);
+  }, [fetchPolicy]);
+
+  useEffect(() => () => policyControllerRef.current?.abort(), []);
 
   const handleFieldChange = (fieldName, value) => {
     setPolicy((currentPolicy) => ({ ...currentPolicy, [fieldName]: value }));
@@ -383,10 +403,10 @@ export default function AdminPointPolicy() {
                   fontWeight="700"
                   color="#1e293b"
                 >
-                  {t("common.systemAdmin")}
+                  {currentUser?.name || "Admin"}
                 </Typography>
                 <Typography variant="caption" fontWeight="500" color="#94a3b8">
-                  {t("common.administrator")}
+                  {currentUser?.role || "Admin"}
                 </Typography>
               </Box>
               <IconButton
@@ -426,7 +446,7 @@ export default function AdminPointPolicy() {
                   }}
                 >
                   <Typography fontSize="13px" fontWeight="500" color="#64748b">
-                    admin@smartlab.ac.th
+                    {currentUser?.email || "—"}
                   </Typography>
                   <IconButton
                     size="small"

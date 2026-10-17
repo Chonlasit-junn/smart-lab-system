@@ -55,7 +55,7 @@ const stringToColor = (string) => {
 
 export default function Admin() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
 
   // --- User menu (avatar dropdown) ---
@@ -251,10 +251,10 @@ export default function Admin() {
                   fontWeight="700"
                   color="#1e293b"
                 >
-                  {t("common.systemAdmin")}
+                  {currentUser?.name || "Admin"}
                 </Typography>
                 <Typography variant="caption" fontWeight="500" color="#94a3b8">
-                  {t("common.administrator")}
+                  {currentUser?.role || "Admin"}
                 </Typography>
               </Box>
               <IconButton
@@ -309,7 +309,7 @@ export default function Admin() {
                     color="#64748b"
                     sx={{ pl: 0.5 }}
                   >
-                    admin@smartlab.ac.th
+                    {currentUser?.email || "—"}
                   </Typography>
                   <IconButton size="small" onClick={handleCloseUserMenu}>
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />
@@ -338,7 +338,7 @@ export default function Admin() {
                     fontWeight="600"
                     fontSize="18px"
                   >
-                    {t("common.systemAdmin")}
+                    {currentUser?.name || "Admin"}
                   </Typography>
 
                   <Button

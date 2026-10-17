@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -87,25 +87,52 @@ const isInternalAdminPointLog = (log) =>
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
+  const {
+    currentUser,
+    currentProfile,
+    profileRefreshPendingFor,
+    logout,
+  } = useAuth();
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pointLogs, setPointLogs] = useState([]);
+  const [pointLogsReady, setPointLogsReady] = useState(false);
+  const [pointLogsAvailable, setPointLogsAvailable] = useState(false);
+  const [pointLogsUserIdentity, setPointLogsUserIdentity] = useState(null);
   const [pointsError, setPointsError] = useState("");
   const [pointRequestLoading, setPointRequestLoading] = useState(false);
+  const userIdentity = currentUser?.email || currentUser?.id;
 
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
 
-    if (!currentUser) {
+    if (!userIdentity) {
       setProfile(null);
       navigate("/");
       return () => controller.abort();
+    }
+
+    const hasFreshProfile =
+      currentProfile?.identity === userIdentity &&
+      Date.now() - currentProfile.fetchedAt < 60_000;
+
+    if (profileRefreshPendingFor === userIdentity && !hasFreshProfile) {
+      setProfile(null);
+      setPointLogs([]);
+      setPointLogsReady(false);
+      setPointLogsAvailable(false);
+      setLoading(true);
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
     }
 
     // Clear the previous account while the new account is loading. Without
@@ -113,6 +140,9 @@ export default function Profile() {
     // current user's profile (for example, showing the Admin profile to a
     // Student after switching accounts).
     setProfile(null);
+    setPointLogs([]);
+    setPointLogsReady(false);
+    setPointLogsAvailable(false);
 
     const loadProfile = async () => {
       try {
@@ -124,7 +154,9 @@ export default function Profile() {
         const requestConfig = { headers, signal: controller.signal };
 
         const [profileResult, pointsResult, logsResult] = await Promise.allSettled([
-          axios.get(`${API_URL}/users/me`, requestConfig),
+          hasFreshProfile
+            ? Promise.resolve({ data: currentProfile.data })
+            : axios.get(`${API_URL}/users/me`, requestConfig),
           axios.get(`${API_URL}/users/me/points`, requestConfig),
           axios.get(
             `${API_URL}/users/me/points/logs?limit=20&notifications_only=true`,
@@ -133,6 +165,15 @@ export default function Profile() {
         ]);
 
         if (cancelled) return;
+        const hasPointLogs =
+          logsResult.status === "fulfilled" &&
+          Array.isArray(logsResult.value.data?.data);
+        const logs = hasPointLogs ? logsResult.value.data.data : [];
+        setPointLogs(logs.filter((log) => !isInternalAdminPointLog(log)));
+        setPointLogsReady(true);
+        setPointLogsAvailable(hasPointLogs);
+        setPointLogsUserIdentity(userIdentity);
+
         if (profileResult.status !== "fulfilled") {
           throw profileResult.reason;
         }
@@ -144,17 +185,12 @@ export default function Profile() {
             : { points: null, daily_score: null, points_loaded: false };
 
         if (pointsResult.status !== "fulfilled") {
-          setPointsError(t("user.pointsLoadFailed"));
+          setPointsError(tRef.current("user.pointsLoadFailed"));
         }
         setProfile({ ...profileData, ...pointData });
-        const logs =
-          logsResult.status === "fulfilled" && Array.isArray(logsResult.value.data.data)
-            ? logsResult.value.data.data
-            : [];
-        setPointLogs(logs.filter((log) => !isInternalAdminPointLog(log)));
       } catch (err) {
         if (cancelled || axios.isCancel(err)) return;
-        setError(t("user.profileLoadFailed"));
+        setError(tRef.current("user.profileLoadFailed"));
         console.error("[Profile] fetch failed:", err);
       } finally {
         if (!cancelled) setLoading(false);
@@ -167,7 +203,7 @@ export default function Profile() {
       cancelled = true;
       controller.abort();
     };
-  }, [currentUser, navigate, t]);
+  }, [currentProfile, navigate, profileRefreshPendingFor, userIdentity]);
 
   // Add User Menu Popover States
   const [anchorEl, setAnchorEl] = useState(null);
@@ -310,7 +346,16 @@ export default function Profile() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <NotificationBell />
+            <NotificationBell
+              initialPointLogs={
+                pointLogsUserIdentity === userIdentity && pointLogsAvailable
+                  ? pointLogs
+                  : null
+              }
+              deferInitialFetch={
+                pointLogsUserIdentity !== userIdentity || !pointLogsReady
+              }
+            />
             {currentUser ? (
               <Box
                 sx={{

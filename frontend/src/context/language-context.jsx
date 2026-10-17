@@ -18,8 +18,6 @@ const messages = {
       support: "ช่วยเหลือ",
       notifications: "การแจ้งเตือน",
       noNotifications: "ยังไม่มีการแจ้งเตือน",
-      systemAdmin: "ผู้ดูแลระบบ",
-      administrator: "ผู้ดูแลระบบ",
       profile: "โปรไฟล์",
       manageAccount: "จัดการบัญชี",
       guestUser: "ผู้ใช้ Guest",
@@ -221,7 +219,6 @@ const messages = {
       unableToFetchLabs: "ไม่สามารถโหลดข้อมูลห้อง Lab ได้ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่",
       unableToFetchSchedule: "ไม่สามารถโหลดตารางห้องได้ กรุณารีเฟรชหน้า",
       bookingFailed: "จองห้องไม่สำเร็จ",
-      generalUsagePurpose: "ใช้งานทั่วไป",
     },
     admin: {
       navOverview: "ภาพรวม",
@@ -606,8 +603,6 @@ const messages = {
       support: "Support",
       notifications: "Notifications",
       noNotifications: "No notifications yet",
-      systemAdmin: "System Admin",
-      administrator: "Administrator",
       profile: "Profile",
       manageAccount: "Manage your account",
       guestUser: "Guest User",
@@ -809,7 +804,6 @@ const messages = {
       unableToFetchLabs: "Unable to load labs. Check your connection and try again.",
       unableToFetchSchedule: "Unable to load the room schedule. Please refresh the page.",
       bookingFailed: "Booking failed",
-      generalUsagePurpose: "General use",
     },
     admin: {
       navOverview: "Overview",
@@ -1205,6 +1199,7 @@ export function LanguageProvider({ children }) {
     isEnglish: language === "en",
     setLanguage,
     toggleLanguage: () => setLanguage((current) => (current === "th" ? "en" : "th")),
+    // Translate explicit UI message keys only; keep account and record values raw.
     t: (key, fallback) => readMessage(language, key) ?? readMessage("th", key) ?? fallback ?? key,
   }), [language]);
 

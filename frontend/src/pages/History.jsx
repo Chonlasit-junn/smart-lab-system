@@ -1,7 +1,7 @@
 // ============================================================================
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Typography,
@@ -54,9 +54,14 @@ export default function History() {
   const PAGE_SIZE = 20;
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const historyControllerRef = useRef(null);
 
   const fetchMyHistory = useCallback(async () => {
+    historyControllerRef.current?.abort();
+    historyControllerRef.current = null;
     if (!currentUser) return;
+    const controller = new AbortController();
+    historyControllerRef.current = controller;
     try {
       setLoading(true);
       const token = localStorage.getItem("access_token");
@@ -64,15 +69,22 @@ export default function History() {
         `${API_URL}/bookings/user/${currentUser.email}`,
         {
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
           params: { scope: "history", page, page_size: PAGE_SIZE },
         },
       );
+      if (historyControllerRef.current !== controller) return;
       setPastBookings(response.data?.data || []);
       setTotal(Number(response.data?.total) || 0);
     } catch (error) {
-      console.error("[API Error] Failed to fetch history:", error);
+      if (!axios.isCancel(error) && historyControllerRef.current === controller) {
+        console.error("[API Error] Failed to fetch history:", error);
+      }
     } finally {
-      setLoading(false);
+      if (historyControllerRef.current === controller) {
+        historyControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [currentUser, page]);
 
@@ -83,6 +95,8 @@ export default function History() {
     }
     fetchMyHistory();
   }, [currentUser, fetchMyHistory, navigate]);
+
+  useEffect(() => () => historyControllerRef.current?.abort(), []);
 
   // Add User Menu Popover States
   const [anchorEl, setAnchorEl] = useState(null);

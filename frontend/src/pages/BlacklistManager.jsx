@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Typography,
@@ -51,8 +51,9 @@ const EMPTY_FORM = { app_name: "", description: "" };
 
 export default function BlacklistManager() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const blacklistControllerRef = useRef(null);
 
   // --- User menu (avatar dropdown) ---
   const [anchorEl, setAnchorEl] = useState(null);
@@ -75,24 +76,41 @@ export default function BlacklistManager() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState("");
 
-  useEffect(() => {
-    document.title = `${t("admin.blacklistTitle")} | Smart Lab Admin`;
-    fetchBlacklist();
-  }, [t]);
-
   // --- API ---
+  const fetchBlacklist = useCallback(async () => {
+    blacklistControllerRef.current?.abort();
+    const controller = new AbortController();
+    blacklistControllerRef.current = controller;
 
-  const fetchBlacklist = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_URL}/admin/blacklist`, authConfig());
+      const res = await axios.get(`${API_URL}/admin/blacklist`, {
+        ...authConfig(),
+        signal: controller.signal,
+      });
+      if (blacklistControllerRef.current !== controller) return;
       setBlacklist(res.data.data || []);
     } catch (err) {
-      console.error("[Blacklist] fetch failed:", err);
+      if (!axios.isCancel(err) && blacklistControllerRef.current === controller) {
+        console.error("[Blacklist] fetch failed:", err);
+      }
     } finally {
-      setLoading(false);
+      if (blacklistControllerRef.current === controller) {
+        blacklistControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    document.title = `${t("admin.blacklistTitle")} | Smart Lab Admin`;
+  }, [t]);
+
+  useEffect(() => {
+    fetchBlacklist();
+  }, [fetchBlacklist]);
+
+  useEffect(() => () => blacklistControllerRef.current?.abort(), []);
 
   const handleOpenAdd = () => {
     setIsEditing(false);
@@ -287,10 +305,10 @@ export default function BlacklistManager() {
                   fontWeight="700"
                   color="#1e293b"
                 >
-                  {t("common.systemAdmin")}
+                  {currentUser?.name || "Admin"}
                 </Typography>
                 <Typography variant="caption" fontWeight="500" color="#94a3b8">
-                  {t("common.administrator")}
+                  {currentUser?.role || "Admin"}
                 </Typography>
               </Box>
               <IconButton
@@ -345,7 +363,7 @@ export default function BlacklistManager() {
                     color="#64748b"
                     sx={{ pl: 0.5 }}
                   >
-                    admin@smartlab.ac.th
+                    {currentUser?.email || "—"}
                   </Typography>
                   <IconButton size="small" onClick={handleCloseUserMenu}>
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />
@@ -374,7 +392,7 @@ export default function BlacklistManager() {
                     fontWeight="600"
                     fontSize="18px"
                   >
-                    {t("common.systemAdmin")}
+                    {currentUser?.name || "Admin"}
                   </Typography>
 
                   <Button

@@ -67,29 +67,49 @@ function mergeProfileIntoUser(tokenUser, profile) {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(readStoredUser);
   const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('access_token')));
+  const [currentProfile, setCurrentProfile] = useState(null);
+  const [profileRefreshPendingFor, setProfileRefreshPendingFor] = useState(null);
 
   const refreshCurrentUser = useCallback(async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
       setCurrentUser(null);
+      setCurrentProfile(null);
+      setProfileRefreshPendingFor(null);
       return null;
     }
+
+    const tokenUser = readStoredUser();
+    const identity = tokenUser?.email;
+    setProfileRefreshPendingFor(identity || null);
 
     try {
       const response = await axios.get(`${API_URL}/users/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const tokenUser = readStoredUser();
-      if (!tokenUser) return null;
-      const nextUser = mergeProfileIntoUser(tokenUser, response.data || {});
+      if (localStorage.getItem('access_token') !== token || !tokenUser) return null;
+      const profile = response.data || {};
+      const nextUser = mergeProfileIntoUser(tokenUser, profile);
       setCurrentUser(nextUser);
+      setCurrentProfile({
+        identity: profile.email || tokenUser.email,
+        data: profile,
+        fetchedAt: Date.now(),
+      });
       return nextUser;
     } catch (error) {
+      if (localStorage.getItem('access_token') !== token) return null;
       if ([401, 404].includes(error.response?.status)) {
         localStorage.removeItem('access_token');
         setCurrentUser(null);
+        setCurrentProfile(null);
+        setProfileRefreshPendingFor(null);
       }
       return null;
+    } finally {
+      if (localStorage.getItem('access_token') === token) {
+        setProfileRefreshPendingFor(null);
+      }
     }
   }, []);
 
@@ -102,7 +122,6 @@ export const AuthProvider = ({ children }) => {
     }
 
     // The refresh synchronizes the token with the authoritative profile API.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshCurrentUser().finally(() => {
       if (mounted) setLoading(false);
     });
@@ -115,6 +134,7 @@ export const AuthProvider = ({ children }) => {
   const login = (token) => {
     localStorage.setItem('access_token', token);
     setCurrentUser(readStoredUser());
+    setCurrentProfile(null);
     setLoading(false);
     void refreshCurrentUser();
   };
@@ -122,10 +142,20 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('access_token');
     setCurrentUser(null);
+    setCurrentProfile(null);
+    setProfileRefreshPendingFor(null);
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, login, logout, loading, refreshCurrentUser }}>
+    <AuthContext.Provider value={{
+      currentUser,
+      currentProfile,
+      profileRefreshPendingFor,
+      login,
+      logout,
+      loading,
+      refreshCurrentUser,
+    }}>
       {!loading && children}
     </AuthContext.Provider>
   );

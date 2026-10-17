@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -89,6 +89,9 @@ export default function RoleManagement() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const rolesControllerRef = useRef(null);
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [roles, setRoles] = useState([]);
@@ -104,27 +107,41 @@ export default function RoleManagement() {
   const [savingRole, setSavingRole] = useState(false);
 
   const fetchRoleData = useCallback(async () => {
+    rolesControllerRef.current?.abort();
+    const controller = new AbortController();
+    rolesControllerRef.current = controller;
+
     try {
       setLoading(true);
       setError("");
-      const requestConfig = authConfig();
+      const requestConfig = { ...authConfig(), signal: controller.signal };
       const [rolesResponse, usersResponse] = await Promise.all([
         axios.get(`${API_URL}/admin/roles`, requestConfig),
         axios.get(`${API_URL}/admin/roles/users`, requestConfig),
       ]);
+      if (rolesControllerRef.current !== controller) return;
       setRoles(Array.isArray(rolesResponse.data?.data) ? rolesResponse.data.data : []);
       setUsers(Array.isArray(usersResponse.data?.data) ? usersResponse.data.data : []);
     } catch (requestError) {
-      setError(getErrorMessage(requestError, t("admin.unableToLoadRoles")));
+      if (axios.isCancel(requestError) || rolesControllerRef.current !== controller) return;
+      setError(getErrorMessage(requestError, tRef.current("admin.unableToLoadRoles")));
     } finally {
-      setLoading(false);
+      if (rolesControllerRef.current === controller) {
+        rolesControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     document.title = `${t("admin.rolesTitle")} | Smart Lab Admin`;
+  }, [t]);
+
+  useEffect(() => {
     fetchRoleData();
-  }, [fetchRoleData, t]);
+  }, [fetchRoleData]);
+
+  useEffect(() => () => rolesControllerRef.current?.abort(), []);
 
   const filteredUsers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -309,10 +326,10 @@ export default function RoleManagement() {
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <Box sx={{ textAlign: "right", display: { xs: "none", sm: "block" } }}>
                 <Typography variant="subtitle2" fontWeight="700" color="#1e293b">
-                  {t("common.systemAdmin")}
+                  {currentUser?.name || "Admin"}
                 </Typography>
                 <Typography variant="caption" fontWeight="500" color="#94a3b8">
-                  {t("common.administrator")}
+                  {currentUser?.role || "Admin"}
                 </Typography>
               </Box>
               <IconButton
@@ -344,7 +361,7 @@ export default function RoleManagement() {
               >
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 2, pt: 1.5 }}>
                   <Typography fontSize="13px" fontWeight="500" color="#64748b">
-                    {currentUser?.email || "admin@smartlab.ac.th"}
+                    {currentUser?.email || "—"}
                   </Typography>
                   <IconButton size="small" onClick={() => setAnchorEl(null)} aria-label={t("common.closeMenu")}>
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />

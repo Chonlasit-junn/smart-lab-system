@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, CircularProgress, Button, Chip, Pagination
@@ -17,6 +17,7 @@ export default function TicketManager() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const ticketsControllerRef = useRef(null);
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -25,25 +26,37 @@ export default function TicketManager() {
 
   // ฟังก์ชันดึงข้อมูล Ticket ทั้งหมดจาก Backend
   const fetchTickets = useCallback(async () => {
+    ticketsControllerRef.current?.abort();
+    const controller = new AbortController();
+    ticketsControllerRef.current = controller;
     try {
       setLoading(true);
       const token = localStorage.getItem('access_token');
       const response = await axios.get(`${API_URL}/tickets`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
         params: { page, page_size: PAGE_SIZE },
       });
+      if (ticketsControllerRef.current !== controller) return;
       setTickets(response.data?.data || []);
       setTotal(Number(response.data?.total) || 0);
     } catch (error) {
-      console.error('[TicketManager] Failed to fetch tickets:', error);
+      if (!axios.isCancel(error) && ticketsControllerRef.current === controller) {
+        console.error('[TicketManager] Failed to fetch tickets:', error);
+      }
     } finally {
-      setLoading(false);
+      if (ticketsControllerRef.current === controller) {
+        ticketsControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [page]);
 
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  useEffect(() => () => ticketsControllerRef.current?.abort(), []);
 
   // ฟังก์ชันอัปเดตสถานะ Ticket เป็น Closed
   const handleCloseTicket = async (ticketId) => {

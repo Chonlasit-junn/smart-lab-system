@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -65,6 +65,9 @@ export default function MyTickets() {
   const location = useLocation();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const ticketsControllerRef = useRef(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -75,8 +78,15 @@ export default function MyTickets() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
+  const userIdentity = currentUser?.id || currentUser?.email;
+
   const fetchMyTickets = useCallback(async () => {
-    if (!currentUser) return;
+    ticketsControllerRef.current?.abort();
+    ticketsControllerRef.current = null;
+    if (!userIdentity) return;
+
+    const controller = new AbortController();
+    ticketsControllerRef.current = controller;
 
     try {
       setLoading(true);
@@ -84,28 +94,39 @@ export default function MyTickets() {
       const token = localStorage.getItem("access_token");
       const response = await axios.get(`${API_URL}/tickets/me`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
         params: { page, page_size: PAGE_SIZE },
       });
+      if (ticketsControllerRef.current !== controller) return;
       setTickets(response.data?.data || []);
       setTotal(Number(response.data?.total) || 0);
     } catch (requestError) {
+      if (axios.isCancel(requestError) || ticketsControllerRef.current !== controller) return;
       setError(
         requestError.response?.data?.detail ||
-          t("user.myTicketsLoadFailed"),
+          tRef.current("user.myTicketsLoadFailed"),
       );
     } finally {
-      setLoading(false);
+      if (ticketsControllerRef.current === controller) {
+        ticketsControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  }, [currentUser, page, t]);
+  }, [page, userIdentity]);
 
   useEffect(() => {
     document.title = `${t("user.ticketTitle")} | Smart Lab`;
-    if (!currentUser) {
+  }, [t]);
+
+  useEffect(() => {
+    if (!userIdentity) {
       navigate("/");
       return;
     }
     fetchMyTickets();
-  }, [currentUser, fetchMyTickets, navigate, t]);
+  }, [fetchMyTickets, navigate, userIdentity]);
+
+  useEffect(() => () => ticketsControllerRef.current?.abort(), []);
 
   const handleLogout = () => {
     setAnchorEl(null);

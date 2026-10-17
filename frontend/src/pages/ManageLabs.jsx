@@ -1,7 +1,7 @@
 // ============================================================================
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Typography,
@@ -90,8 +90,10 @@ const getDayLabel = (day, t) => t(`admin.weekday${day}`);
 // ============================================================================
 export default function ManageLabs() {
   const navigate = useNavigate();
-  const { currentUser, logout, refreshCurrentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const labsControllerRef = useRef(null);
+  const schedulesControllerRef = useRef(null);
 
   // --- User menu (avatar dropdown) ---
   const [anchorEl, setAnchorEl] = useState(null);
@@ -145,8 +147,12 @@ export default function ManageLabs() {
   // 5. LIFECYCLE & API CALLS
   // ============================================================================
   const fetchLabs = useCallback(async () => {
+    labsControllerRef.current?.abort();
+    const controller = new AbortController();
+    labsControllerRef.current = controller;
     try {
-      const response = await axios.get(`${API_URL}/labs`);
+      const response = await axios.get(`${API_URL}/labs`, { signal: controller.signal });
+      if (labsControllerRef.current !== controller) return;
       setLabs(response.data.data);
       setActiveLab((currentLab) => {
         if (!currentLab) return currentLab;
@@ -156,23 +162,39 @@ export default function ManageLabs() {
         );
       });
     } catch (error) {
-      console.error("[API Error] Fetch labs failed:", error);
+      if (!axios.isCancel(error) && labsControllerRef.current === controller) {
+        console.error("[API Error] Fetch labs failed:", error);
+      }
+    } finally {
+      if (labsControllerRef.current === controller) labsControllerRef.current = null;
     }
   }, []);
 
   useEffect(() => {
     // This effect intentionally loads remote data and updates state asynchronously.
-    refreshCurrentUser();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLabs();
-  }, [fetchLabs, refreshCurrentUser]);
+    return () => {
+      labsControllerRef.current?.abort();
+      schedulesControllerRef.current?.abort();
+    };
+  }, [fetchLabs]);
 
   const fetchSchedules = async (labId) => {
+    schedulesControllerRef.current?.abort();
+    const controller = new AbortController();
+    schedulesControllerRef.current = controller;
     try {
-      const response = await axios.get(`${API_URL}/labs/${labId}/schedules`);
+      const response = await axios.get(`${API_URL}/labs/${labId}/schedules`, {
+        signal: controller.signal,
+      });
+      if (schedulesControllerRef.current !== controller) return;
       setSchedules(response.data.data);
     } catch (error) {
-      console.error("[API Error] Fetch schedules failed:", error);
+      if (!axios.isCancel(error) && schedulesControllerRef.current === controller) {
+        console.error("[API Error] Fetch schedules failed:", error);
+      }
+    } finally {
+      if (schedulesControllerRef.current === controller) schedulesControllerRef.current = null;
     }
   };
 
@@ -246,6 +268,8 @@ export default function ManageLabs() {
   };
 
   const handleGoBack = () => {
+    schedulesControllerRef.current?.abort();
+    schedulesControllerRef.current = null;
     setViewMode("list");
     setActiveLab(null);
     setSchedules([]);
@@ -479,10 +503,10 @@ export default function ManageLabs() {
                   fontWeight="700"
                   color="#1e293b"
                 >
-                  {currentUser?.name || t("common.systemAdmin")}
+                  {currentUser?.name || "Admin"}
                 </Typography>
                 <Typography variant="caption" fontWeight="500" color="#94a3b8">
-                  {t("common.administrator")}
+                  {currentUser?.role || "Admin"}
                 </Typography>
               </Box>
               <IconButton
@@ -537,7 +561,7 @@ export default function ManageLabs() {
                     color="#64748b"
                     sx={{ pl: 0.5 }}
                   >
-                    {currentUser?.email || "admin@smartlab.ac.th"}
+                    {currentUser?.email || "—"}
                   </Typography>
                   <IconButton size="small" onClick={handleCloseUserMenu}>
                     <Close sx={{ fontSize: 18, color: "#64748b" }} />
@@ -566,7 +590,7 @@ export default function ManageLabs() {
                     fontWeight="600"
                     fontSize="18px"
                   >
-                    {currentUser?.name || t("common.systemAdmin")}
+                    {currentUser?.name || "Admin"}
                   </Typography>
 
                   <Button

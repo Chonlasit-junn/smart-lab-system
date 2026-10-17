@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -124,8 +124,12 @@ const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
 export default function AdminPoints() {
   const PAGE_SIZE = 25;
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const pointsControllerRef = useRef(null);
+  const detailControllerRef = useRef(null);
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [rows, setRows] = useState([]);
@@ -154,16 +158,23 @@ export default function AdminPoints() {
   const fetchPoints = useCallback(async () => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setError(t("admin.adminLoginRequired"));
+      pointsControllerRef.current?.abort();
+      pointsControllerRef.current = null;
+      setError(tRef.current("admin.adminLoginRequired"));
       setLoading(false);
       return;
     }
+
+    pointsControllerRef.current?.abort();
+    const controller = new AbortController();
+    pointsControllerRef.current = controller;
 
     try {
       setLoading(true);
       setError("");
       const response = await axios.get(`${API_URL}/admin/points`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
         params: {
           page,
           page_size: PAGE_SIZE,
@@ -172,6 +183,7 @@ export default function AdminPoints() {
           sort_by: sortBy,
         },
       });
+      if (pointsControllerRef.current !== controller) return;
       const payload = response.data || {};
       const nextWarningThreshold = Number.isFinite(Number(payload.points_warning_threshold))
         ? Number(payload.points_warning_threshold)
@@ -185,14 +197,18 @@ export default function AdminPoints() {
       setPointRequests(pendingPointRequests);
       setTotal(Number(payload.total) || 0);
     } catch (requestError) {
+      if (axios.isCancel(requestError) || pointsControllerRef.current !== controller) return;
       const detail = requestError.response?.data?.detail;
       setError(
-        typeof detail === "string" ? detail : t("admin.loadUserPointsFailed"),
+        typeof detail === "string" ? detail : tRef.current("admin.loadUserPointsFailed"),
       );
     } finally {
-      setLoading(false);
+      if (pointsControllerRef.current === controller) {
+        pointsControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  }, [filter, page, searchTerm, sortBy, t]);
+  }, [filter, page, searchTerm, sortBy]);
 
   useEffect(() => {
     document.title = `${t("admin.pointsTitle")} | Smart Lab Admin`;
@@ -210,6 +226,11 @@ export default function AdminPoints() {
     fetchPoints();
   }, [fetchPoints]);
 
+  useEffect(() => () => {
+    pointsControllerRef.current?.abort();
+    detailControllerRef.current?.abort();
+  }, []);
+
   const handleLogout = () => {
     setAnchorEl(null);
     logout();
@@ -218,6 +239,8 @@ export default function AdminPoints() {
 
   const handleOpenUserDetail = async (user) => {
     const token = localStorage.getItem("access_token");
+    detailControllerRef.current?.abort();
+    detailControllerRef.current = null;
     setSelectedUser(user);
     setUserDetail(null);
     setDetailTab(0);
@@ -229,16 +252,22 @@ export default function AdminPoints() {
       return;
     }
 
+    const controller = new AbortController();
+    detailControllerRef.current = controller;
+
     try {
       setDetailLoading(true);
       const response = await axios.get(
         `${API_URL}/admin/users/${user.user_id}/details`,
         {
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
         },
       );
+      if (detailControllerRef.current !== controller) return;
       setUserDetail(response.data || null);
     } catch (requestError) {
+      if (axios.isCancel(requestError) || detailControllerRef.current !== controller) return;
       const detail = requestError.response?.data?.detail;
       setDetailError(
         typeof detail === "string"
@@ -246,13 +275,19 @@ export default function AdminPoints() {
           : t("admin.loadUserDetailFailed"),
       );
     } finally {
-      setDetailLoading(false);
+      if (detailControllerRef.current === controller) {
+        detailControllerRef.current = null;
+        setDetailLoading(false);
+      }
     }
   };
 
   const handleCloseUserDetail = () => {
+    detailControllerRef.current?.abort();
+    detailControllerRef.current = null;
     setDetailOpen(false);
     setDetailError("");
+    setDetailLoading(false);
   };
 
   const handlePointRequestAction = async (requestId, action) => {
@@ -526,10 +561,10 @@ export default function AdminPoints() {
                   fontWeight="700"
                   color="var(--text-dark)"
                 >
-                  {t("common.systemAdmin")}
+                  {currentUser?.name || "Admin"}
                 </Typography>
                 <Typography variant="caption" fontWeight="500" color="var(--text-muted)">
-                  {t("common.administrator")}
+                  {currentUser?.role || "Admin"}
                 </Typography>
               </Box>
               <IconButton
@@ -567,7 +602,7 @@ export default function AdminPoints() {
                   }}
                 >
                   <Typography fontSize="13px" fontWeight="500" color="var(--text-muted)">
-                    admin@smartlab.ac.th
+                    {currentUser?.email || "—"}
                   </Typography>
                   <IconButton
                     size="small"

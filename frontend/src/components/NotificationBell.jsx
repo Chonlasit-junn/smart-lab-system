@@ -20,11 +20,24 @@ export default function NotificationBell({
   className = "header-notification-button",
   iconColor = "#111827",
   loadNotifications = true,
+  initialPointLogs = null,
+  deferInitialFetch = false,
 }) {
   const { currentUser } = useAuth();
   const { t } = useLanguage();
   const [anchorEl, setAnchorEl] = useState(null);
-  const [pointLogs, setPointLogs] = useState([]);
+  const [pointLogState, setPointLogState] = useState(() => ({
+    email: currentUser?.email || null,
+    logs: initialPointLogs || [],
+    fetched: false,
+  }));
+  const pointLogs = useMemo(() => {
+    if (pointLogState.email === currentUser?.email && pointLogState.fetched) {
+      return pointLogState.logs;
+    }
+    return initialPointLogs ??
+      (pointLogState.email === currentUser?.email ? pointLogState.logs : []);
+  }, [currentUser?.email, initialPointLogs, pointLogState]);
   const [lastSeenLogId, setLastSeenLogId] = useState(
     () => Number(localStorage.getItem(LAST_SEEN_POINT_LOG_KEY)) || 0,
   );
@@ -35,30 +48,49 @@ export default function NotificationBell({
     }
 
     let cancelled = false;
+    let activeController = null;
+    const hasInitialPointLogs = Array.isArray(initialPointLogs);
     const token = localStorage.getItem("access_token");
 
     const fetchPointLogs = async () => {
+      if (cancelled || activeController) return;
+      const controller = new AbortController();
+      activeController = controller;
       try {
         const response = await axios.get(
           `${API_URL}/users/me/points/logs?limit=10&notifications_only=true`,
-          { headers: { Authorization: `Bearer ${token}` } },
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
+          },
         );
-        if (!cancelled) setPointLogs(response.data?.data || []);
-      } catch (error) {
         if (!cancelled) {
+          setPointLogState({
+            email: currentUser.email,
+            logs: response.data?.data || [],
+            fetched: true,
+          });
+        }
+      } catch (error) {
+        if (!cancelled && !axios.isCancel(error)) {
           console.error("[API Error] Failed to fetch notifications:", error);
         }
+      } finally {
+        if (activeController === controller) activeController = null;
       }
     };
 
-    fetchPointLogs();
-    const intervalId = setInterval(fetchPointLogs, 15000);
+    if (!hasInitialPointLogs && !deferInitialFetch) fetchPointLogs();
+    const intervalId = deferInitialFetch
+      ? null
+      : setInterval(fetchPointLogs, 15000);
 
     return () => {
       cancelled = true;
-      clearInterval(intervalId);
+      if (intervalId) clearInterval(intervalId);
+      activeController?.abort();
     };
-  }, [currentUser?.email, loadNotifications]);
+  }, [currentUser?.email, deferInitialFetch, initialPointLogs, loadNotifications]);
 
   const visiblePointLogs = useMemo(
     () =>
@@ -67,7 +99,7 @@ export default function NotificationBell({
           !HIDDEN_POINT_NOTIFICATION_REASONS.has(log.reason) &&
           log.source_type !== "admin_test" &&
           !String(log.reason || "").startsWith("admin_"),
-      ),
+      ).slice(0, 10),
     [pointLogs],
   );
 

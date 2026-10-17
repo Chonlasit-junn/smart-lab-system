@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -64,8 +64,11 @@ const getProfileImage = (profilePic) => {
 
 export default function VerifyUsers() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const pendingUsersControllerRef = useRef(null);
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -75,27 +78,44 @@ export default function VerifyUsers() {
   const [error, setError] = useState("");
 
   const fetchPendingUsers = useCallback(async () => {
+    pendingUsersControllerRef.current?.abort();
+    const controller = new AbortController();
+    pendingUsersControllerRef.current = controller;
+
     try {
       setLoading(true);
       setError("");
-      const response = await axios.get(`${API_URL}/admin/users/pending`, authConfig());
+      const response = await axios.get(`${API_URL}/admin/users/pending`, {
+        ...authConfig(),
+        signal: controller.signal,
+      });
+      if (pendingUsersControllerRef.current !== controller) return;
       setPendingUsers(response.data?.data || []);
     } catch (requestError) {
+      if (axios.isCancel(requestError) || pendingUsersControllerRef.current !== controller) return;
       const detail = requestError.response?.data?.detail;
       setError(
         typeof detail === "string"
           ? detail
-          : t("admin.pendingUsersLoadFailed"),
+          : tRef.current("admin.pendingUsersLoadFailed"),
       );
     } finally {
-      setLoading(false);
+      if (pendingUsersControllerRef.current === controller) {
+        pendingUsersControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     document.title = `${t("admin.verifyTitle")} | Smart Lab Admin`;
+  }, [t]);
+
+  useEffect(() => {
     fetchPendingUsers();
-  }, [fetchPendingUsers, t]);
+  }, [fetchPendingUsers]);
+
+  useEffect(() => () => pendingUsersControllerRef.current?.abort(), []);
 
   const handleVerify = async (userId, action) => {
     if (
@@ -292,10 +312,10 @@ export default function VerifyUsers() {
                   fontWeight="700"
                   color="#1e293b"
                 >
-                  {t("common.systemAdmin")}
+                  {currentUser?.name || "Admin"}
                 </Typography>
                 <Typography variant="caption" fontWeight="500" color="#94a3b8">
-                  {t("common.administrator")}
+                  {currentUser?.role || "Admin"}
                 </Typography>
               </Box>
               <IconButton
@@ -333,7 +353,7 @@ export default function VerifyUsers() {
                   }}
                 >
                   <Typography fontSize="13px" fontWeight="500" color="#64748b">
-                    admin@smartlab.ac.th
+                    {currentUser?.email || "—"}
                   </Typography>
                   <IconButton
                     size="small"

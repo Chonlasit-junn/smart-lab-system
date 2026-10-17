@@ -1,7 +1,7 @@
 // ============================================================================
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Typography,
@@ -61,27 +61,39 @@ export default function Reserved() {
   const PAGE_SIZE = 20;
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const bookingsControllerRef = useRef(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState(null);
 
   const fetchMyBookings = useCallback(async () => {
+    bookingsControllerRef.current?.abort();
+    bookingsControllerRef.current = null;
     if (!currentUser) return;
+    const controller = new AbortController();
     try {
+      bookingsControllerRef.current = controller;
       setLoading(true);
       const token = localStorage.getItem("access_token");
       const response = await axios.get(
         `${API_URL}/bookings/user/${currentUser.email}`,
         {
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
           params: { scope: "upcoming", page, page_size: PAGE_SIZE },
         },
       );
+      if (bookingsControllerRef.current !== controller) return;
       setBookings(response.data?.data || []);
       setTotal(Number(response.data?.total) || 0);
     } catch (error) {
-      console.error("[API Error] Failed to fetch bookings:", error);
+      if (!axios.isCancel(error) && bookingsControllerRef.current === controller) {
+        console.error("[API Error] Failed to fetch bookings:", error);
+      }
     } finally {
-      setLoading(false);
+      if (bookingsControllerRef.current === controller) {
+        bookingsControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [currentUser, page]);
 
@@ -92,6 +104,8 @@ export default function Reserved() {
     }
     fetchMyBookings();
   }, [currentUser, fetchMyBookings, navigate]);
+
+  useEffect(() => () => bookingsControllerRef.current?.abort(), []);
 
   const handleConfirmCancel = async () => {
     if (!bookingToCancel) return;
