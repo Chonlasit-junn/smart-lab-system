@@ -26,3 +26,12 @@ responses are synthetic, including errors; no production database is accessed.
 To check the compiled chunks too, run `npm run build`, start
 `npm run preview -- --host 127.0.0.1 --port 5181 --strictPort`, set
 `SMART_LAB_E2E_URL=http://127.0.0.1:5181`, then run the same script.
+
+`node e2e/notification-regressions.mjs` uses the same setup with virtual time
+and controlled visibility/online events. It checks one shared feed across
+Booking, History and Profile, 10 bell items vs 20 history items, paused polling,
+resume, logout/login ownership, Admin's disabled feed, and error/retry/empty
+states and cross-tab credential replacement in both languages. It also checks
+the popover's transition and scrollable list. Every API is mocked; no real
+account is created.
+`npm test` additionally covers slow and late responses with a fake clock.

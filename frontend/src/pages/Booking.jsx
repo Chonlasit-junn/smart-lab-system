@@ -18,11 +18,9 @@ import {
   Dialog,
   DialogContent,
   Popover,
-  Badge,
 } from "@mui/material";
 import {
   Search,
-  Notifications,
   EventNote,
   Assignment,
   History,
@@ -46,8 +44,6 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
-import { formatDateTime } from "../utils/dateFormat";
-import { getPointReasonLabel } from "../utils/pointReason";
 import { buildBookingPayload } from "../utils/bookingPayload";
 import {
   getLabCalendarDate,
@@ -56,7 +52,7 @@ import {
   getLabNowReference,
 } from "../utils/labTime";
 import SupportModal from "./SupportModal";
-import { useNotificationReadState } from "../context/useNotificationReadState.js";
+import NotificationBell from "../components/NotificationBell";
 
 // API Endpoint configuration
 const API_URL = import.meta.env.VITE_API_URL;
@@ -76,13 +72,6 @@ const SLOT_TIMES = {
   4: { hours: 17, minutes: 0 },
 };
 
-// Admin point actions stay available in the Profile audit history, but do not
-// appear in the User notification bell.
-const HIDDEN_POINT_NOTIFICATION_REASONS = new Set([
-  "admin_grant",
-  "admin_test_deduction",
-  "admin_test_reset",
-]);
 
 // ============================================================================
 // 2. MAIN COMPONENT
@@ -111,10 +100,6 @@ export default function Booking() {
   const [availability, setAvailability] = useState(null);
   const [pointStatus, setPointStatus] = useState(null);
   const [pointsLoading, setPointsLoading] = useState(false);
-  const [pointLogState, setPointLogState] = useState({ email: null, logs: [] });
-  const pointLogs = useMemo(() => pointLogState.email === currentUser?.email ? pointLogState.logs : [],
-    [pointLogState, currentUser?.email]);
-  const [lastSeenLogId, markNotificationsRead] = useNotificationReadState(currentUser?.email);
   const [pointsError, setPointsError] = useState("");
   const [pointRequestLoading, setPointRequestLoading] = useState(false);
 
@@ -184,53 +169,6 @@ export default function Booking() {
     };
   }, [currentUser?.email]);
 
-  // Fetch recent point-change history to populate the notification bell.
-  useEffect(() => {
-    if (!currentUser?.email) {
-      setPointLogState({ email: null, logs: [] });
-      return undefined;
-    }
-
-    let cancelled = false;
-    let activeController = null;
-    const token = localStorage.getItem("access_token");
-
-    // สร้างฟังก์ชันสำหรับดึงประวัติแจ้งเตือน
-    const fetchPointLogs = async () => {
-      if (cancelled || activeController) return;
-      const controller = new AbortController();
-      activeController = controller;
-      try {
-        const response = await axios.get(
-          `${API_URL}/users/me/points/logs?limit=10&notifications_only=true`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
-          },
-        );
-        if (!cancelled) setPointLogState({ email: currentUser.email, logs: response.data?.data || [] });
-      } catch (error) {
-        if (!cancelled && !axios.isCancel(error)) {
-          console.error("[API Error] Failed to fetch point logs:", error);
-        }
-      } finally {
-        if (activeController === controller) activeController = null;
-      }
-    };
-
-    // 1. เรียกทำงานทันที 1 ครั้งเมื่อเข้าหน้าเว็บ
-    fetchPointLogs();
-
-    // 2. ตั้งเวลาให้ดึงข้อมูลใหม่ทุกๆ 15,000 มิลลิวินาที (15 วินาที)
-    const intervalId = setInterval(fetchPointLogs, 15000);
-
-    // 3. ล้าง Interval เมื่อออกจากหน้าเพื่อป้องกัน Memory Leak
-    return () => {
-      cancelled = true;
-      clearInterval(intervalId);
-      activeController?.abort();
-    };
-  }, [currentUser?.email]);
 
   useEffect(() => () => availabilityControllerRef.current?.abort(), []);
 
@@ -484,48 +422,6 @@ export default function Booking() {
     navigate("/");
   };
 
-  // Add Notification Popover States (UI only - no data yet)
-  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
-  const openNotifMenu = Boolean(notifAnchorEl);
-
-  const visiblePointLogs = useMemo(
-    () => pointLogs.filter((log) => !HIDDEN_POINT_NOTIFICATION_REASONS.has(log.reason)),
-    [pointLogs],
-  );
-
-  const handleNotifClick = (e) => {
-    setNotifAnchorEl(e.currentTarget);
-    // Mark all currently loaded point-change notifications as seen.
-    if (visiblePointLogs.length > 0) {
-      const latestId = Math.max(...visiblePointLogs.map((log) => log.id));
-      if (latestId > lastSeenLogId) {
-        markNotificationsRead(latestId);
-      }
-    }
-  };
-  const handleCloseNotifMenu = () => setNotifAnchorEl(null);
-
-  // Notifications are derived from the user's point-change history.
-  const notifications = useMemo(
-    () =>
-      visiblePointLogs.map((log) => {
-        const isPositive = log.change > 0;
-        const reasonLabel = getPointReasonLabel(log.reason, t);
-        return {
-          id: log.id,
-          title: `${reasonLabel} ${isPositive ? "+" : ""}${log.change} ${t("common.points")}`,
-          subtitle: log.note || "—",
-          time: formatDateTime(log.created_at, t("common.locale"), {
-            fallback: "—",
-            includeSeconds: true,
-          }),
-          color: isPositive ? "#16a34a" : "#dc2626",
-          iconText: isPositive ? "+" : "-",
-          unread: log.id > lastSeenLogId,
-        };
-      }),
-    [visiblePointLogs, lastSeenLogId, t],
-  );
 
   // ============================================================================
   // 7. RENDER HELPERS
@@ -636,139 +532,7 @@ export default function Booking() {
             <IconButton sx={{ display: { xs: "block", md: "none" } }}>
               <Search sx={{ color: "#111827" }} />
             </IconButton>
-            <IconButton className="header-notification-button" onClick={handleNotifClick} aria-label={t("common.notifications")}>
-              <Badge
-                variant="dot"
-                color="error"
-                overlap="circular"
-                invisible={!notifications.some((n) => n.unread)}
-              >
-                <Notifications sx={{ color: "#111827" }} />
-              </Badge>
-            </IconButton>
-
-            {/* Notification Popover */}
-            <Popover
-              anchorEl={notifAnchorEl}
-              open={openNotifMenu}
-              onClose={handleCloseNotifMenu}
-              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-              transformOrigin={{ vertical: "top", horizontal: "right" }}
-              PaperProps={{
-                sx: {
-                  mt: 1.5,
-                  width: 380,
-                  maxWidth: "92vw",
-                  maxHeight: 520,
-                  borderRadius: 3,
-                  bgcolor: "var(--card-bg)",
-                  color: "var(--text-dark)",
-                  border: "1px solid var(--border-light)",
-                  boxShadow: "0 20px 45px rgba(15,23,42,0.35)",
-                  overflow: "hidden",
-                  display: "flex",
-                  flexDirection: "column",
-                },
-              }}
-            >
-              {/* Header */}
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  px: 2.5,
-                  py: 2,
-                  flexShrink: 0,
-                }}
-              >
-                <Typography fontSize="16px" fontWeight="600">
-                  {t("common.notifications")}
-                </Typography>
-              </Box>
-
-              {/* Scrollable notification list */}
-              <Box sx={{ overflowY: "auto", px: 1, pb: 1 }}>
-                {notifications.length === 0 ? (
-                  <Box sx={{ py: 4, textAlign: "center" }}>
-                    <Typography fontSize="13px" sx={{ color: "var(--text-gray)" }}>
-                      {t("common.noNotifications")}
-                    </Typography>
-                  </Box>
-                ) : (
-                  notifications.map((n) => (
-                    <Box
-                      key={n.id}
-                      sx={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "var(--surface-subtle)" },
-                      }}
-                    >
-                      {/* Unread dot */}
-                      <Box sx={{ pt: 1.2 }}>
-                        {n.unread ? (
-                          <Box
-                            sx={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: "50%",
-                              bgcolor: "#2563eb",
-                            }}
-                          />
-                        ) : (
-                          <Box sx={{ width: 8, height: 8 }} />
-                        )}
-                      </Box>
-
-                      <Avatar
-                        sx={{
-                          bgcolor: n.color,
-                          width: 36,
-                          height: 36,
-                          fontSize: 14,
-                        }}
-                      >
-                        {n.iconText}
-                      </Avatar>
-
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography
-                          fontSize="13.5px"
-                          fontWeight="500"
-                          sx={{
-                            color: "var(--text-dark)",
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                          }}
-                        >
-                          {n.title}
-                        </Typography>
-                        <Typography
-                          fontSize="12px"
-                          sx={{ color: "var(--text-gray)", mt: 0.3 }}
-                        >
-                          {n.subtitle}
-                        </Typography>
-                        <Typography
-                          fontSize="12px"
-                          sx={{ color: "var(--text-muted)", mt: 0.3 }}
-                        >
-                          {n.time}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  ))
-                )}
-              </Box>
-            </Popover>
+            <NotificationBell compact />
 
             {/* Profile Section */}
             {currentUser ? (

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { AuthContext } from './auth-context';
+import { notificationStore } from '../utils/notificationClient.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -101,6 +102,7 @@ export const AuthProvider = ({ children }) => {
       if (localStorage.getItem('access_token') !== token) return null;
       if ([401, 404].includes(error.response?.status)) {
         localStorage.removeItem('access_token');
+        notificationStore.reset();
         setCurrentUser(null);
         setCurrentProfile(null);
         setProfileRefreshPendingFor(null);
@@ -132,6 +134,7 @@ export const AuthProvider = ({ children }) => {
   }, [refreshCurrentUser]);
 
   const login = (token) => {
+    notificationStore.reset();
     localStorage.setItem('access_token', token);
     setCurrentUser(readStoredUser());
     setCurrentProfile(null);
@@ -141,6 +144,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('access_token');
+    notificationStore.reset();
     setCurrentUser(null);
     setCurrentProfile(null);
     setProfileRefreshPendingFor(null);

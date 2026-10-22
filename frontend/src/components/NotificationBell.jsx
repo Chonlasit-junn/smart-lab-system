@@ -1,103 +1,28 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Avatar, Badge, Box, IconButton, Popover, Typography } from "@mui/material";
 import { Notifications } from "@mui/icons-material";
-import axios from "axios";
-import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import { formatDateTime } from "../utils/dateFormat";
 import { getPointReasonLabel } from "../utils/pointReason";
 import { useNotificationReadState } from "../context/useNotificationReadState.js";
-
-const API_URL = import.meta.env.VITE_API_URL;
-
-const HIDDEN_POINT_NOTIFICATION_REASONS = new Set([
-  "admin_grant",
-  "admin_test_deduction",
-  "admin_test_reset",
-]);
+import { useNotifications } from "../context/useNotifications.js";
+import { useAuth } from "../context/auth-context";
+import LoadError from "./LoadError";
 
 export default function NotificationBell({
   className = "header-notification-button",
   iconColor = "#111827",
   loadNotifications = true,
-  initialPointLogs = null,
-  deferInitialFetch = false,
+  compact = false,
 }) {
   const { currentUser } = useAuth();
   const { t } = useLanguage();
   const [anchorEl, setAnchorEl] = useState(null);
-  const [pointLogState, setPointLogState] = useState(() => ({
-    email: currentUser?.email || null,
-    logs: initialPointLogs || [],
-    fetched: false,
-  }));
-  const pointLogs = useMemo(() => {
-    if (pointLogState.email === currentUser?.email && pointLogState.fetched) {
-      return pointLogState.logs;
-    }
-    return initialPointLogs ??
-      (pointLogState.email === currentUser?.email ? pointLogState.logs : []);
-  }, [currentUser?.email, initialPointLogs, pointLogState]);
+  const { logs: pointLogs, loading, ready, error, refresh } = useNotifications(loadNotifications);
   const [lastSeenLogId, markNotificationsRead] = useNotificationReadState(currentUser?.email);
 
-  useEffect(() => {
-    if (!loadNotifications || !currentUser?.email) {
-      return undefined;
-    }
-
-    let cancelled = false;
-    let activeController = null;
-    const hasInitialPointLogs = Array.isArray(initialPointLogs);
-    const token = localStorage.getItem("access_token");
-
-    const fetchPointLogs = async () => {
-      if (cancelled || activeController) return;
-      const controller = new AbortController();
-      activeController = controller;
-      try {
-        const response = await axios.get(
-          `${API_URL}/users/me/points/logs?limit=10&notifications_only=true`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
-          },
-        );
-        if (!cancelled) {
-          setPointLogState({
-            email: currentUser.email,
-            logs: response.data?.data || [],
-            fetched: true,
-          });
-        }
-      } catch (error) {
-        if (!cancelled && !axios.isCancel(error)) {
-          console.error("[API Error] Failed to fetch notifications:", error);
-        }
-      } finally {
-        if (activeController === controller) activeController = null;
-      }
-    };
-
-    if (!hasInitialPointLogs && !deferInitialFetch) fetchPointLogs();
-    const intervalId = deferInitialFetch
-      ? null
-      : setInterval(fetchPointLogs, 15000);
-
-    return () => {
-      cancelled = true;
-      if (intervalId) clearInterval(intervalId);
-      activeController?.abort();
-    };
-  }, [currentUser?.email, deferInitialFetch, initialPointLogs, loadNotifications]);
-
   const visiblePointLogs = useMemo(
-    () =>
-      pointLogs.filter(
-        (log) =>
-          !HIDDEN_POINT_NOTIFICATION_REASONS.has(log.reason) &&
-          log.source_type !== "admin_test" &&
-          !String(log.reason || "").startsWith("admin_"),
-      ).slice(0, 10),
+    () => pointLogs.slice(0, 10),
     [pointLogs],
   );
 
@@ -123,6 +48,7 @@ export default function NotificationBell({
 
   const handleNotificationClick = (event) => {
     setAnchorEl(event.currentTarget);
+    refresh();
     if (visiblePointLogs.length === 0) return;
 
     const latestId = Math.max(...visiblePointLogs.map((log) => log.id));
@@ -162,7 +88,7 @@ export default function NotificationBell({
             width: 380,
             maxWidth: "92vw",
             maxHeight: 520,
-            borderRadius: "var(--radius-modal)",
+            borderRadius: compact ? 3 : "var(--radius-modal)",
             bgcolor: "var(--card-bg)",
             color: "var(--text-dark)",
             border: "1px solid var(--border-light)",
@@ -188,7 +114,10 @@ export default function NotificationBell({
         </Box>
 
         <Box sx={{ overflowY: "auto", px: 1, pb: 1 }}>
-          {notifications.length === 0 ? (
+          {error && <LoadError onRetry={() => refresh(true)} />}
+          {loadNotifications && !ready && !error ? (
+            <Typography role="status" sx={{ p: 3, color: "var(--text-gray)" }}>{t("common.loading")}</Typography>
+          ) : notifications.length === 0 && !error && !loading ? (
             <Box sx={{ py: 4, textAlign: "center" }}>
               <Typography fontSize="13px" sx={{ color: "var(--text-gray)" }}>
                 {t("common.noNotifications")}
@@ -237,7 +166,7 @@ export default function NotificationBell({
 
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography
-                    fontSize="14px"
+                    fontSize={compact ? "13.5px" : "14px"}
                     fontWeight="500"
                     sx={{
                       color: "var(--text-dark)",
@@ -250,14 +179,14 @@ export default function NotificationBell({
                     {notification.title}
                   </Typography>
                   <Typography
-                    fontSize="13px"
-                    fontWeight="400"
+                    fontSize={compact ? "12px" : "13px"}
+                    fontWeight={compact ? undefined : "400"}
                     sx={{ color: "var(--text-gray)", mt: 0.3 }}
                   >
                     {notification.subtitle}
                   </Typography>
                   <Typography
-                    fontSize="12.5px"
+                    fontSize={compact ? "12px" : "12.5px"}
                     sx={{ color: "var(--text-muted)", mt: 0.3 }}
                   >
                     {notification.time}

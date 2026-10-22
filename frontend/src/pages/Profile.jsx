@@ -40,6 +40,8 @@ import { useLanguage } from "../context/language-context.js";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { getPointReasonLabel } from "../utils/pointReason";
 import NotificationBell from "../components/NotificationBell";
+import LoadError from "../components/LoadError";
+import { useNotifications } from "../context/useNotifications.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -63,12 +65,6 @@ const FACULTY_NAMES = {
   economics: "School of Economics",
 };
 
-const HIDDEN_USER_POINT_LOG_REASONS = new Set([
-  "admin_grant",
-  "admin_test_deduction",
-  "admin_test_reset",
-]);
-
 const formatPointLogSubtitle = (log, locale) => {
   const timestamp = formatDateTime(log.created_at, locale);
   const note = String(log.note || "").trim();
@@ -79,11 +75,6 @@ const formatPointLogSubtitle = (log, locale) => {
   if (!note) return timestamp;
   return `${note} · ${timestamp}`;
 };
-
-const isInternalAdminPointLog = (log) =>
-  HIDDEN_USER_POINT_LOG_REASONS.has(log.reason) ||
-  log.source_type === "admin_test" ||
-  String(log.reason || "").startsWith("admin_");
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -101,10 +92,7 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [pointLogs, setPointLogs] = useState([]);
-  const [pointLogsReady, setPointLogsReady] = useState(false);
-  const [pointLogsAvailable, setPointLogsAvailable] = useState(false);
-  const [pointLogsUserIdentity, setPointLogsUserIdentity] = useState(null);
+  const { logs: pointLogs, ready: pointLogsReady, error: pointLogsError, refresh: refreshPointLogs } = useNotifications();
   const [pointsError, setPointsError] = useState("");
   const [pointRequestLoading, setPointRequestLoading] = useState(false);
   const userIdentity = currentUser?.email || currentUser?.id;
@@ -125,9 +113,6 @@ export default function Profile() {
 
     if (profileRefreshPendingFor === userIdentity && !hasFreshProfile) {
       setProfile(null);
-      setPointLogs([]);
-      setPointLogsReady(false);
-      setPointLogsAvailable(false);
       setLoading(true);
       return () => {
         cancelled = true;
@@ -140,9 +125,6 @@ export default function Profile() {
     // current user's profile (for example, showing the Admin profile to a
     // Student after switching accounts).
     setProfile(null);
-    setPointLogs([]);
-    setPointLogsReady(false);
-    setPointLogsAvailable(false);
 
     const loadProfile = async () => {
       try {
@@ -153,26 +135,14 @@ export default function Profile() {
         const headers = { Authorization: `Bearer ${token}` };
         const requestConfig = { headers, signal: controller.signal };
 
-        const [profileResult, pointsResult, logsResult] = await Promise.allSettled([
+        const [profileResult, pointsResult] = await Promise.allSettled([
           hasFreshProfile
             ? Promise.resolve({ data: currentProfile.data })
             : axios.get(`${API_URL}/users/me`, requestConfig),
           axios.get(`${API_URL}/users/me/points`, requestConfig),
-          axios.get(
-            `${API_URL}/users/me/points/logs?limit=20&notifications_only=true`,
-            requestConfig,
-          ),
         ]);
 
         if (cancelled) return;
-        const hasPointLogs =
-          logsResult.status === "fulfilled" &&
-          Array.isArray(logsResult.value.data?.data);
-        const logs = hasPointLogs ? logsResult.value.data.data : [];
-        setPointLogs(logs.filter((log) => !isInternalAdminPointLog(log)));
-        setPointLogsReady(true);
-        setPointLogsAvailable(hasPointLogs);
-        setPointLogsUserIdentity(userIdentity);
 
         if (profileResult.status !== "fulfilled") {
           throw profileResult.reason;
@@ -346,16 +316,7 @@ export default function Profile() {
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <NotificationBell
-              initialPointLogs={
-                pointLogsUserIdentity === userIdentity && pointLogsAvailable
-                  ? pointLogs
-                  : null
-              }
-              deferInitialFetch={
-                pointLogsUserIdentity !== userIdentity || !pointLogsReady
-              }
-            />
+            <NotificationBell />
             {currentUser ? (
               <Box
                 sx={{
@@ -1006,7 +967,10 @@ export default function Profile() {
                       <Typography variant="subtitle2" fontWeight="600" color="#334155" sx={{ mb: 1.5 }}>
                         {t("user.scoreHistory")}
                       </Typography>
-                      {pointLogs.length === 0 ? (
+                      {pointLogsError && <LoadError onRetry={() => refreshPointLogs(true)} />}
+                      {!pointLogsReady && !pointLogsError ? (
+                        <Typography role="status" color="text.secondary">{t("common.loading")}</Typography>
+                      ) : pointLogs.length === 0 && !pointLogsError ? (
                         <Typography variant="body2" color="#94a3b8">
                           {t("user.noScoreHistory")}
                         </Typography>
