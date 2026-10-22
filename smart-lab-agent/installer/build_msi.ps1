@@ -87,16 +87,35 @@ if ($usePrebuiltPayload) {
     Copy-Item -LiteralPath $prebuiltPayload -Destination $payloadRoot
 } else {
     $deviceBuildArgs = @(
-        "-B", "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
+        "-I", "-B", "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
         "--name", "SmartLabDevice",
         "--distpath", $payloadRoot,
         "--workpath", (Join-Path $buildRoot "pyinstaller-work\device"),
         "--specpath", (Join-Path $buildRoot "spec"),
         (Join-Path $agentRoot "smart_lab_device.py")
     )
-    & $python @deviceBuildArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "PyInstaller failed while packaging the shared Agent and registration executable (exit code $LASTEXITCODE)."
+    # Do not resolve Qt's Windows ICU dependency from unrelated tools on PATH
+    # (e.g. Poppler/Conda). Those DLLs are both incompatible and much larger.
+    # qt_runtime.py already pins the Windows system ICU in the installed app.
+    $pythonRuntimeRoot = & $python -I -B -c "import sys; print(sys.base_prefix)"
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $pythonRuntimeRoot -PathType Container)) {
+        throw "Could not resolve the Python runtime for the isolated build."
+    }
+    $originalBuildPath = $env:PATH
+    try {
+        $env:PATH = @(
+            (Join-Path $env:SystemRoot 'System32'),
+            $env:SystemRoot,
+            (Split-Path $python -Parent),
+            $pythonRuntimeRoot,
+            (Join-Path $pythonRuntimeRoot 'DLLs')
+        ) -join [System.IO.Path]::PathSeparator
+        & $python @deviceBuildArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "PyInstaller failed while packaging the shared Agent and registration executable (exit code $LASTEXITCODE)."
+        }
+    } finally {
+        $env:PATH = $originalBuildPath
     }
 }
 
@@ -548,4 +567,8 @@ try {
     }
 }
 
-Write-Host "MSI created: $msiPath"
+$msiBytes = (Get-Item -LiteralPath $msiPath).Length
+if ($msiBytes -ge 50000000) {
+    throw "MSI exceeds the distribution limit of 50,000,000 bytes ($msiBytes bytes). Inspect the bundled dependencies before distributing it: '$msiPath'."
+}
+Write-Host "MSI created: $msiPath ($msiBytes bytes)"

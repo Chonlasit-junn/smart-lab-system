@@ -132,6 +132,18 @@ If the runtime dependencies are already installed in the project virtual environ
 
 The script packages the shared Agent/registration entry point as a self-contained, one-file executable, generates a temporary Visual Studio Setup Project from `SmartLabAgent.vdproj.template`, and invokes `devenv.com` to create the MSI. The registration shortcut launches the same executable with the internal `--register` argument. It does not install Visual Studio or the extension, and it does not make registry changes. Microsoft documents that command-line builds of `.vdproj` projects may require running Visual Studio's `DisableOutOfProcBuild.exe` once for the same Windows account; see the [Microsoft build instructions](https://learn.microsoft.com/en-us/visualstudio/ide/reference/build-devenv-exe?view=visualstudio#build-a-setup-project).
 
+Packaging runs Python in isolated mode and temporarily restricts the build process's
+`PATH` to Windows and the selected Python runtime. This prevents unrelated tools
+such as Poppler/Conda from supplying incompatible ICU DLLs. The original `PATH`
+is restored before Visual Studio runs, including when packaging fails; no user or
+machine environment settings are changed. The application continues using the
+Windows system ICU as configured in `qt_runtime.py`. Python, Qt, Tcl/Tk, software
+OpenGL, TLS certificates and the URL reader remain included; no optional runtime
+components are removed to meet the size target. Target machines still require
+the supported Windows 10/11 environment, not a separate Python/Qt installation.
+The build rejects MSI output of 50,000,000 bytes or larger (decimal 50 MB),
+including installer-only rebuilds, to catch future packaging size regressions.
+
 For an installer-only rebuild using an already-built, verified shared executable, pass the directory containing `SmartLabDevice.exe` with `-PrebuiltPayloadPath`; this skips PyInstaller but still creates a new MSI:
 
 ```powershell

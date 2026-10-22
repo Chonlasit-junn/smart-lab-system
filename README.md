@@ -402,7 +402,13 @@ npm run build
 
 ## โครงสร้างสำคัญ
 
+ดู [คู่มือจัดวางไฟล์และผลลัพธ์ build](docs/PROJECT_STRUCTURE.md) สำหรับหน้าที่ของแต่ละโฟลเดอร์และข้อควรระวังก่อนย้ายหรือลบไฟล์
+
 ```text
+docs/                       # คู่มือโครงสร้างโปรเจค
+scripts/                    # เครื่องมือตรวจสอบข้ามระบบ
+tests/fixtures/             # ข้อมูลทดสอบร่วมของ Frontend / Backend / Agent
+
 backend/
   main.py, models.py, database.py
   routers/                 # API endpoints
@@ -426,7 +432,9 @@ smart-lab-agent/
   installer/                # MSI build script, template และคู่มือ
   tests/                    # Agent tests
   build_msi/<build-id>/     # ไฟล์ระหว่าง build (ไม่ commit)
+  build_msi/qa-archive/     # โฟลเดอร์ QA เบราว์เซอร์เก่า (ไม่ commit)
   dist_msi/<build-id>/      # MSI ที่ build แล้ว; เก็บรุ่นที่ต้องการแจกจ่าย
+  dist_msi/archive/         # MSI รุ่นก่อนหน้า (ไม่ commit)
 
 gatekeeper/
   smart_gatekeeper.py
