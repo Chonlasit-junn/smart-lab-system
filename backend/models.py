@@ -32,6 +32,24 @@ class RegistrationOTP(Base):
     attempt_window_started_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class PasswordResetOTP(Base):
+    __tablename__ = "password_reset_otps"
+    __table_args__ = {"info": {"manual_migration": True}}
+
+    email = Column(String, primary_key=True)
+    challenge_id = Column(String(32), nullable=True)
+    code_hash = Column(String(64), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    last_sent_at = Column(DateTime(timezone=True), nullable=True)
+    failed_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    window_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    attempt_window_started_at = Column(DateTime(timezone=True), nullable=True)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    credential_hash = Column(String(64), nullable=True)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -40,6 +58,7 @@ class User(Base):
     last_name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
+    auth_version = Column(Integer, nullable=False, default=0, server_default="0")
     profile_pic = Column(String, nullable=True)
     face_embedding = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

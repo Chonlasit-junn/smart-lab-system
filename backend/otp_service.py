@@ -1,4 +1,4 @@
-"""Shared issuance/verification boundary for registration OTPs.
+"""Shared issuance/verification boundary for purpose-isolated email OTPs.
 
 No application imports with startup DDL. Email is the serialization key, with
 PostgreSQL upsert + row locks for first issuance, retries and consumption.
@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from models import RegistrationOTP
+from models import PasswordResetOTP, RegistrationOTP
 from time_utils import as_utc, utc_now
 
 
@@ -48,9 +48,9 @@ def _key():
     return key.encode("utf-8")
 
 
-def _digest(email, challenge_id, code):
+def _digest(email, challenge_id, code, *, purpose="registration"):
     message = json.dumps(
-        ["registration-otp:v1", email, challenge_id, code],
+        [f"{purpose}-otp:v1", email, challenge_id, code],
         separators=(",", ":"), ensure_ascii=True,
     ).encode("utf-8")
     return hmac.new(_key(), message, hashlib.sha256).hexdigest()
@@ -67,15 +67,16 @@ def _reject(db, message, *, status=400, retry_after=None, persist=False):
     raise HTTPException(status_code=status, detail=message, headers=headers)
 
 
-def _locked(db, email, *, create=False):
+def _locked(db, email, *, create=False, purpose="registration"):
+    model = {"registration": RegistrationOTP, "password-reset": PasswordResetOTP}[purpose]
     if create:
         dialect = db.get_bind().dialect.name
         insert = pg_insert if dialect == "postgresql" else sqlite_insert
-        db.execute(insert(RegistrationOTP).values(email=email).on_conflict_do_nothing(
-            index_elements=[RegistrationOTP.email],
+        db.execute(insert(model).values(email=email).on_conflict_do_nothing(
+            index_elements=[model.email],
         ))
-    return db.query(RegistrationOTP).filter(
-        RegistrationOTP.email == email,
+    return db.query(model).filter(
+        model.email == email,
     ).populate_existing().with_for_update().first()
 
 
@@ -93,10 +94,10 @@ def _window_wait(row, now):
     ).total_seconds()))
 
 
-def reserve_otp(db, email):
+def reserve_otp(db, email, *, purpose="registration", binding=None):
     """Reserve before sending; a pending/failed email can never authorize a user."""
     _key()  # Fail before changing even test/local challenge state.
-    row = _locked(db, email, create=True)
+    row = _locked(db, email, create=True, purpose=purpose)
     now = utc_now()
     _reset_window(row, now)
     if row.window_attempts >= MAX_ATTEMPTS:
@@ -109,7 +110,9 @@ def reserve_otp(db, email):
     code = f"{secrets.randbelow(1_000_000):06d}"
     challenge_id = uuid4().hex
     row.challenge_id = challenge_id
-    row.code_hash = _digest(email, challenge_id, code)
+    row.code_hash = _digest(email, challenge_id, code, purpose=purpose)
+    if purpose == "password-reset":
+        row.user_id, row.credential_hash = binding or (None, None)
     row.expires_at = now + timedelta(seconds=TTL_SECONDS)
     row.last_sent_at = now
     row.delivered_at = None
@@ -120,9 +123,9 @@ def reserve_otp(db, email):
     return challenge_id, code
 
 
-def finish_delivery(db, email, challenge_id, *, success):
+def finish_delivery(db, email, challenge_id, *, success, purpose="registration"):
     """A late mail response must not activate/invalidate a newer challenge."""
-    row = _locked(db, email)
+    row = _locked(db, email, purpose=purpose)
     if row is None or row.challenge_id != challenge_id:
         _reject(db, REPLACED)
     now = utc_now()
@@ -142,14 +145,14 @@ def finish_delivery(db, email, challenge_id, *, success):
     }
 
 
-def verify_otp(db, email, code, *, consume=False, expected_challenge_id=None):
+def verify_otp(db, email, code, *, consume=False, expected_challenge_id=None, purpose="registration"):
     """Verify without consumption; consume only in the account's transaction.
 
     Call before creating any account rows. Normal verification commits to release
     its lock before face processing. Final consumption stays uncommitted so a
     failed registration can roll it back together with the account.
     """
-    row = _locked(db, email)
+    row = _locked(db, email, purpose=purpose)
     now = utc_now()
     if row is None:
         _reject(db, EXPIRED)
@@ -163,7 +166,7 @@ def verify_otp(db, email, code, *, consume=False, expected_challenge_id=None):
     if row.failed_attempts >= MAX_ATTEMPTS or row.window_attempts >= MAX_ATTEMPTS:
         _reject(db, EXHAUSTED, status=429, retry_after=_window_wait(row, now))
     matches = bool(re.fullmatch(r"[0-9]{6}", code)) and hmac.compare_digest(
-        row.code_hash, _digest(email, row.challenge_id, code),
+        row.code_hash, _digest(email, row.challenge_id, code, purpose=purpose),
     )
     if not matches:
         if consume:

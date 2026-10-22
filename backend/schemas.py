@@ -1,6 +1,6 @@
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import date
 
 
@@ -17,6 +17,17 @@ class OTPVerify(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+class PasswordReset(OTPVerify):
+    new_password: str = Field(..., min_length=8, max_length=72)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_bytes(cls, value):
+        if len(value.encode("utf-8")) > 72 or not value.strip():
+            raise ValueError("Password must be 8 or more characters and at most 72 UTF-8 bytes.")
+        return value
 
 class Token(BaseModel):
     access_token: str

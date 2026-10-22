@@ -243,6 +243,6 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             raise HTTPException(status_code=403, detail="Your account is pending admin approval.")
 
     access_token = create_access_token(
-        data={"sub": normalize_email(user.email), "role": role_name},
+        data={"sub": normalize_email(user.email), "role": role_name, "auth_version": user.auth_version},
     )
     return {"access_token": access_token, "token_type": "bearer"}

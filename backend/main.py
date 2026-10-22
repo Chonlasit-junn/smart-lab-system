@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 import models
 from database import engine, Base
-from routers import auth, users, labs, agent, devices, gatekeeper, admin, blacklist, points, tickets
+from routers import auth, users, labs, agent, devices, gatekeeper, admin, blacklist, points, tickets, password_reset
 from utils import UPLOAD_ROOT
 
 Base.metadata.create_all(
@@ -26,6 +26,7 @@ app.add_middleware(
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
 
 app.include_router(auth.router)
+app.include_router(password_reset.router)
 app.include_router(users.router)
 app.include_router(labs.router)
 app.include_router(agent.router)

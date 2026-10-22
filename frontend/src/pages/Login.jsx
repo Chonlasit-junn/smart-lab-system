@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   TextField, Button, IconButton, InputAdornment, Alert, CircularProgress, Box, Divider
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
@@ -177,9 +177,9 @@ export default function Login() {
             </Button>
 
             <Box sx={{ textAlign: 'center', mb: 3 }}>
-              <a href="#" style={{ color: 'var(--brand-color)', textDecoration: 'none', fontSize: '0.95rem' }}>
+              <Link to="/forgot-password" style={{ color: 'var(--brand-color)', textDecoration: 'none', fontSize: '0.95rem' }}>
                 {t.forgotPassword}
-              </a>
+              </Link>
             </Box>
 
             <Divider sx={{ mb: 3 }} />

@@ -11,6 +11,7 @@ import LanguageToggle from './components/LanguageToggle';
 
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const Booking = lazy(() => import('./pages/Booking'));
 const Admin = lazy(() => import('./pages/Admin'));
 const AdminPoints = lazy(() => import('./pages/AdminPoints'));
@@ -193,6 +194,7 @@ function AppContent() {
               <Route path="/" element={<Login />} />
               <Route path="/booking" element={<ProtectedRoute><Booking /></ProtectedRoute>} />
               <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reserved" element={<ProtectedRoute><Reserved /></ProtectedRoute>} />
               <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

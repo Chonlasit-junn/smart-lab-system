@@ -58,7 +58,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 # 📌 ฟังก์ชันส่งอีเมลผ่าน HTTP API ของ Brevo
-async def send_otp_mail(email: str, otp: str) -> None:
+async def send_otp_mail(email: str, otp: str, *, password_reset: bool = False) -> None:
     if not BREVO_API_KEY:
         raise RuntimeError("OTP mail provider is not configured.")
 
@@ -78,11 +78,11 @@ async def send_otp_mail(email: str, otp: str) -> None:
         "to": [
             {"email": email}
         ],
-        "subject": "OTP Verification for Smart Lab Project",
+        "subject": "Reset your Smart Lab password" if password_reset else "OTP Verification for Smart Lab Project",
         "htmlContent": f"""
         <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-            <h2 style="color: #2563eb;">Smart Lab Verification</h2>
-            <p>Your verification code is:</p>
+            <h2 style="color: #2563eb;">{'Smart Lab Password Reset' if password_reset else 'Smart Lab Verification'}</h2>
+            <p>{'Use this code only to reset your password. If you did not request this, ignore this email.' if password_reset else 'Your verification code is:'}</p>
             <h1 style="background: #f1f5f9; padding: 10px; border-radius: 8px; text-align: center; letter-spacing: 5px; color: #1e293b;">{otp}</h1>
             <p style="color: #64748b; font-size: 14px;">This code will expire in 10 minutes. Please do not share it with anyone.</p>
         </div>
