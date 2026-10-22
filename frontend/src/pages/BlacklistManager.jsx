@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import LoadError from "../components/LoadError";
 import {
   Box,
   Typography,
@@ -70,6 +71,7 @@ export default function BlacklistManager() {
 
   const [blacklist, setBlacklist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const [openDialog, setOpenDialog] = useState(false);
@@ -88,6 +90,7 @@ export default function BlacklistManager() {
 
     try {
       setLoading(true);
+      setLoadFailed(false);
       const res = await axios.get(`${API_URL}/admin/blacklist`, {
         ...authConfig(),
         signal: controller.signal,
@@ -96,7 +99,7 @@ export default function BlacklistManager() {
       setBlacklist(res.data.data || []);
     } catch (err) {
       if (!axios.isCancel(err) && blacklistControllerRef.current === controller) {
-        console.error("[Blacklist] fetch failed:", err);
+        setLoadFailed(true);
       }
     } finally {
       if (blacklistControllerRef.current === controller) {
@@ -512,7 +515,7 @@ export default function BlacklistManager() {
                 }}
               >
                 <Typography variant="h6" fontWeight="600" color="#64748b">
-                  {blacklist.length} {t("admin.programsBlocked")}
+                  {loading || loadFailed ? "—" : blacklist.length} {t("admin.programsBlocked")}
                 </Typography>
                 <Button
                   variant="contained"
@@ -599,6 +602,8 @@ export default function BlacklistManager() {
                             {t("common.loading")}
                           </TableCell>
                         </TableRow>
+                      ) : loadFailed ? (
+                        <TableRow><TableCell colSpan={5}><LoadError onRetry={fetchBlacklist} /></TableCell></TableRow>
                       ) : filtered.length === 0 ? (
                         <TableRow>
                           <TableCell

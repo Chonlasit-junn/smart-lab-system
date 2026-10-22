@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import LoadError from "../components/LoadError";
 import {
   Alert,
   Avatar,
@@ -126,8 +127,6 @@ export default function AdminPoints() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
-  const tRef = useRef(t);
-  tRef.current = t;
   const pointsControllerRef = useRef(null);
   const detailControllerRef = useRef(null);
 
@@ -144,6 +143,7 @@ export default function AdminPoints() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userDetail, setUserDetail] = useState(null);
@@ -160,7 +160,7 @@ export default function AdminPoints() {
     if (!token) {
       pointsControllerRef.current?.abort();
       pointsControllerRef.current = null;
-      setError(tRef.current("admin.adminLoginRequired"));
+      setLoadFailed(true);
       setLoading(false);
       return;
     }
@@ -171,6 +171,7 @@ export default function AdminPoints() {
 
     try {
       setLoading(true);
+      setLoadFailed(false);
       setError("");
       const response = await axios.get(`${API_URL}/admin/points`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -198,10 +199,7 @@ export default function AdminPoints() {
       setTotal(Number(payload.total) || 0);
     } catch (requestError) {
       if (axios.isCancel(requestError) || pointsControllerRef.current !== controller) return;
-      const detail = requestError.response?.data?.detail;
-      setError(
-        typeof detail === "string" ? detail : tRef.current("admin.loadUserPointsFailed"),
-      );
+      setLoadFailed(true);
     } finally {
       if (pointsControllerRef.current === controller) {
         pointsControllerRef.current = null;
@@ -658,7 +656,7 @@ export default function AdminPoints() {
                 {t("admin.pointsPageDescription")}
               </Typography>
               <Typography variant="caption" color="var(--text-muted)" sx={{ display: "block", mt: 0.5 }}>
-                {t("admin.pointSummaryDate")} {formatDate(scoreDate, t("common.locale"))} · {t("admin.bookingDependsOnBan")}
+                {t("admin.pointSummaryDate")} {loading || loadFailed ? "—" : formatDate(scoreDate, t("common.locale"))} · {t("admin.bookingDependsOnBan")}
               </Typography>
             </Box>
             <Button
@@ -684,7 +682,7 @@ export default function AdminPoints() {
             </Alert>
           )}
 
-          {pointRequests.length > 0 && (
+          {!loading && !loadFailed && pointRequests.length > 0 && (
             <Alert
               severity="warning"
               icon={<Notifications />}
@@ -813,10 +811,10 @@ export default function AdminPoints() {
                     {card.label}
                   </Typography>
                   <Typography variant="h5" fontWeight="700" color="var(--text-dark)">
-                    {card.value}
+                    {loading || loadFailed ? "—" : card.value}
                   </Typography>
                   <Typography variant="caption" color="var(--text-muted)" noWrap>
-                    {card.helper}
+                    {loading || loadFailed ? "—" : card.helper}
                   </Typography>
                 </Box>
               </Paper>
@@ -900,7 +898,7 @@ export default function AdminPoints() {
               </FormControl>
             </Box>
 
-            {loading ? (
+            {loadFailed ? <LoadError onRetry={fetchPoints} /> : loading ? (
               <Box
                 sx={{
                   display: "flex",
@@ -909,7 +907,7 @@ export default function AdminPoints() {
                   minHeight: 280,
                 }}
               >
-                <CircularProgress />
+                <CircularProgress aria-label={t("common.loading")} />
               </Box>
             ) : (
               <TableContainer
@@ -1271,7 +1269,7 @@ export default function AdminPoints() {
                 </Table>
               </TableContainer>
             )}
-            {!loading && (
+            {!loading && !loadFailed && (
               <Box
                 sx={{
                   px: 3,
@@ -1310,6 +1308,7 @@ export default function AdminPoints() {
         detail={userDetail}
         loading={detailLoading}
         error={detailError}
+        onRetry={() => handleOpenUserDetail(selectedUser)}
         tab={detailTab}
         onTabChange={(_, nextTab) => setDetailTab(nextTab)}
       />

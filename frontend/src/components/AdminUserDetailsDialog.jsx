@@ -1,6 +1,6 @@
 import React from "react";
+import LoadError from "./LoadError";
 import {
-  Alert,
   Avatar,
   Box,
   Chip,
@@ -370,6 +370,7 @@ export default function AdminUserDetailsDialog({
   detail,
   loading,
   error,
+  onRetry,
   tab,
   onTabChange,
 }) {
@@ -428,11 +429,11 @@ export default function AdminUserDetailsDialog({
       </DialogTitle>
 
       <DialogContent className="page-content" dividers sx={{ p: { xs: 2.5, md: 4 }, bgcolor: "#fcfdfe" }}>
-        {error && <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>{error}</Alert>}
+        {error && <LoadError onRetry={onRetry} />}
 
         {loading && !detail ? (
           <Box sx={{ minHeight: 420, display: "flex", justifyContent: "center", alignItems: "center" }}>
-            <CircularProgress />
+            <CircularProgress aria-label={t("common.loading")} />
           </Box>
         ) : detail ? (
           <>

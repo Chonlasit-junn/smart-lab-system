@@ -34,6 +34,7 @@ import { authConfig } from "../utils/auth";
 import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import NotificationBell from "../components/NotificationBell";
+import LoadError from "../components/LoadError";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -47,14 +48,12 @@ export default function AdminDevices() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
-  const tRef = useRef(t);
-  tRef.current = t;
   const devicesControllerRef = useRef(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [devices, setDevices] = useState([]);
   const [labs, setLabs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [savingDeviceId, setSavingDeviceId] = useState(null);
   const [notice, setNotice] = useState({ open: false, message: "", severity: "success" });
 
@@ -69,7 +68,7 @@ export default function AdminDevices() {
 
     try {
       setLoading(true);
-      setError("");
+      setLoadFailed(false);
       const requestConfig = { ...authConfig(), signal: controller.signal };
       const [devicesResponse, labsResponse] = await Promise.all([
         axios.get(`${API_URL}/admin/lab-devices`, requestConfig),
@@ -80,7 +79,7 @@ export default function AdminDevices() {
       setLabs(labsResponse.data?.data || []);
     } catch (requestError) {
       if (axios.isCancel(requestError) || devicesControllerRef.current !== controller) return;
-      setError(requestError.response?.data?.detail || tRef.current("common.error"));
+      setLoadFailed(true);
     } finally {
       if (devicesControllerRef.current === controller) {
         devicesControllerRef.current = null;
@@ -180,7 +179,7 @@ export default function AdminDevices() {
             </Box>
           </Box>
 
-          {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+          {loadFailed && <LoadError onRetry={fetchData} />}
           <Paper className="surface-card data-table-shell" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, overflow: "hidden" }}>
             <TableContainer sx={{ overflowX: "auto" }}>
               <Table sx={{ minWidth: 980 }}>
@@ -196,8 +195,8 @@ export default function AdminDevices() {
                 </TableHead>
                 <TableBody>
                   {loading ? (
-                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7 }}><CircularProgress size={28} /></TableCell></TableRow>
-                  ) : devices.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7 }}><CircularProgress size={28} aria-label={t("common.loading")} /></TableCell></TableRow>
+                  ) : loadFailed ? null : devices.length === 0 ? (
                     <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7, color: "#94a3b8" }}>{t("admin.noDevices")}</TableCell></TableRow>
                   ) : devices.map((device) => (
                     <TableRow key={device.id} hover>

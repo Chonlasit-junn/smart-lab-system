@@ -1,5 +1,7 @@
 import { lazy, Suspense, useMemo } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import AppErrorBoundary from './components/AppErrorBoundary';
+import LoadingState from './components/LoadingState';
 import { CssBaseline, ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/auth-context';
@@ -29,15 +31,20 @@ const MyTickets = lazy(() => import('./pages/MyTickets'));
 
 function ProtectedRoute({ children }) {
   const { currentUser, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <LoadingState />;
   return currentUser ? children : <Navigate to="/" replace />;
 }
 
 function AdminRoute({ children }) {
   const { currentUser, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <LoadingState />;
   if (!currentUser) return <Navigate to="/" replace />;
   return currentUser.roleName === "admin" ? children : <Navigate to="/booking" replace />;
+}
+
+function RouteErrorBoundary({ children }) {
+  const { pathname } = useLocation();
+  return <AppErrorBoundary key={pathname}>{children}</AppErrorBoundary>;
 }
 
 function AppContent() {
@@ -181,15 +188,8 @@ function AppContent() {
       <CssBaseline enableColorScheme />
       <AuthProvider>
         <BrowserRouter>
-          <Suspense fallback={(
-            <div
-              role="status"
-              aria-live="polite"
-              style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}
-            >
-              Loading...
-            </div>
-          )}>
+          <RouteErrorBoundary>
+          <Suspense fallback={<LoadingState />}>
             <Routes>
               <Route path="/" element={<Login />} />
               <Route path="/booking" element={<ProtectedRoute><Booking /></ProtectedRoute>} />
@@ -211,6 +211,7 @@ function AppContent() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
+          </RouteErrorBoundary>
           <LanguageToggle className="global-language-toggle" />
           <ThemeToggle className="global-theme-toggle" />
         </BrowserRouter>
@@ -223,7 +224,7 @@ function App() {
   return (
     <AppThemeProvider>
       <LanguageProvider>
-        <AppContent />
+        <AppErrorBoundary><AppContent /></AppErrorBoundary>
       </LanguageProvider>
     </AppThemeProvider>
   );

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import LoadError from "../components/LoadError";
 import {
   Alert,
   Avatar,
@@ -89,8 +90,6 @@ export default function RoleManagement() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
-  const tRef = useRef(t);
-  tRef.current = t;
   const rolesControllerRef = useRef(null);
 
   const [anchorEl, setAnchorEl] = useState(null);
@@ -98,6 +97,7 @@ export default function RoleManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [success, setSuccess] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -113,6 +113,7 @@ export default function RoleManagement() {
 
     try {
       setLoading(true);
+      setLoadFailed(false);
       setError("");
       const requestConfig = { ...authConfig(), signal: controller.signal };
       const [rolesResponse, usersResponse] = await Promise.all([
@@ -124,7 +125,7 @@ export default function RoleManagement() {
       setUsers(Array.isArray(usersResponse.data?.data) ? usersResponse.data.data : []);
     } catch (requestError) {
       if (axios.isCancel(requestError) || rolesControllerRef.current !== controller) return;
-      setError(getErrorMessage(requestError, tRef.current("admin.unableToLoadRoles")));
+      setLoadFailed(true);
     } finally {
       if (rolesControllerRef.current === controller) {
         rolesControllerRef.current = null;
@@ -422,14 +423,14 @@ export default function RoleManagement() {
                 </Box>
                 <Box>
                   <Typography variant="body2" color="#64748b" fontWeight="500">{t(card.labelKey)}</Typography>
-                  <Typography variant="h5" color="#0f172a" fontWeight="700">{card.value}</Typography>
+                  <Typography variant="h5" color="#0f172a" fontWeight="700">{loading || loadFailed ? "—" : card.value}</Typography>
                 </Box>
               </Paper>
             ))}
           </Box>
 
-          {loading ? (
-            <Box sx={{ minHeight: 360, display: "grid", placeItems: "center" }}><CircularProgress /></Box>
+          {loadFailed ? <LoadError onRetry={fetchRoleData} /> : loading ? (
+            <Box sx={{ minHeight: 360, display: "grid", placeItems: "center" }}><CircularProgress aria-label={t("common.loading")} /></Box>
           ) : (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
               <Paper className="surface-card data-table-shell" elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0", overflow: "hidden" }}>
@@ -451,6 +452,7 @@ export default function RoleManagement() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
+                      {roles.length === 0 && <TableRow><TableCell colSpan={5} align="center" sx={{ py: 6 }}>{t("common.noData")}</TableCell></TableRow>}
                       {roles.map((role) => (
                         <TableRow key={role.id} hover>
                           <TableCell><Chip label={role.name} size="small" variant="outlined" sx={{ fontWeight: 600, borderRadius: 2 }} /></TableCell>

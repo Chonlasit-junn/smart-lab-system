@@ -46,7 +46,6 @@ export default function TicketManager() {
       setTotal(Number(response.data?.total) || 0);
     } catch (error) {
       if (!axios.isCancel(error) && ticketsControllerRef.current === controller) {
-        console.error('[TicketManager] Failed to fetch tickets:', error);
         setLoadError(true);
       }
     } finally {
@@ -88,7 +87,7 @@ export default function TicketManager() {
       <Paper className="admin-table-paper surface-card data-table-shell" elevation={0} sx={{ p: 4 }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress />
+            <CircularProgress aria-label={t("common.loading")} />
           </Box>
         ) : (
           <>

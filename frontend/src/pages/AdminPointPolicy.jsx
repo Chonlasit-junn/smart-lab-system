@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import LoadError from "../components/LoadError";
 import {
   Alert,
   Avatar,
@@ -173,8 +174,6 @@ export default function AdminPointPolicy() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
-  const tRef = useRef(t);
-  tRef.current = t;
   const policyControllerRef = useRef(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [policy, setPolicy] = useState(() =>
@@ -182,6 +181,8 @@ export default function AdminPointPolicy() {
   );
   const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [empty, setEmpty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -191,7 +192,7 @@ export default function AdminPointPolicy() {
     if (!token) {
       policyControllerRef.current?.abort();
       policyControllerRef.current = null;
-      setError(tRef.current("admin.policyAdminLoginRequired"));
+      setLoadFailed(true);
       setLoading(false);
       return;
     }
@@ -202,6 +203,7 @@ export default function AdminPointPolicy() {
 
     try {
       setLoading(true);
+      setLoadFailed(false);
       setError("");
       const response = await axios.get(`${API_URL}/admin/points/policy`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -209,11 +211,12 @@ export default function AdminPointPolicy() {
       });
       if (policyControllerRef.current !== controller) return;
       const data = response.data?.data || {};
+      setEmpty(Object.keys(data).length === 0);
       setPolicy(normalizePointPolicy(data));
       setLastUpdated(data.updated_at || null);
     } catch (requestError) {
       if (axios.isCancel(requestError) || policyControllerRef.current !== controller) return;
-      setError(getErrorMessage(requestError, tRef.current("admin.loadPolicyFailed")));
+      setLoadFailed(true);
     } finally {
       if (policyControllerRef.current === controller) {
         policyControllerRef.current = null;
@@ -506,7 +509,7 @@ export default function AdminPointPolicy() {
                 color="#94a3b8"
                 sx={{ display: "block", mt: 0.5 }}
               >
-                {t("admin.lastUpdated")} {formatDateTime(lastUpdated, t("common.locale"), { fallback: t("common.noData") })} · 100 {t("common.points")}
+                {t("admin.lastUpdated")} {loading || loadFailed ? "—" : formatDateTime(lastUpdated, t("common.locale"), { fallback: t("common.noData") })} · 100 {t("common.points")}
               </Typography>
             </Box>
             <Button
@@ -541,7 +544,7 @@ export default function AdminPointPolicy() {
             </Alert>
           )}
 
-          {loading ? (
+          {loadFailed ? <LoadError onRetry={fetchPolicy} /> : loading ? (
             <Box
               sx={{
                 display: "flex",
@@ -550,9 +553,9 @@ export default function AdminPointPolicy() {
                 minHeight: 360,
               }}
             >
-              <CircularProgress />
+              <CircularProgress aria-label={t("common.loading")} />
             </Box>
-          ) : (
+          ) : empty ? <Typography sx={{ py: 8, textAlign: "center" }} color="text.secondary">{t("common.noData")}</Typography> : (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {POINT_SECTIONS.map((section) => (
                 <Paper
@@ -646,7 +649,7 @@ export default function AdminPointPolicy() {
                 >
                   {BAN_LEVELS.map((level) => (
                     <Paper
-                      key={level.label}
+                      key={level.labelKey}
                       className="surface-card surface-card--subtle"
                       elevation={0}
                       sx={{

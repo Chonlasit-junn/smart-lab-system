@@ -2,6 +2,8 @@
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import LoadError from "../components/LoadError";
+import LoadingState from "../components/LoadingState";
 import {
   Box,
   Typography,
@@ -113,6 +115,10 @@ export default function ManageLabs() {
   const [activeLab, setActiveLab] = useState(null);
 
   const [labs, setLabs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [schedulesFailed, setSchedulesFailed] = useState(false);
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [newLab, setNewLab] = useState({
     name: "",
@@ -150,6 +156,8 @@ export default function ManageLabs() {
     labsControllerRef.current?.abort();
     const controller = new AbortController();
     labsControllerRef.current = controller;
+    setLoading(true);
+    setLoadFailed(false);
     try {
       const response = await axios.get(`${API_URL}/labs`, { signal: controller.signal });
       if (labsControllerRef.current !== controller) return;
@@ -163,12 +171,19 @@ export default function ManageLabs() {
       });
     } catch (error) {
       if (!axios.isCancel(error) && labsControllerRef.current === controller) {
-        console.error("[API Error] Fetch labs failed:", error);
+        setLoadFailed(true);
       }
     } finally {
-      if (labsControllerRef.current === controller) labsControllerRef.current = null;
+      if (labsControllerRef.current === controller) {
+        labsControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, []);
+
+  useEffect(() => {
+    document.title = `${t("admin.manageLabsTitle")} | Smart Lab Admin`;
+  }, [t]);
 
   useEffect(() => {
     // This effect intentionally loads remote data and updates state asynchronously.
@@ -183,6 +198,8 @@ export default function ManageLabs() {
     schedulesControllerRef.current?.abort();
     const controller = new AbortController();
     schedulesControllerRef.current = controller;
+    setSchedulesLoading(true);
+    setSchedulesFailed(false);
     try {
       const response = await axios.get(`${API_URL}/labs/${labId}/schedules`, {
         signal: controller.signal,
@@ -191,10 +208,13 @@ export default function ManageLabs() {
       setSchedules(response.data.data);
     } catch (error) {
       if (!axios.isCancel(error) && schedulesControllerRef.current === controller) {
-        console.error("[API Error] Fetch schedules failed:", error);
+        setSchedulesFailed(true);
       }
     } finally {
-      if (schedulesControllerRef.current === controller) schedulesControllerRef.current = null;
+      if (schedulesControllerRef.current === controller) {
+        schedulesControllerRef.current = null;
+        setSchedulesLoading(false);
+      }
     }
   };
 
@@ -675,6 +695,7 @@ export default function ManageLabs() {
 
         {/* CONTENT BODY */}
         <Box className="content-area admin-content-area page-content" sx={{ p: 6, flex: 1 }}>
+          {activeLab && loadFailed && <LoadError onRetry={fetchLabs} />}
           {/* ================= VIEW 1: LIST LABS ================= */}
           {!activeLab && (
             <Fade in={viewMode === "list"} timeout={400}>
@@ -714,7 +735,9 @@ export default function ManageLabs() {
                   </Button>
                 </Box>
 
-                <Grid container spacing={4}>
+                {loadFailed ? <LoadError onRetry={fetchLabs} /> : loading ? <LoadingState /> : labs.length === 0 ? (
+                  <Paper className="surface-card empty-state" sx={{ p: 6, textAlign: "center", minHeight: 280 }}><Typography color="text.secondary">{t("common.noData")}</Typography></Paper>
+                ) : <Grid container spacing={4}>
                   {labs.map((lab) => (
                     <Grid
                       item
@@ -858,7 +881,7 @@ export default function ManageLabs() {
                       </Paper>
                     </Grid>
                   ))}
-                </Grid>
+                </Grid>}
               </Box>
             </Fade>
           )}
@@ -1332,7 +1355,11 @@ export default function ManageLabs() {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {schedules.length === 0 ? (
+                              {schedulesFailed ? (
+                                <TableRow><TableCell colSpan={6}><LoadError onRetry={() => fetchSchedules(activeLab.id)} /></TableCell></TableRow>
+                              ) : schedulesLoading ? (
+                                <TableRow><TableCell colSpan={6}><LoadingState /></TableCell></TableRow>
+                              ) : schedules.length === 0 ? (
                                 <TableRow>
                                   <TableCell
                                     colSpan={6}

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import LoadError from "../components/LoadError";
 import {
   Alert,
   Avatar,
@@ -66,8 +67,6 @@ export default function VerifyUsers() {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
-  const tRef = useRef(t);
-  tRef.current = t;
   const pendingUsersControllerRef = useRef(null);
 
   const [anchorEl, setAnchorEl] = useState(null);
@@ -76,6 +75,7 @@ export default function VerifyUsers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [processingId, setProcessingId] = useState(null);
   const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const fetchPendingUsers = useCallback(async () => {
     pendingUsersControllerRef.current?.abort();
@@ -84,6 +84,7 @@ export default function VerifyUsers() {
 
     try {
       setLoading(true);
+      setLoadFailed(false);
       setError("");
       const response = await axios.get(`${API_URL}/admin/users/pending`, {
         ...authConfig(),
@@ -93,12 +94,7 @@ export default function VerifyUsers() {
       setPendingUsers(response.data?.data || []);
     } catch (requestError) {
       if (axios.isCancel(requestError) || pendingUsersControllerRef.current !== controller) return;
-      const detail = requestError.response?.data?.detail;
-      setError(
-        typeof detail === "string"
-          ? detail
-          : tRef.current("admin.pendingUsersLoadFailed"),
-      );
+      setLoadFailed(true);
     } finally {
       if (pendingUsersControllerRef.current === controller) {
         pendingUsersControllerRef.current = null;
@@ -414,7 +410,7 @@ export default function VerifyUsers() {
                 </Box>
                 <Chip
                   icon={<PendingActions />}
-                  label={`${pendingUsers.length} ${t("admin.pending")}`}
+                  label={`${loading || loadFailed ? "—" : pendingUsers.length} ${t("admin.pending")}`}
                   sx={{
                     bgcolor: "#fff7ed",
                     color: "#c2410c",
@@ -444,9 +440,9 @@ export default function VerifyUsers() {
                     border: "1px solid #e2e8f0",
                   }}
                 >
-                  <CircularProgress />
+                  <CircularProgress aria-label={t("common.loading")} />
                 </Paper>
-              ) : pendingUsers.length === 0 ? (
+              ) : loadFailed ? <LoadError onRetry={fetchPendingUsers} /> : pendingUsers.length === 0 ? (
                 <Paper
                   className="surface-card empty-state"
                   elevation={0}

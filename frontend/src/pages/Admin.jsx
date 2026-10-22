@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import LoadError from "../components/LoadError";
 import {
   Box,
   Typography,
@@ -70,6 +71,9 @@ export default function Admin() {
   };
 
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [empty, setEmpty] = useState(false);
+  const dashboardControllerRef = useRef(null);
   const [stats, setStats] = useState({
     totalRequests: 0,
     activeUsers: 0,
@@ -82,16 +86,18 @@ export default function Admin() {
     document.title = `${t("admin.dashboard")} | Smart Lab Admin`;
   }, [t]);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
+    dashboardControllerRef.current?.abort();
+    const controller = new AbortController();
+    dashboardControllerRef.current = controller;
     try {
       setLoading(true);
-      const requestConfig = authConfig();
+      setLoadFailed(false);
+      const requestConfig = { ...authConfig(), signal: controller.signal };
       const dashboardRes = await axios.get(`${API_URL}/admin/dashboard`, requestConfig);
+      if (dashboardControllerRef.current !== controller) return;
       const dashboard = dashboardRes.data?.data || {};
+      setEmpty(Object.keys(dashboard).length === 0);
 
       setRecentReservations(dashboard.recent_reservations || []);
       setStats({
@@ -100,11 +106,19 @@ export default function Admin() {
         pendingApprovals: dashboard.pending_approvals ?? 0,
       });
     } catch (error) {
-      console.error("[Admin] failed to fetch dashboard data:", error);
+      if (!axios.isCancel(error) && dashboardControllerRef.current === controller) setLoadFailed(true);
     } finally {
-      setLoading(false);
+      if (dashboardControllerRef.current === controller) {
+        dashboardControllerRef.current = null;
+        setLoading(false);
+      }
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+    return () => dashboardControllerRef.current?.abort();
+  }, [fetchDashboardData]);
 
   const STATS_DATA = [
     {
@@ -419,7 +433,7 @@ export default function Admin() {
         </Box>
 
         <Box className="content-area admin-content-area page-content" sx={{ p: 6, overflowY: "auto" }}>
-          {loading ? (
+          {loadFailed ? <LoadError onRetry={fetchDashboardData} /> : loading ? (
             <Box
               sx={{
                 display: "flex",
@@ -428,9 +442,9 @@ export default function Admin() {
                 height: "50vh",
               }}
             >
-              <CircularProgress />
+              <CircularProgress aria-label={t("common.loading")} />
             </Box>
-          ) : (
+          ) : empty ? <Typography sx={{ py: 8, textAlign: "center" }} color="text.secondary">{t("common.noData")}</Typography> : (
             <>
               {/* stat cards — clicking Pending Users navigates to the verify page */}
               <Grid container spacing={4} sx={{ mb: 6 }}>
