@@ -56,6 +56,33 @@ class BlacklistTests(unittest.TestCase):
         self.session.close()
         self.engine.dispose()
 
+    def test_website_creation_stores_only_a_normalized_domain(self):
+        blacklist.create(
+            blacklist.BlacklistCreate(app_name="Example site", match_type="website_domain",
+                                      match_value="https://EXAMPLE.com/path?private=1"),
+            self.admin, self.session,
+        )
+        row = self.session.query(models.BlacklistedApp).filter_by(app_name="Example site").one()
+        self.assertEqual(row.match_type, "website_domain")
+        self.assertEqual(row.match_value, "example.com")
+
+    def test_invalid_website_creation_is_rejected(self):
+        with self.assertRaises(HTTPException) as raised:
+            blacklist.create(
+                blacklist.BlacklistCreate(app_name="Bad website", match_type="website_domain",
+                                          match_value="not a URL"), self.admin, self.session,
+            )
+        self.assertEqual(raised.exception.status_code, 422)
+        self.assertIsNone(self.session.query(models.BlacklistedApp).filter_by(app_name="Bad website").first())
+
+    def test_invalid_website_update_does_not_change_existing_program(self):
+        with self.assertRaises(HTTPException):
+            blacklist.update(self.rule.id,
+                             blacklist.BlacklistUpdate(match_type="website_domain", match_value="bad input"),
+                             self.admin, self.session)
+        self.session.refresh(self.rule)
+        self.assertEqual(self.rule.match_type, "process_name")
+
     def test_update_allows_renaming_without_changing_detection_value(self):
         result = blacklist.update(
             self.rule.id,

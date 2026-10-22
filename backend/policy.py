@@ -7,16 +7,21 @@ import json
 from typing import Any, Optional
 
 import models
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+from time_utils import utc_now
+from utils import ALGORITHM, SECRET_KEY
+from url_policy import find_website_rule
 
 
-DEFAULT_MATCH_TYPE = "process_name_or_title"
+DEFAULT_MATCH_TYPE = "process_name"
 SUPPORTED_MATCH_TYPES = frozenset(
     {
         "process_name",
         "process_name_or_title",
         "exe_path",
         "window_title",
+        "website_domain",
     }
 )
 
@@ -90,18 +95,64 @@ def build_policy(rules: list[dict[str, Any]]) -> dict[str, Any]:
     return {"version": version, "data": rules}
 
 
+def sign_policy_snapshot(policy: dict[str, Any]) -> str:
+    """Preserve server-issued rules for events delivered after a policy change."""
+
+    return jwt.encode(
+        {
+            "purpose": "agent_policy_snapshot",
+            "version": policy["version"],
+            "data": policy["data"],
+            "issued_at": int(utc_now().timestamp()),
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def verify_policy_snapshot(token: str) -> dict[str, Any]:
+    """Accept only signed policy data, never an Agent's unsigned rule snapshot.
+
+    No expiry is imposed: a durable outbox may be offline for a long time.
+    The caller checks the detection time against issuance and session times.
+    """
+
+    try:
+        snapshot = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if (
+            snapshot.get("purpose") != "agent_policy_snapshot"
+            or not isinstance(snapshot.get("data"), list)
+            or not isinstance(snapshot.get("issued_at"), int)
+            or snapshot.get("version") != build_policy(snapshot["data"])["version"]
+        ):
+            raise ValueError("Invalid policy snapshot.")
+        return snapshot
+    except (JWTError, TypeError, KeyError, ValueError) as exc:
+        raise ValueError("Invalid policy snapshot.") from exc
+
+
 def find_matching_rule(
     rules: list[dict[str, Any]],
     *,
     process_name: Optional[str] = None,
     exe_path: Optional[str] = None,
     window_title: Optional[str] = None,
+    executable_identity: Optional[dict[str, str]] = None,
+    browser_domain: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Validate Agent evidence against the active policy rules."""
 
-    normalized_process = normalize_process_name(process_name)
+    if not isinstance(executable_identity, dict):
+        return None
+    if browser_domain is not None:
+        if str(executable_identity.get("original_filename") or "").casefold() not in {"chrome.exe", "msedge.exe"}:
+            return None
+        return find_website_rule(rules, browser_domain)
+    original = normalize_process_name(
+        executable_identity.get("original_filename") or executable_identity.get("internal_name")
+    )
+    product = normalize_compact(executable_identity.get("product_name"))
     normalized_exe_path = normalize_path(exe_path)
-    normalized_title = normalize_compact(window_title)
 
     for rule in rules:
         if rule.get("enabled") is False:
@@ -112,20 +163,21 @@ def find_matching_rule(
         if not match_value:
             continue
 
-        if match_type in {"process_name", "process_name_or_title"}:
-            if normalized_process and normalized_process == normalize_process_name(match_value):
+        # Legacy mixed rules now use executable identity only. Titles remain telemetry.
+        if match_type in {"window_title", "website_domain"} or match_type not in SUPPORTED_MATCH_TYPES:
+            continue
+        if match_type == "exe_path" and normalized_exe_path != normalize_path(match_value):
+            continue
+        expected = {normalize_process_name(match_value)}
+        if match_type == "exe_path":
+            expected.add(normalize_process_name(rule.get("app_name")))
+        expected.discard("")
+        if original:
+            if original in expected:
                 return rule
-            if (
-                match_type == "process_name_or_title"
-                and normalized_title
-                and normalize_compact(match_value) in normalized_title
-            ):
-                return rule
-        elif match_type == "exe_path":
-            if normalized_exe_path and normalized_exe_path == normalize_path(match_value):
-                return rule
-        elif match_type == "window_title":
-            if normalized_title and normalize_compact(match_value) in normalized_title:
+        elif product:
+            aliases = {"starrail": {"starrail", "honkaistarrail"}}
+            if any(product in aliases.get(name, {name}) for name in expected):
                 return rule
 
     return None

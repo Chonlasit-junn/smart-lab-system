@@ -12,10 +12,12 @@ import pygetwindow as gw
 from datetime import datetime, timezone
 from agent_device import load_device_registration
 from agent_outbox import AgentOutbox
+from program_identity import read_executable_identity
+from browser_url import BrowserURLMonitor
 from agent_policy import (
     DEFAULT_FALLBACK_RULES,
     find_process_match,
-    find_window_match,
+    find_website_match,
     normalize_rules,
 )
 from agent_violation import (
@@ -24,7 +26,6 @@ from agent_violation import (
     ViolationState,
 )
 from agent_cleanup import SessionCleanupManager
-from agent_background import BackgroundTaskRunner
 from qt_runtime import prepare_qt_dll_search_path
 
 
@@ -36,6 +37,7 @@ def _utc_now():
 
 prepare_qt_dll_search_path()
 
+from agent_background import BackgroundTaskRunner
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QPushButton, QFrame,
                              QGraphicsDropShadowEffect, QMessageBox, QDialog)
@@ -46,7 +48,7 @@ from PyQt6.QtGui import QFont, QColor
 def post_with_retry(url, data=None, json_data=None, retries=3, timeout=15):
     for attempt in range(retries):
         try:
-            if json_data:
+            if json_data is not None:
                 return requests.post(url, json=json_data, timeout=timeout)
             return requests.post(url, data=data, timeout=timeout)
         except requests.exceptions.ConnectionError:
@@ -112,6 +114,7 @@ IGNORE_SYSTEM_APPS = [
     "Taskbar", "Program Manager", "Settings",
     "Windows Default Lock Screen", "Search",
 ]
+USAGE_CHECKPOINT_SECONDS = 30
 
 
 # ── Violation Dialog ──────────────────────────────────────────────────────────
@@ -145,7 +148,7 @@ class ViolationDialog(QDialog):
         layout.setSpacing(10)
 
         title = QLabel(
-            "⚠️ ตรวจพบโปรแกรมที่ไม่อนุญาต"
+            "⚠️ ตรวจพบการใช้งานที่ไม่อนุญาต"
             if self.allow_grace
             else "🚫 หมดสิทธิ์ขอโอกาส"
         )
@@ -180,7 +183,7 @@ class ViolationDialog(QDialog):
 
         if self.allow_grace:
             self.countdown_lbl.setText(
-                f"กรุณาปิดโปรแกรม หรือกดขอโอกาสภายใน {self.left} วินาที"
+                f"กรุณาปิดโปรแกรม/เว็บไซต์ หรือขอโอกาสภายใน {self.left} วินาที"
             )
             chance_btn = QPushButton("ขอโอกาส")
             chance_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -557,7 +560,7 @@ class LoginOverlay(QWidget):
         )
 
         # Retry once with a fresh idempotency key if the old request was closed.
-        if session_response and session_response.status_code == 409:
+        if session_response is not None and session_response.status_code == 409:
             detail = response_detail(session_response).lower()
             if "session request is already closed" in detail:
                 self.agent.discard_session_attempt(client_session_id)
@@ -568,7 +571,7 @@ class LoginOverlay(QWidget):
                     data=session_data,
                 )
 
-        if session_response and session_response.status_code == 200:
+        if session_response is not None and session_response.status_code == 200:
             session_id = session_response.json().get("session_id")
             if session_id is not None:
                 self.agent.confirm_session_attempt(client_session_id)
@@ -578,7 +581,7 @@ class LoginOverlay(QWidget):
                     "email": email,
                 }
 
-        status = session_response.status_code if session_response else None
+        status = session_response.status_code if session_response is not None else None
         if status == 409:
             return {"kind": "active_session"}
         return {"kind": "session_error", "status": status}
@@ -641,6 +644,7 @@ class SmartLabAgent:
         self.policy_rules = []
         self.policy_version = None
         self.policy_source = None
+        self.policy_token = None
         self.seen_process_ids = set()
         self.violation_reported = False
         self.violation_state = ViolationState()
@@ -652,6 +656,10 @@ class SmartLabAgent:
         self.heartbeat_timer.timeout.connect(self.send_heartbeat)
         self.policy_timer = QTimer()
         self.policy_timer.timeout.connect(self.refresh_policy)
+        self.outbox_retry_timer = QTimer()
+        self.outbox_retry_timer.timeout.connect(self.retry_outbox)
+        self.outbox_retry_timer.start(30_000)
+        QTimer.singleShot(0, self.retry_outbox)
 
     def get_or_create_session_attempt(self, email):
         if self.outbox is None:
@@ -690,6 +698,22 @@ class SmartLabAgent:
         """Deliver queued telemetry and keep failed items for a later retry."""
         with self._outbox_flush_lock:
             return self._flush_outbox_locked(limit)
+
+    def retry_outbox(self):
+        """Retry durable telemetry in the background, including on the login screen."""
+        if self.outbox is None:
+            return False
+
+        return self.background_tasks.submit(
+            "outbox-retry",
+            lambda: self.flush_outbox(limit=3),
+            self._handle_outbox_retry,
+        )
+
+    @staticmethod
+    def _handle_outbox_retry(_sent, error):
+        if error is not None:
+            print(f"ส่งข้อมูลจาก local outbox ไม่สำเร็จ: {error}")
 
     def _flush_outbox_locked(self, limit=3):
         if self.outbox is None:
@@ -738,8 +762,10 @@ class SmartLabAgent:
         self.overlay = overlay
 
     def _set_policy(self, raw_rules, version, source):
+        if not isinstance(raw_rules, list):
+            return False
         rules = normalize_rules(raw_rules)
-        if not rules:
+        if raw_rules and not rules:
             return False
 
         changed = rules != self.policy_rules or version != self.policy_version
@@ -766,6 +792,7 @@ class SmartLabAgent:
             return False
 
         if self._set_policy(cached.get("data"), cached.get("version"), "cache"):
+            self.policy_token = cached.get("policy_token")
             print(f"ใช้ Blacklist จาก cache เวอร์ชัน {self.policy_version}")
             return True
         return False
@@ -782,17 +809,25 @@ class SmartLabAgent:
         payload = response.json()
         raw_rules = payload.get("data") if isinstance(payload, dict) else None
         version = payload.get("version") if isinstance(payload, dict) else None
+        if not isinstance(raw_rules, list):
+            raise ValueError("Backend policy data must be a list")
         rules = normalize_rules(raw_rules)
-        if not rules:
+        if raw_rules and not rules:
             raise ValueError("Backend returned an empty or invalid policy")
 
+        policy_token = payload.get("policy_token")
+        if policy_token is not None and not isinstance(policy_token, str):
+            raise ValueError("Backend policy token must be a string")
         if self.outbox is not None:
             self.outbox.save_policy_cache(
                 "blacklist",
-                {"version": version or "unknown", "data": rules},
+                {"version": version or "unknown", "data": rules, "policy_token": policy_token},
                 version=version,
             )
-        return {"rules": rules, "version": version}
+        result = {"rules": rules, "version": version}
+        if policy_token:
+            result["policy_token"] = policy_token
+        return result
 
     def fetch_policy(self):
         """Fetch policy in the background; apply it on the Qt thread."""
@@ -805,7 +840,7 @@ class SmartLabAgent:
     def _handle_policy_result(self, result, error):
         if error is not None:
             print(f"ดึง Blacklist ไม่ได้: {error}")
-            if self.policy_rules:
+            if self.policy_source is not None:
                 print(f"ใช้ Blacklist เดิมจาก {self.policy_source}")
             else:
                 self._use_fallback_policy()
@@ -817,10 +852,11 @@ class SmartLabAgent:
             "backend",
         ):
             print("ดึง Blacklist ไม่ได้: Backend returned an empty or invalid policy")
-            if not self.policy_rules:
+            if self.policy_source is None:
                 self._use_fallback_policy()
             return
 
+        self.policy_token = result.get("policy_token")
         print(
             f"ดึง Blacklist สำเร็จ {len(self.policy_rules)} รายการ "
             f"(เวอร์ชัน {self.policy_version})"
@@ -838,6 +874,7 @@ class SmartLabAgent:
         self.policy_rules = []
         self.policy_version = None
         self.policy_source = None
+        self.policy_token = None
         self.seen_process_ids.clear()
         self.violation_reported = False
         self.violation_state.reset()
@@ -854,7 +891,7 @@ class SmartLabAgent:
                 self.session_cleanup = None
                 print(f"เตรียม Session Cleanup ไม่สำเร็จ: {e}")
         self._load_cached_policy()
-        if not self.policy_rules:
+        if self.policy_source is None:
             # Keep local protection active while the first server request runs.
             self._use_fallback_policy()
         self.refresh_policy()
@@ -889,10 +926,10 @@ class SmartLabAgent:
             retries=1,
             timeout=10,
         )
-        if response and 200 <= response.status_code < 300:
+        if response is not None and 200 <= response.status_code < 300:
             # Successful heartbeat is also the reconnect signal for the outbox.
             self.flush_outbox(limit=3)
-        return {"status": response.status_code if response else None}
+        return {"status": response.status_code if response is not None else None}
 
     def _handle_heartbeat_result(self, session_id, result, error):
         if error is not None:
@@ -927,8 +964,7 @@ class SmartLabAgent:
                 "ended_at": ended_at.isoformat(timespec="seconds"),
                 "duration": duration,
             }
-            self.usage_segments.append(segment)
-            self._queue_outbox(
+            queued = self._queue_outbox(
                 kind="usage",
                 payload={
                     "session_id": self.current_session_id,
@@ -937,6 +973,10 @@ class SmartLabAgent:
                 session_id=self.current_session_id,
                 event_id=segment["event_id"],
             )
+            if not queued:
+                # Keep only segments that could not be durably queued. Successfully
+                # queued events are already recoverable from SQLite after a crash.
+                self.usage_segments.append(segment)
             print(f"บันทึก: [{self.current_activity_name}] {duration} วินาที")
 
         self.current_activity_name = None
@@ -954,6 +994,17 @@ class SmartLabAgent:
         self.current_activity_name = app_name
         self.current_activity_started_at = observed_at
 
+    def _checkpoint_current_activity(self, observed_at):
+        """Persist a running app periodically without overlapping its segments."""
+        if not self.current_activity_name or not self.current_activity_started_at:
+            return
+        if (observed_at - self.current_activity_started_at).total_seconds() < USAGE_CHECKPOINT_SECONDS:
+            return
+        app_name = self.current_activity_name
+        self._close_current_activity(observed_at)
+        self.current_activity_name = app_name
+        self.current_activity_started_at = observed_at
+
     def _finalize_violation(self, context, show_dialog=True):
         """Record the final violation and close the current lab session."""
         self.report_violation(
@@ -963,6 +1014,11 @@ class SmartLabAgent:
             exe_path=context.get("exe_path"),
             window_title=context.get("window_title"),
             detection_source=context.get("detection_source"),
+            detected_at=context.get("detected_at"),
+            policy_version=context.get("policy_version"),
+            policy_token=context.get("policy_token"),
+            executable_identity=context.get("executable_identity"),
+            browser_domain=context.get("browser_domain"),
         )
         if self.info_bar:
             self.info_bar.trigger_logout(
@@ -979,6 +1035,10 @@ class SmartLabAgent:
         ):
             return
 
+        context = dict(context)
+        context.setdefault("detected_at", _utc_now().isoformat(timespec="seconds"))
+        context.setdefault("policy_version", self.policy_version)
+        context.setdefault("policy_token", self.policy_token)
         now = datetime.now()
         if self.violation_state.clear_expired_grace(now):
             # The original process may already be in seen_process_ids. Clear it
@@ -1035,13 +1095,46 @@ class SmartLabAgent:
                 self.monitor_timer.start(5000)
             return
 
-        # The five-second warning expired without a request for more time.
-        # Treat that as a refusal and enforce the policy immediately.
+        # The warning itself takes focus. Recheck EXE identity or the original
+        # browser window rather than treating the warning as the active app.
+        try:
+            still_present = self._violation_is_still_present(context)
+        except Exception as exc:
+            print(f"ตรวจโปรแกรมซ้ำไม่ได้: {exc}")
+            still_present = True
+        if not still_present:
+            self.seen_process_ids.clear()
+            if self.current_session_id and not self.violation_reported:
+                self.monitor_timer.start(5000)
+            return
+
         timeout_context = dict(context)
         timeout_context["reason"] = (
             f"{context['reason']} (ไม่ขอโอกาสภายในเวลาที่กำหนด)"
         )
         self._finalize_violation(timeout_context, show_dialog=False)
+
+    def _violation_is_still_present(self, context):
+        rules = [context["matched_rule"]] if context.get("matched_rule") else self.policy_rules
+        if context.get("detection_source") == "browser_domain":
+            monitor = getattr(self, "browser_url_monitor", None)
+            observation = monitor.recheck(context) if monitor else None
+            return bool(observation and find_website_match(rules, observation["domain"]))
+        if context.get("detection_source") == "window_title":
+            return False
+        for process in psutil.process_iter(["pid", "name"]):
+            try:
+                name = process.info.get("name") or ""
+                path = process.exe()
+                identity = read_executable_identity(path)
+                if find_process_match(rules, name, path, identity):
+                    return True
+            except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                continue
+            except psutil.AccessDenied:
+                # A matching observed name alone cannot establish EXE identity.
+                continue
+        return False
 
     def report_violation(
         self,
@@ -1052,6 +1145,11 @@ class SmartLabAgent:
         exe_path=None,
         window_title=None,
         detection_source=None,
+        detected_at=None,
+        policy_version=None,
+        policy_token=None,
+        executable_identity=None,
+        browser_domain=None,
     ):
         if self.violation_reported or not self.current_session_id:
             return
@@ -1067,6 +1165,11 @@ class SmartLabAgent:
             "exe_path": exe_path,
             "window_title": window_title,
             "detection_source": detection_source,
+            "detected_at": detected_at or _utc_now().isoformat(timespec="seconds"),
+            "policy_version": policy_version,
+            "policy_token": policy_token,
+            "executable_identity": json.dumps(executable_identity or {}, ensure_ascii=False),
+            "browser_domain": browser_domain,
         }
 
         if self._queue_outbox(
@@ -1087,9 +1190,6 @@ class SmartLabAgent:
         """Inspect each process fully only when its PID first appears."""
 
         current_process_ids = set()
-        has_path_rules = any(
-            rule["match_type"] == "exe_path" for rule in self.policy_rules
-        )
 
         for proc in psutil.process_iter(["pid", "name"]):
             try:
@@ -1101,26 +1201,17 @@ class SmartLabAgent:
                     continue
 
                 process_name = (proc.info.get("name") or "").strip()
-                matched_rule = find_process_match(self.policy_rules, process_name)
-                exe_path = None
-                if matched_rule is None and has_path_rules:
-                    try:
-                        exe_path = proc.exe()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                        exe_path = None
-                    matched_rule = find_process_match(
-                        self.policy_rules,
-                        process_name,
-                        exe_path,
-                    )
+                exe_path = proc.exe()
+                identity = read_executable_identity(exe_path)
+                matched_rule = find_process_match(self.policy_rules, process_name, exe_path, identity)
 
                 if matched_rule is not None:
                     detection_source = (
                         "exe_path"
                         if matched_rule["match_type"] == "exe_path"
-                        else "process_name"
+                        else "executable_identity"
                     )
-                    return process_name, exe_path, matched_rule, detection_source
+                    return process_name, exe_path, matched_rule, detection_source, identity
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
 
@@ -1132,55 +1223,65 @@ class SmartLabAgent:
             if not self.current_session_id or self.violation_dialog_active:
                 return
 
+            self._checkpoint_current_activity(_utc_now())
             now = datetime.now()
             if self.violation_state.clear_expired_grace(now):
                 # A running forbidden process was intentionally skipped during
                 # the grace period, so it must be checked again now.
                 self.seen_process_ids.clear()
 
-            if self.violation_state.is_grace_active(now):
-                return
+            grace_active = self.violation_state.is_grace_active(now)
 
-            # ── ด่านที่ 1: ตรวจ Process ใหม่จากชื่อและ Path ────────────────
-            process_match = self._find_new_process_match()
-            if process_match is not None:
-                process_name, exe_path, matched_rule, detection_source = process_match
-                rule_name = matched_rule.get("app_name") or matched_rule.get("match_value")
-                reason = f"ไม่อนุญาตให้เปิดแอป: {rule_name}"
-                self._handle_violation_detection(
-                    {
-                        "program_name": process_name,
-                        "reason": reason,
-                        "process_name": process_name,
-                        "exe_path": exe_path,
-                        "window_title": None,
-                        "detection_source": detection_source,
-                    }
-                )
-                return
+            # ตรวจ Process ใหม่จากข้อมูลที่ฝังอยู่ใน EXE
+            if not grace_active:
+                process_match = self._find_new_process_match()
+                if process_match is not None:
+                    process_name, exe_path, matched_rule, detection_source, identity = process_match
+                    rule_name = matched_rule.get("app_name") or matched_rule.get("match_value")
+                    reason = f"ไม่อนุญาตให้เปิดแอป: {rule_name}"
+                    self._handle_violation_detection(
+                        {
+                            "program_name": (
+                                identity.get("original_filename") or identity.get("internal_name")
+                                or identity.get("product_name") or process_name
+                            ),
+                            "reason": reason,
+                            "process_name": process_name,
+                            "exe_path": exe_path,
+                            "window_title": None,
+                            "detection_source": detection_source,
+                            "matched_rule": matched_rule,
+                            "executable_identity": identity,
+                        }
+                    )
+                    return
 
-            # ── ด่านที่ 2: ตรวจจาก Active Window title ──────────────────────
+            if not grace_active and any(
+                rule.get("match_type") == "website_domain" for rule in self.policy_rules
+            ):
+                if getattr(self, "browser_url_monitor", None) is None:
+                    self.browser_url_monitor = BrowserURLMonitor()
+                observation = self.browser_url_monitor.poll()
+                matched_rule = find_website_match(self.policy_rules, observation["domain"]) if observation else None
+                if matched_rule:
+                    self._handle_violation_detection({
+                        "program_name": observation["domain"],
+                        "reason": f"ไม่อนุญาตให้เข้าเว็บไซต์: {observation['domain']}",
+                        "browser_domain": observation["domain"],
+                        "browser_hwnd": observation["hwnd"], "browser_pid": observation["pid"],
+                        "process_name": observation["process_name"], "exe_path": observation["exe_path"],
+                        "executable_identity": observation["executable_identity"],
+                        "detection_source": "browser_domain", "matched_rule": matched_rule,
+                    })
+                    return
+
+            # Window titles are used for usage statistics, never enforcement.
             active_win = gw.getActiveWindow()
             if not active_win or not active_win.title:
                 self._close_current_activity(_utc_now())
                 return
 
             raw_title  = active_win.title.strip()
-            window_match = find_window_match(self.policy_rules, raw_title)
-            if window_match is not None:
-                rule_name = window_match.get("app_name") or window_match.get("match_value")
-                reason = f"ไม่อนุญาตให้เปิดใช้งาน: {rule_name}"
-                self._handle_violation_detection(
-                    {
-                        "program_name": raw_title,
-                        "reason": reason,
-                        "process_name": None,
-                        "exe_path": None,
-                        "window_title": raw_title,
-                        "detection_source": "window_title",
-                    }
-                )
-                return
 
             # ── บันทึกสถิติการใช้งานปกติ ────────────────────────────────────
             # ตัดส่วนขยายออก เช่น "Google - Brave" → "Brave"
@@ -1226,7 +1327,7 @@ class SmartLabAgent:
                     f"{API_URL}/agent/log-violation",
                     data=payload,
                 )
-                print(f"Violation response: {response.status_code if response else 'Timeout'}")
+                print(f"Violation response: {response.status_code if response is not None else 'Timeout'}")
             except Exception as error:
                 print(f"บันทึก violation ไม่ได้: {error}")
 
@@ -1239,7 +1340,7 @@ class SmartLabAgent:
                         "usage_data": json.dumps(summary, ensure_ascii=False),
                     },
                 )
-                print(f"Server Response: {response.status_code if response else 'Timeout'}")
+                print(f"Server Response: {response.status_code if response is not None else 'Timeout'}")
             except Exception as error:
                 print(f"ส่งข้อมูลไม่ได้: {error}")
         else:
@@ -1250,11 +1351,12 @@ class SmartLabAgent:
                 f"{API_URL}/agent/end-session",
                 data={"session_id": session_id, "end_reason": end_reason},
             )
-            print(f"End session response: {response.status_code if response else 'Timeout'}")
+            print(f"End session response: {response.status_code if response is not None else 'Timeout'}")
         except Exception as error:
             print(f"ปิด Session ไม่ได้: {error}")
 
     def stop_and_send_logs(self, session_id, end_reason="logout"):
+        self.stop_browser_monitor()
         self.monitor_timer.stop()
         self.heartbeat_timer.stop()
         self.policy_timer.stop()
@@ -1266,9 +1368,8 @@ class SmartLabAgent:
 
         logoff_immediately = not DEBUG_MODE and self.outbox is not None
         if self.outbox is not None:
-            # Segments are normally queued as soon as an activity ends. This
-            # second enqueue is idempotent and protects segments collected by
-            # an older code path before logout.
+            # Retry only segments that could not be saved to the outbox when
+            # their activity ended; already queued items may have been delivered.
             for segment in summary:
                 self._queue_outbox(
                     kind="usage",
@@ -1333,6 +1434,7 @@ class SmartLabAgent:
         self.policy_rules = []
         self.policy_version = None
         self.policy_source = None
+        self.policy_token = None
         self.seen_process_ids.clear()
         self.violation_state.reset()
         self.violation_dialog_active = False
@@ -1341,6 +1443,12 @@ class SmartLabAgent:
         if logoff_immediately:
             os.system("shutdown /l /f")
 
+    def stop_browser_monitor(self):
+        monitor = getattr(self, "browser_url_monitor", None)
+        if monitor is not None:
+            monitor.close()
+            self.browser_url_monitor = None
+
 
 def run_agent() -> int:
     """Start the Agent UI and return its Qt event-loop exit code."""
@@ -1348,6 +1456,7 @@ def run_agent() -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     agent_logic  = SmartLabAgent()
+    app.aboutToQuit.connect(agent_logic.stop_browser_monitor)
     login_screen = LoginOverlay(agent_logic)
     login_screen.show()
     return app.exec()

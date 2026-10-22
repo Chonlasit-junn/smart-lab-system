@@ -1,7 +1,8 @@
 param(
     [string]$Version = "1.0.0",
     [string]$PythonPath = "",
-    [string]$PrebuiltPayloadPath = ""
+    [string]$PrebuiltPayloadPath = "",
+    [switch]$UseVisualStudioAutomation
 )
 
 $ErrorActionPreference = "Stop"
@@ -161,9 +162,28 @@ $devenvArgs = @(
     "/ProjectConfig", "Release",
     "/Out", $buildLog
 )
-& $devenv @devenvArgs
-if ($LASTEXITCODE -ne 0) {
-    throw "Visual Studio Installer Projects failed to build the MSI (exit code $LASTEXITCODE). See '$buildLog'."
+if ($UseVisualStudioAutomation) {
+    # Isolated hidden IDE instance: do not attach to or close the user's IDE.
+    $ideVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($devenv).FileMajorPart
+    $dte = $null
+    try {
+        $dte = New-Object -ComObject "VisualStudio.DTE.$ideVersion.0"
+        $dte.SuppressUI = $true
+        $dte.MainWindow.Visible = $false
+        $dte.Solution.Open($solutionPath)
+        $dte.Solution.SolutionBuild.SolutionConfigurations.Item('Release').Activate()
+        $dte.Solution.SolutionBuild.Build($true)
+        if ($dte.Solution.SolutionBuild.LastBuildInfo -ne 0) {
+            throw "Visual Studio automation reported MSI build errors."
+        }
+    } finally {
+        if ($null -ne $dte) { $dte.Quit() }
+    }
+} else {
+    & $devenv @devenvArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Visual Studio Installer Projects failed to build the MSI (exit code $LASTEXITCODE). See '$buildLog'. If this is a command-line license error, retry with -UseVisualStudioAutomation."
+    }
 }
 if (-not (Test-Path -LiteralPath $msiPath -PathType Leaf)) {
     throw "Visual Studio reported success, but the expected MSI was not found at '$msiPath'."

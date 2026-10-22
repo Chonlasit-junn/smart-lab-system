@@ -22,6 +22,7 @@ import {
   Fade,
   Chip,
   Popover,
+  MenuItem,
 } from "@mui/material";
 import {
   Search,
@@ -44,10 +45,11 @@ import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import NotificationBell from "../components/NotificationBell";
+import { blacklistFormError, serializeBlacklistForm } from "../utils/blacklistPolicy";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-const EMPTY_FORM = { app_name: "", description: "" };
+const EMPTY_FORM = { app_name: "", description: "", match_type: "process_name", match_value: "" };
 
 export default function BlacklistManager() {
   const navigate = useNavigate();
@@ -75,6 +77,8 @@ export default function BlacklistManager() {
   const [currentId, setCurrentId] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const savePendingRef = useRef(false);
 
   // --- API ---
   const fetchBlacklist = useCallback(async () => {
@@ -126,26 +130,37 @@ export default function BlacklistManager() {
     setFormData({
       app_name: item.app_name,
       description: item.description || "",
+      match_type: item.match_type || "process_name",
+      match_value: item.match_value || item.app_name,
     });
     setFormError("");
     setOpenDialog(true);
   };
 
   const handleSave = async () => {
-    if (!formData.app_name.trim()) {
-      setFormError(t("admin.appNameRequired"));
+    if (savePendingRef.current) return;
+    const errorKey = blacklistFormError(formData);
+    if (errorKey) {
+      setFormError(t(errorKey));
       return;
     }
+    savePendingRef.current = true;
+    setSaving(true);
+    setFormError("");
     try {
+      const payload = serializeBlacklistForm(formData);
       if (isEditing) {
-        await axios.put(`${API_URL}/admin/blacklist/${currentId}`, formData, authConfig());
+        await axios.put(`${API_URL}/admin/blacklist/${currentId}`, payload, authConfig());
       } else {
-        await axios.post(`${API_URL}/admin/blacklist`, formData, authConfig());
+        await axios.post(`${API_URL}/admin/blacklist`, payload, authConfig());
       }
       setOpenDialog(false);
       fetchBlacklist();
     } catch (err) {
       setFormError(err.response?.data?.detail || t("admin.blacklistOperationFailed"));
+    } finally {
+      savePendingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -164,6 +179,7 @@ export default function BlacklistManager() {
   const filtered = blacklist.filter(
     (item) =>
       (item.app_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.match_value || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.description || "")
         .toLowerCase()
         .includes(searchQuery.toLowerCase()),
@@ -249,7 +265,13 @@ export default function BlacklistManager() {
         <Box
           className="top-header admin-top-header"
           sx={{
+            "&.admin-top-header": {
+              height: { xs: "auto", md: 72 },
+              flexBasis: { xs: "auto", md: 72 },
+            },
             display: "flex",
+            flexWrap: { xs: "wrap", md: "nowrap" },
+            rowGap: 1,
             alignItems: "center",
             justifyContent: "space-between",
             px: 6,
@@ -262,11 +284,12 @@ export default function BlacklistManager() {
           <Typography
             variant="h5"
             fontWeight="700"
-            sx={{ color: "#1e293b", letterSpacing: "-1px" }}
+            sx={{ color: "#1e293b", letterSpacing: "-1px", fontSize: { xs: 18, md: 24 },
+              width: { xs: "100%", md: "auto" }, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
           >
             {t("admin.blacklistTitle")}
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 2 }, minWidth: 0, width: { xs: "100%", md: "auto" } }}>
             <Paper
               className="admin-search-control"
               elevation={0}
@@ -275,13 +298,15 @@ export default function BlacklistManager() {
                 py: 0.5,
                 display: "flex",
                 alignItems: "center",
-                width: 400,
+                width: { xs: "auto", md: 400 },
+                flex: { xs: 1, md: "0 1 auto" },
+                minWidth: 0,
                 height: 44,
               }}
             >
               <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
               <InputBase
-                placeholder={t("admin.searchLabs")}
+                placeholder={t("admin.searchBlacklist")}
                 fullWidth
                 sx={{ fontSize: "15px", fontWeight: "400" }}
                 value={searchQuery}
@@ -294,12 +319,13 @@ export default function BlacklistManager() {
               loadNotifications={false}
             />
             <Divider
+              className="admin-header-divider"
               orientation="vertical"
               flexItem
               sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box sx={{ textAlign: "right" }}>
+              <Box className="admin-user-summary" sx={{ textAlign: "right" }}>
                 <Typography
                   variant="subtitle2"
                   fontWeight="700"
@@ -581,7 +607,7 @@ export default function BlacklistManager() {
                             sx={{ py: 6, color: "#94a3b8", fontWeight: "500" }}
                           >
                             {searchQuery
-                              ? `${t("admin.noMatchingUsers")}: "${searchQuery}"`
+                              ? `${t("admin.noMatchingBlacklist")}: "${searchQuery}"`
                               : t("admin.noBlockedPrograms")}
                           </TableCell>
                         </TableRow>
@@ -636,7 +662,7 @@ export default function BlacklistManager() {
                                     {item.app_name || t("admin.unknownProgram")}
                                   </Typography>
                                   <Chip
-                                    label={t("common.inactive")}
+                                    label={t(item.match_type === "website_domain" ? "admin.websiteRule" : "admin.programRule")}
                                     size="small"
                                     sx={{
                                       bgcolor: "#fef2f2",
@@ -647,6 +673,9 @@ export default function BlacklistManager() {
                                       mt: 0.3,
                                     }}
                                   />
+                                  <Typography variant="caption" display="block" sx={{ color: "text.secondary", overflowWrap: "anywhere" }}>
+                                    {item.match_value || item.app_name}
+                                  </Typography>
                                 </Box>
                               </Box>
                             </TableCell>
@@ -725,12 +754,13 @@ export default function BlacklistManager() {
       {/* DIALOG: Add / Edit */}
       <Dialog
         open={openDialog}
-        onClose={() => setOpenDialog(false)}
+        onClose={() => { if (!saving) setOpenDialog(false); }}
         PaperProps={{
           sx: {
             borderRadius: 4,
             p: 2,
-            minWidth: 460,
+            width: 600,
+            maxWidth: "calc(100vw - 32px)",
             boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
           },
         }}
@@ -749,10 +779,29 @@ export default function BlacklistManager() {
         </DialogTitle>
 
         <DialogContent
-          sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 2 }}
+          sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 2, border: 0, m: 0, minWidth: 0 }}
         >
           <TextField
+            select
+            disabled={saving}
+            label={t("admin.ruleType")}
+            size="small"
+            value={formData.match_type}
+            onChange={(e) => {
+              setFormData({ ...formData, match_type: e.target.value, match_value: "" });
+              setFormError("");
+            }}
+            sx={{ mt: 1 }}
+          >
+            <MenuItem value="process_name">{t("admin.programRule")}</MenuItem>
+            <MenuItem value="website_domain">{t("admin.websiteRule")}</MenuItem>
+            {["process_name_or_title", "exe_path", "window_title"].includes(formData.match_type) && (
+              <MenuItem value={formData.match_type}>{t("admin.legacyRule")}: {formData.match_type}</MenuItem>
+            )}
+          </TextField>
+          <TextField
             label={t("admin.programName")}
+            disabled={saving}
             fullWidth
             size="small"
             value={formData.app_name}
@@ -763,7 +812,21 @@ export default function BlacklistManager() {
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           <TextField
+            label={t(formData.match_type === "website_domain" ? "admin.websiteDomain" : "admin.executableMatch")}
+            disabled={saving}
+            fullWidth
+            size="small"
+            value={formData.match_value}
+            onChange={(e) => {
+              setFormData({ ...formData, match_value: e.target.value });
+              setFormError("");
+            }}
+            helperText={t(formData.match_type === "website_domain" ? "admin.websiteDomainHint" : "admin.executableMatchHint")}
+            placeholder={formData.match_type === "website_domain" ? "example.com" : "StarRail.exe"}
+          />
+          <TextField
             label={t("admin.description")}
+            disabled={saving}
             fullWidth
             multiline
             rows={3}
@@ -784,12 +847,14 @@ export default function BlacklistManager() {
 
         <DialogActions sx={{ pb: 1, pr: 2, gap: 1 }}>
           <Button
+            disabled={saving}
             onClick={() => setOpenDialog(false)}
             sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
           >
             {t("common.cancel")}
           </Button>
           <Button
+            disabled={saving}
             onClick={handleSave}
             variant="contained"
             disableElevation

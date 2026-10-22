@@ -7,6 +7,7 @@ that policy behavior can be tested without starting the Agent window.
 from __future__ import annotations
 
 from typing import Any, Optional
+from browser_url import normalize_domain
 
 
 SUPPORTED_MATCH_TYPES = frozenset(
@@ -15,6 +16,7 @@ SUPPORTED_MATCH_TYPES = frozenset(
         "process_name_or_title",
         "exe_path",
         "window_title",
+        "website_domain",
     }
 )
 
@@ -23,43 +25,29 @@ DEFAULT_FALLBACK_RULES = [
     {
         "id": None,
         "app_name": "BitTorrent",
-        "match_type": "process_name_or_title",
+        "match_type": "process_name",
         "match_value": "bittorrent",
         "enabled": True,
     },
     {
         "id": None,
         "app_name": "CheatEngine",
-        "match_type": "process_name_or_title",
+        "match_type": "process_name",
         "match_value": "cheatengine",
         "enabled": True,
     },
     {
         "id": None,
         "app_name": "GenshinImpact",
-        "match_type": "process_name_or_title",
+        "match_type": "process_name",
         "match_value": "genshinimpact",
         "enabled": True,
     },
     {
         "id": None,
-        "app_name": "GenshinImpact",
-        "match_type": "window_title",
-        "match_value": "genshin",
-        "enabled": True,
-    },
-    {
-        "id": None,
         "app_name": "StarRail",
-        "match_type": "process_name_or_title",
+        "match_type": "process_name",
         "match_value": "starrail",
-        "enabled": True,
-    },
-    {
-        "id": None,
-        "app_name": "StarRail",
-        "match_type": "window_title",
-        "match_value": "star rail",
         "enabled": True,
     },
 ]
@@ -104,7 +92,7 @@ def normalize_rules(raw_rules: Any) -> list[dict[str, Any]]:
 
         app_name = str(raw_rule.get("app_name") or "").strip()
         match_type = str(
-            raw_rule.get("match_type") or "process_name_or_title"
+            raw_rule.get("match_type") or "process_name"
         ).strip().casefold()
         match_value = str(raw_rule.get("match_value") or app_name).strip()
         if not app_name or not match_value or match_type not in SUPPORTED_MATCH_TYPES:
@@ -127,20 +115,37 @@ def find_process_match(
     rules: list[dict[str, Any]],
     process_name: Any,
     exe_path: Optional[Any] = None,
+    executable_identity: Optional[dict[str, str]] = None,
 ) -> Optional[dict[str, Any]]:
-    """Find an exact process-name or executable-path policy match."""
+    """Match embedded EXE identity; observed names/titles cannot prove identity."""
 
-    normalized_process = normalize_process_name(process_name)
+    if not isinstance(executable_identity, dict):
+        return None
+    original = executable_identity.get("original_filename") or executable_identity.get("internal_name")
+    original = normalize_process_name(original)
+    product = normalize_compact(executable_identity.get("product_name"))
     normalized_exe_path = normalize_path(exe_path)
 
     for rule in rules:
+        if rule.get("enabled") is False:
+            continue
         match_type = rule["match_type"]
         match_value = rule["match_value"]
-        if match_type in {"process_name", "process_name_or_title"}:
-            if normalized_process and normalized_process == normalize_process_name(match_value):
+        if match_type in {"window_title", "website_domain"}:
+            continue
+        if match_type == "exe_path" and normalized_exe_path != normalize_path(match_value):
+            continue
+        expected = {normalize_process_name(match_value)}
+        if match_type == "exe_path":
+            expected.add(normalize_process_name(rule.get("app_name")))
+        expected.discard("")
+        if original:
+            if original in expected:
                 return rule
-        elif match_type == "exe_path":
-            if normalized_exe_path and normalized_exe_path == normalize_path(match_value):
+        elif product:
+            # Product-only resources use exact labels, not title substrings.
+            aliases = {"starrail": {"starrail", "honkaistarrail"}}
+            if any(product in aliases.get(name, {name}) for name in expected):
                 return rule
 
     return None
@@ -150,17 +155,18 @@ def find_window_match(
     rules: list[dict[str, Any]],
     window_title: Any,
 ) -> Optional[dict[str, Any]]:
-    """Find a configured window-title policy match."""
+    """Window titles are telemetry only, never grounds for a penalty."""
+    return None
 
-    normalized_title = normalize_compact(window_title)
-    if not normalized_title:
+
+def find_website_match(rules, domain):
+    host = normalize_domain(domain)
+    if not host:
         return None
-
     for rule in rules:
-        if rule["match_type"] not in {"window_title", "process_name_or_title"}:
+        if rule.get("enabled") is False or rule.get("match_type") != "website_domain":
             continue
-        normalized_value = normalize_compact(rule["match_value"])
-        if normalized_value and normalized_value in normalized_title:
+        blocked = normalize_domain(rule.get("match_value"))
+        if blocked and (host == blocked or host.endswith("." + blocked)):
             return rule
-
     return None

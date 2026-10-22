@@ -10,10 +10,14 @@ from sqlalchemy.orm import Session
 import models
 from database import get_db
 from device_registry import require_registered_device
-from policy import build_policy, find_matching_rule, get_policy_rules
+from policy import (
+    build_policy, find_matching_rule, get_policy_rules,
+    sign_policy_snapshot, verify_policy_snapshot,
+)
 from routers.points import apply_point_event, mark_due_no_shows
 from time_utils import as_utc, lab_now_naive, utc_now
 from utils import normalize_email
+from url_policy import normalize_domain
 
 router = APIRouter(tags=["Hardware Agent"])
 
@@ -37,7 +41,8 @@ REQUIRE_DEVICE_REGISTRATION = os.getenv(
 def get_agent_policy(db: Session = Depends(get_db)):
     """Return the active, versioned policy used by Windows Agents."""
 
-    return build_policy(get_policy_rules(db))
+    policy = build_policy(get_policy_rules(db))
+    return {**policy, "policy_token": sign_policy_snapshot(policy)}
 
 
 def _clean_device_mac(value: Optional[str]) -> Optional[str]:
@@ -422,6 +427,11 @@ def log_violation(
     exe_path: Optional[str] = Form(None),
     window_title: Optional[str] = Form(None),
     detection_source: Optional[str] = Form(None),
+    detected_at: Optional[str] = Form(None),
+    policy_version: Optional[str] = Form(None),
+    policy_token: Optional[str] = Form(None),
+    executable_identity: Optional[str] = Form(None),
+    browser_domain: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     access_log = db.query(models.LabAccessLog).filter(
@@ -433,6 +443,14 @@ def log_violation(
     cleaned_program_name = program_name.strip()
     if not cleaned_program_name:
         raise HTTPException(status_code=422, detail="program_name is required.")
+    if browser_domain is not None:
+        domain = normalize_domain(browser_domain)
+        if not domain or domain != browser_domain or detection_source != "browser_domain":
+            raise HTTPException(status_code=422, detail="A canonical browser domain is required.")
+        cleaned_program_name = domain
+        window_title = None
+    elif detection_source == "browser_domain":
+        raise HTTPException(status_code=422, detail="browser_domain is required.")
 
     resolved_event_id = _clean_idempotency_key(event_id, "event_id")
     if resolved_event_id:
@@ -450,19 +468,64 @@ def log_violation(
                 "violation_id": existing.id,
             }
 
-    active_policy = build_policy(get_policy_rules(db))
+    identity = {}
+    if executable_identity:
+        try:
+            if len(executable_identity) > 4096:
+                raise ValueError("Identity too large.")
+            identity = json.loads(executable_identity)
+            if not isinstance(identity, dict) or any(
+                key not in {"original_filename", "internal_name", "product_name", "company_name"}
+                or not isinstance(value, str) or len(value) > 256
+                for key, value in identity.items()
+            ):
+                raise ValueError("Invalid identity.")
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail="Invalid executable identity.") from exc
+    if not any(identity.get(key, "").strip() for key in (
+        "original_filename", "internal_name", "product_name",
+    )):
+        # Acknowledge obsolete outbox entries without applying title/name-only penalties.
+        return {"message": "Unverified violation ignored.", "ignored": True,
+                "reason": "executable_identity_required"}
+
+    received_at = utc_now()
+    event_time = _parse_usage_time(detected_at, received_at)
+    clock_tolerance = timedelta(minutes=5)
+    if detected_at and (
+        event_time < as_utc(access_log.entry_time) - clock_tolerance
+        or event_time > received_at + clock_tolerance
+    ):
+        raise HTTPException(status_code=422, detail="Detection time is outside the session window.")
+
+    if policy_token:
+        if not detected_at:
+            raise HTTPException(status_code=422, detail="A signed policy requires detected_at.")
+        try:
+            event_policy = verify_policy_snapshot(policy_token)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid policy snapshot.") from exc
+        if (
+            policy_version != event_policy["version"]
+            or event_policy["issued_at"] > event_time.timestamp() + clock_tolerance.total_seconds()
+        ):
+            raise HTTPException(status_code=422, detail="Policy snapshot does not match the event.")
+    else:
+        # Legacy Agents have no signed receipt; keep validating their evidence
+        # against the active rules rather than trusting client-supplied history.
+        event_policy = build_policy(get_policy_rules(db))
     matched_rule = find_matching_rule(
-        active_policy["data"],
-        # These fallbacks keep the endpoint compatible with older Agents that
-        # only sent program_name and did not include evidence fields.
+        event_policy["data"],
         process_name=(process_name or cleaned_program_name).strip(),
         exe_path=exe_path,
-        window_title=(window_title or cleaned_program_name).strip(),
+        window_title=window_title,
+        executable_identity=identity,
+        browser_domain=browser_domain,
     )
     if matched_rule is None:
         raise HTTPException(
             status_code=422,
-            detail="Violation does not match an active blacklist rule.",
+            detail="Violation does not match the supplied or active blacklist policy.",
         )
 
     session_is_active = (
@@ -477,13 +540,13 @@ def log_violation(
         program_name=cleaned_program_name,
         reason=reason.strip() if reason else None,
         action_taken=action_taken.strip() or "logout",
-        detected_at=utc_now(),
+        detected_at=event_time,
         event_id=resolved_event_id,
         process_name=process_name.strip() if process_name else None,
         exe_path=exe_path.strip() if exe_path else None,
         window_title=window_title.strip() if window_title else None,
         detection_source=detection_source.strip() if detection_source else None,
-        policy_version=active_policy["version"],
+        policy_version=event_policy["version"],
         matched_rule_id=matched_rule.get("id"),
     )
     point_result = None
@@ -495,7 +558,7 @@ def log_violation(
             access_log.user_id,
             "forbidden_app",
             db,
-            note=f"ตรวจพบโปรแกรมต้องห้าม: {cleaned_program_name}",
+            note=f"ตรวจพบ{'เว็บไซต์' if browser_domain else 'โปรแกรม'}ต้องห้าม: {cleaned_program_name}",
             event_id=point_event_id,
             source_type="usage_violation",
             source_id=violation.id,

@@ -18,6 +18,59 @@ The MSI does not contain Admin credentials. The returned device token is saved f
 
 The Backend URL saved with the device credential is used by the Agent. `SMART_LAB_API_URL`, if set on the Windows account, intentionally overrides the saved URL.
 
+## Usage and violation delivery
+
+The Agent checkpoints a running application's usage every 30 seconds into its
+SQLite outbox. On a crash, completed checkpoints survive; the most recent partial
+interval can still be lost. At the end of a warning, it checks whether the detected
+application is still present before ending the session.
+
+Deploy the Backend update before distributing the updated Agent. The policy API
+now supplies a signed rule snapshot, which the Agent caches and attaches to queued
+violations with their original UTC detection time. This lets the Backend validate
+events after the blacklist changes, without a database migration. Keep the Backend
+signing key stable while old outbox events are pending. Unsigned fallback policies
+still require a match against current rules.
+
+Enforcement now uses embedded EXE version metadata (OriginalFilename, InternalName,
+or an exact ProductName fallback), not window titles or the observed filename.
+Renaming a Notepad document or copying Notepad to `StarRail.exe` does not identify
+it as a game. Legacy `process_name_or_title` rules use EXE identity only;
+`window_title` rules no longer trigger penalties and need an executable-based
+replacement. Unreadable files or files without usable metadata are not guessed
+from their names. Metadata is not a cryptographic signature and does not protect
+against deliberately modified binaries. Backend acknowledges old violations with
+no executable identity without recording them or deducting points. Deploy Backend
+first and rebuild/distribute the Agent; existing MSI files are not updated by a
+source change.
+
+## Chrome and Edge website rules
+
+Add a **Website** rule in Admin Blacklist using a domain such as `example.com`.
+The rule includes subdomains but not lookalikes such as `example.com.evil.com`.
+With operator approval, apply `backend/migrations/013_website_domain_policy.sql`
+before creating these rules; deploy Backend before distributing this Agent.
+
+The MSI includes the URL reader. It uses the Windows PowerShell/.NET UI Automation
+components already installed on Windows 10/11, with one hidden, persistent helper
+and one bounded background worker. No browser extension or extra Python package
+is required. Environments that disable Windows PowerShell or UI Automation cannot
+use website detection. The reader does not change execution policy, browser flags,
+permissions, clipboard, keyboard focus or security settings.
+
+Only the active tab in a foreground Chrome/Edge window is sampled, on the existing
+five-second monitor timer. Warning rechecks target the original browser window.
+Only the domain is sent with violations; paths, queries, fragments and page titles
+are not sent as URL evidence. This is policy detection, not a network firewall or
+a record of all browser tabs/history. Brief visits between samples may be missed.
+Inaccessible/hidden address bars, full-screen mode and an address bar currently
+being edited produce no evidence, not a guessed violation. Browser updates and
+different Windows/browser versions need compatibility testing on a Lab PC.
+
+Program and website rules share the existing warning, grace, durable outbox,
+signed-policy validation and idempotent point handling. On logout/exit the URL
+helper is closed. This feature does not change device registration or lab login.
+
 ## Build the MSI
 
 Build on Windows for the target architecture. The build machine needs:
@@ -31,6 +84,11 @@ From the repository root, run:
 ```powershell
 .\smart-lab-agent\installer\build_msi.ps1 -Version 1.0.0
 ```
+
+If command-line Visual Studio reports invalid license data but IDE builds work,
+add `-UseVisualStudioAutomation`. This uses a new hidden IDE instance to build the
+same project and applies the same shortcut validation; it does not repair/update
+Visual Studio or modify registry settings.
 
 The default uses `smart-lab-agent\venv\Scripts\python.exe`. A different Python may be selected with `-PythonPath`, but it must have the project runtime dependencies and PyInstaller 6.20.0 installed.
 
