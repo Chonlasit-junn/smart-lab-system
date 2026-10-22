@@ -3,3 +3,6 @@ PyQt6==6.11.0
 psutil==7.2.2
 requests==2.33.1
 PyGetWindow==0.0.9
+# Explicit runtime dependency; included automatically in the frozen executable.
+idna==3.11
+unicodedata2==16.0.0; python_version < "3.14"

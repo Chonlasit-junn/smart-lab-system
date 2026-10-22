@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 from browser_url import normalize_domain
+from domain_normalization import domain_matches
 
 
 SUPPORTED_MATCH_TYPES = frozenset(
@@ -167,6 +168,6 @@ def find_website_match(rules, domain):
         if rule.get("enabled") is False or rule.get("match_type") != "website_domain":
             continue
         blocked = normalize_domain(rule.get("match_value"))
-        if blocked and (host == blocked or host.endswith("." + blocked)):
+        if blocked and domain_matches(host, blocked):
             return rule
     return None

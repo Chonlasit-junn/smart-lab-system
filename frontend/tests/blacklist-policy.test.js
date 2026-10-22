@@ -1,6 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { blacklistFormError, normalizeWebsiteDomain, serializeBlacklistForm } from "../src/utils/blacklistPolicy.js";
+
+const contract = JSON.parse(readFileSync(new URL("../../tests/fixtures/domain-contract.json", import.meta.url), "utf8"));
+
+test("all shared domain vectors agree with the canonical contract and are idempotent", () => {
+  for (const [value, expected] of contract.normalization) {
+    assert.equal(normalizeWebsiteDomain(value), expected, JSON.stringify(value));
+    if (expected) assert.equal(normalizeWebsiteDomain(expected), expected);
+  }
+});
+
+test("canonical website payloads remain usable for every shared matching domain", () => {
+  for (const [value] of contract.matching) {
+    const form = { app_name: "Display label", description: "", match_type: "website_domain", match_value: value };
+    assert.equal(blacklistFormError(form), null);
+    assert.equal(serializeBlacklistForm(form).match_value, normalizeWebsiteDomain(value));
+  }
+});
 
 test("website URLs are reduced to a canonical domain before sending", () => {
   assert.equal(normalizeWebsiteDomain("https://EXAMPLE.com:443/private?q=secret#token"), "example.com");

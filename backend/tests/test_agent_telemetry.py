@@ -203,6 +203,60 @@ class AgentTelemetryTests(unittest.TestCase):
                 self.assertEqual(raised.exception.status_code, 422)
                 points.assert_not_called()
 
+    def test_special_domains_pass_admin_policy_agent_and_violation_validation(self):
+        # All writes are to this fixture's in-memory SQLite database, never production.
+        from routers import blacklist
+        from url_policy import normalize_domain
+
+        for index, (entered, canonical, observed) in enumerate((
+            ("https://faß.de/private?secret=1", "xn--fa-hia.de", "https://faß.de/"),
+            ("ไทย.ไทย", "xn--o3cw4h.xn--o3cw4h", "https://ไทย.ไทย/"),
+            ("127.1", "127.0.0.1", "http://127.0.0.1/"),
+            ("https://[::ffff:192.0.2.1]:443/", "[::ffff:c000:201]", "http://[::ffff:c000:201]/"),
+        )):
+            with self.subTest(entered=entered):
+                blacklist.create(blacklist.BlacklistCreate(
+                    app_name=f"Offline domain {index}", match_type="website_domain", match_value=entered,
+                ), self.user, self.db)
+                row = self.db.query(models.BlacklistedApp).filter_by(app_name=f"Offline domain {index}").one()
+                self.assertEqual(row.match_value, canonical)
+                with patch("policy.utc_now", return_value=self.detected_at - timedelta(minutes=1)):
+                    self.policy = agent.get_agent_policy(self.db)
+                policy_rule = next(rule for rule in self.policy["data"] if rule["id"] == row.id)
+                self.assertEqual(policy_rule["match_type"], "website_domain")
+                self.assertEqual(policy_rule["match_value"], canonical)
+                self.assertEqual(normalize_domain(observed), canonical)
+                with patch.object(agent, "apply_point_event", return_value={}) as points:
+                    payload = dict(program_name=canonical, browser_domain=canonical,
+                                   event_id=f"offline-domain-{index}", detection_source="browser_domain",
+                                   process_name="msedge.exe",
+                                   executable_identity=json.dumps({"original_filename": "msedge.exe"}))
+                    self.deliver(**payload)
+                    self.deliver(**payload)
+                    self.assertEqual(points.call_count, 1)
+                violation = self.db.query(models.UsageViolation).filter_by(event_id=f"offline-domain-{index}").one()
+                self.assertEqual(violation.program_name, canonical)
+                self.assertEqual(violation.matched_rule_id, row.id)
+                self.assertIsNone(violation.window_title)
+
+    def test_unicode_domain_evidence_must_be_canonical_before_deducting_points(self):
+        payload = self.website_payload()
+        payload["browser_domain"] = "faß.de"
+        with patch.object(agent, "apply_point_event") as points:
+            with self.assertRaises(HTTPException) as raised:
+                self.deliver(**payload)
+            self.assertEqual(raised.exception.status_code, 422)
+            points.assert_not_called()
+
+    def test_ip_alias_evidence_must_be_canonical_before_deducting_points(self):
+        payload = self.website_payload()
+        payload["browser_domain"] = "127.1"
+        with patch.object(agent, "apply_point_event") as points:
+            with self.assertRaises(HTTPException) as raised:
+                self.deliver(**payload)
+            self.assertEqual(raised.exception.status_code, 422)
+            points.assert_not_called()
+
     def test_point_failure_rolls_back_the_violation_for_a_later_retry(self):
         with patch.object(agent, "apply_point_event", side_effect=RuntimeError("unavailable")):
             with self.assertRaises(HTTPException) as raised:

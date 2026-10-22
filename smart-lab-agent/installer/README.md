@@ -71,6 +71,38 @@ Program and website rules share the existing warning, grace, durable outbox,
 signed-policy validation and idempotent point handling. On logout/exit the URL
 helper is closed. This feature does not change device registration or lab login.
 
+### Domain contract v1
+
+Frontend, Backend and Agent use Unicode 16 UTS #46 non-transitional mapping.
+`faß.de` becomes `xn--fa-hia.de`, not `fass.de`; Thai, Chinese, Emoji and existing
+Punycode names use the same canonical ASCII domain. Invalid Punycode, Bidi/Joiner
+sequences, credentials, percent-encoded hosts and wildcard rules are rejected.
+Only one trailing DNS dot is stripped. Single-label non-IP hosts are unsupported.
+
+IPv4 browser aliases such as `127.1`, `0177.0.0.1` and `0x7f000001` become
+`127.0.0.1`. IPv6 is bracketed/compressed, with IPv4-mapped addresses rendered as
+hexadecimal, e.g. `[::ffff:c000:201]`. Ports are validated then discarded. IP rules
+match exactly, never as domain suffixes. No paths, queries or fragments persist.
+
+The Python module `domain_normalization.py` is mirrored in Backend and Agent
+because each is deployed independently. A test compares the copies byte-for-byte.
+Both pin `idna==3.11`; Python older than 3.14 also bundles Unicode 16 data via
+`unicodedata2`. Frontend pins `tr46==5.1.1`, loaded only with the Blacklist page.
+These runtime dependencies are included in the MSI; Lab users install nothing else.
+
+Shared expected results are in `tests/fixtures/domain-contract.json`. From the
+repository root, after installing the normal project dependencies, run:
+
+```powershell
+.\smart-lab-agent\venv\Scripts\python.exe -B scripts/check_domain_contract.py
+```
+
+This offline check compares the real JS frontend, Backend Python and Agent Python
+over the same synthetic cases, including form payloads and idempotence. It makes
+no network requests, creates no production rules and cannot deduct real points.
+Existing persisted rules are not automatically rewritten. Rebuild/distribute the
+MSI after changing this contract; updating the website does not update Lab PCs.
+
 ## Build the MSI
 
 Build on Windows for the target architecture. The build machine needs:

@@ -6,42 +6,16 @@ provider hangs. No extension, keyboard shortcuts, clipboard or browsing history.
 from __future__ import annotations
 
 import ctypes
-import ipaddress
 import json
 import os
-import re
 import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urlsplit
 
 import psutil
 from program_identity import read_executable_identity
-
-
-def normalize_domain(value):
-    raw = str(value or "").strip()
-    if not raw or len(raw) > 4096 or any(char.isspace() or ord(char) < 32 for char in raw):
-        return None
-    try:
-        parsed = urlsplit(raw if "://" in raw else "https://" + raw)
-        if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password:
-            return None
-        parsed.port  # Reject invalid ports, not just invalid hostnames.
-        host = (parsed.hostname or "").rstrip(".").encode("idna").decode("ascii").lower()
-        try:
-            return str(ipaddress.ip_address(host))
-        except ValueError:
-            pass
-        if len(host) > 253 or "." not in host:
-            return None
-        if not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
-                   for label in host.split(".")):
-            return None
-        return host
-    except (ValueError, UnicodeError):
-        return None
+from domain_normalization import normalize_domain
 
 
 def browser_name(identity):
