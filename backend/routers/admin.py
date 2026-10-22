@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pydantic import BaseModel, Field
 import models
 from database import get_db
@@ -271,8 +272,8 @@ def verify_user(
     _admin: models.User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    passport = db.query(models.UserPassport).filter(models.UserPassport.user_id == user_id).first()
+    user = db.query(models.User).filter(models.User.id == user_id).with_for_update().first()
+    passport = db.query(models.UserPassport).filter(models.UserPassport.user_id == user_id).with_for_update().first()
 
     if not user or not passport:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -283,14 +284,36 @@ def verify_user(
         return {"message": "User approved successfully."}
 
     elif payload.action == "reject":
+        if passport.is_active or any(role.name != "guest" for role in user.roles):
+            raise HTTPException(status_code=409, detail="Only a pending Guest account can be rejected.")
+        history_models = (models.Booking, models.LabAccessLog, models.PointLog,
+                          models.UserDailyScore, models.BanRecord, models.PointRequest, models.Ticket)
+        has_history = db.query(or_(*(
+            db.query(model).filter(model.user_id == user.id).exists()
+            for model in history_models
+        ))).scalar()
+        if has_history:
+            raise HTTPException(status_code=409, detail="This account has related records and cannot be removed.")
         profile_image_path = user.profile_pic
-        # delete child records first, then flush so FK constraints are satisfied
-        # before we delete the parent user row
-        db.delete(passport)
-        db.query(models.UserRole).filter(models.UserRole.user_id == user.id).delete()
-        db.flush()
-        db.delete(user)
-        db.commit()
+        try:
+            # Pending registration creates a points row too. Explicit ORM
+            # deletion avoids blanking its PK via User.points_record backref.
+            points = db.get(models.UserPoints, user.id)
+            if points is not None:
+                db.delete(points)
+            db.delete(passport)
+            user.roles = []
+            db.flush()
+            db.expire(user, ["points_record"])
+            db.delete(user)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            # Do not cascade-delete usage/audit history to make rejection work.
+            raise HTTPException(status_code=409, detail="This account has related records and cannot be removed.") from None
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(status_code=503, detail="Unable to reject this account. Please try again.") from None
         delete_profile_image_sync(profile_image_path)
         return {"message": "User rejected and removed."}
 

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Avatar,
   Box,
   Button,
@@ -39,6 +38,7 @@ import { useLanguage } from "../context/language-context.js";
 import { formatDateTime } from "../utils/dateFormat";
 import SupportModal from "./SupportModal";
 import NotificationBell from "../components/NotificationBell";
+import LoadError from "../components/LoadError";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -65,20 +65,19 @@ export default function MyTickets() {
   const location = useLocation();
   const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
-  const tRef = useRef(t);
-  tRef.current = t;
   const ticketsControllerRef = useRef(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
-  const [tickets, setTickets] = useState([]);
+  const [ticketData, setTicketData] = useState({ identity: null, page: 0, items: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
   const userIdentity = currentUser?.id || currentUser?.email;
+  const tickets = ticketData.identity === userIdentity && ticketData.page === page ? ticketData.items : [];
 
   const fetchMyTickets = useCallback(async () => {
     ticketsControllerRef.current?.abort();
@@ -98,14 +97,11 @@ export default function MyTickets() {
         params: { page, page_size: PAGE_SIZE },
       });
       if (ticketsControllerRef.current !== controller) return;
-      setTickets(response.data?.data || []);
+      setTicketData({ identity: userIdentity, page, items: response.data?.data || [] });
       setTotal(Number(response.data?.total) || 0);
     } catch (requestError) {
       if (axios.isCancel(requestError) || ticketsControllerRef.current !== controller) return;
-      setError(
-        requestError.response?.data?.detail ||
-          tRef.current("user.myTicketsLoadFailed"),
-      );
+      setError(true);
     } finally {
       if (ticketsControllerRef.current === controller) {
         ticketsControllerRef.current = null;
@@ -418,11 +414,7 @@ export default function MyTickets() {
                 bgcolor: "white",
               }}
             >
-              {error && (
-                <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>
-                  {error}
-                </Alert>
-              )}
+              {error && <LoadError onRetry={fetchMyTickets} />}
 
               <Typography
                 variant="h6"
@@ -548,7 +540,7 @@ export default function MyTickets() {
                     </Box>
                   )}
                 </>
-              ) : (
+              ) : error ? null : (
                 <Box
                   className="empty-state history-empty-state"
                   sx={{ bgcolor: "var(--surface-subtle)" }}

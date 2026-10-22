@@ -6,9 +6,9 @@ import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import { formatDateTime } from "../utils/dateFormat";
 import { getPointReasonLabel } from "../utils/pointReason";
+import { useNotificationReadState } from "../context/useNotificationReadState.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
-const LAST_SEEN_POINT_LOG_KEY = "last_seen_point_log_id";
 
 const HIDDEN_POINT_NOTIFICATION_REASONS = new Set([
   "admin_grant",
@@ -38,9 +38,7 @@ export default function NotificationBell({
     return initialPointLogs ??
       (pointLogState.email === currentUser?.email ? pointLogState.logs : []);
   }, [currentUser?.email, initialPointLogs, pointLogState]);
-  const [lastSeenLogId, setLastSeenLogId] = useState(
-    () => Number(localStorage.getItem(LAST_SEEN_POINT_LOG_KEY)) || 0,
-  );
+  const [lastSeenLogId, markNotificationsRead] = useNotificationReadState(currentUser?.email);
 
   useEffect(() => {
     if (!loadNotifications || !currentUser?.email) {
@@ -129,8 +127,7 @@ export default function NotificationBell({
 
     const latestId = Math.max(...visiblePointLogs.map((log) => log.id));
     if (latestId > lastSeenLogId) {
-      setLastSeenLogId(latestId);
-      localStorage.setItem(LAST_SEEN_POINT_LOG_KEY, String(latestId));
+      markNotificationsRead(latestId);
     }
   };
 

@@ -47,6 +47,7 @@ import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import { formatDate } from "../utils/dateFormat";
 import NotificationBell from "../components/NotificationBell";
+import LoadError from "../components/LoadError";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -56,26 +57,30 @@ export default function Reserved() {
   const { t } = useLanguage();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [bookings, setBookings] = useState([]);
+  const [bookingData, setBookingData] = useState({ identity: null, page: 0, items: [] });
+  const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const PAGE_SIZE = 20;
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const bookingsControllerRef = useRef(null);
+  const userIdentity = currentUser?.email;
+  const bookings = bookingData.identity === userIdentity && bookingData.page === page ? bookingData.items : [];
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState(null);
 
   const fetchMyBookings = useCallback(async () => {
     bookingsControllerRef.current?.abort();
     bookingsControllerRef.current = null;
-    if (!currentUser) return;
+    if (!userIdentity) return;
     const controller = new AbortController();
     try {
       bookingsControllerRef.current = controller;
       setLoading(true);
+      setLoadError(false);
       const token = localStorage.getItem("access_token");
       const response = await axios.get(
-        `${API_URL}/bookings/user/${currentUser.email}`,
+        `${API_URL}/bookings/user/${userIdentity}`,
         {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
@@ -83,11 +88,12 @@ export default function Reserved() {
         },
       );
       if (bookingsControllerRef.current !== controller) return;
-      setBookings(response.data?.data || []);
+      setBookingData({ identity: userIdentity, page, items: response.data?.data || [] });
       setTotal(Number(response.data?.total) || 0);
     } catch (error) {
       if (!axios.isCancel(error) && bookingsControllerRef.current === controller) {
         console.error("[API Error] Failed to fetch bookings:", error);
+        setLoadError(true);
       }
     } finally {
       if (bookingsControllerRef.current === controller) {
@@ -95,7 +101,7 @@ export default function Reserved() {
         setLoading(false);
       }
     }
-  }, [currentUser, page]);
+  }, [userIdentity, page]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -480,6 +486,7 @@ export default function Reserved() {
               >
                 {t("user.reservedStatus")}
               </Typography>
+              {loadError && <LoadError onRetry={fetchMyBookings} />}
 
               {bookings.length > 0 ? (
                 <>
@@ -607,7 +614,7 @@ export default function Reserved() {
                   </Box>
                 )}
                 </>
-              ) : (
+              ) : loadError ? null : (
                 <Box
                   className="reservation-empty-state"
                   sx={{

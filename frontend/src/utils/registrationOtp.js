@@ -11,6 +11,7 @@ const errorKeys = {
 
 export function otpErrorMessage(error, translations, fallback) {
   const detail = error?.response?.data?.detail;
+  if (detail === 'Password must be 8 or more characters and at most 72 UTF-8 bytes.') return translations.passwordInvalid;
   const key = Object.hasOwn(errorKeys, detail) ? errorKeys[detail] : null;
   return key ? translations[key] : typeof detail === 'string' ? detail : fallback;
 }

@@ -79,16 +79,52 @@ class RegistrationOTPTests(unittest.TestCase):
     def row(self, email=None):
         return self.db.get(models.RegistrationOTP, email or self.email, populate_existing=True)
 
-    def register(self, code, email=None):
+    def register(self, code, email=None, password="test-pass"):
         image = io.BytesIO()
         Image.new("RGB", (10, 10)).save(image, format="JPEG")
         return asyncio.run(auth.register(
-            email=email or self.email, otp=code, password="test-pass",
+            email=email or self.email, otp=code, password=password,
             first_name="Test", last_name="Account", student_id="S001",
             faculty="Science", department="Computing", phone="0000000000",
             face_image=UploadFile(filename="face.jpg", file=io.BytesIO(image.getvalue())),
             db=self.db,
         ))
+
+    def test_invalid_registration_password_does_not_spend_otp_or_process_face(self):
+        _, code = self.issue()
+        for password in ["short", " " * 8, "x" * 73, "ก" * 25, "😀" * 4]:
+            with self.subTest(length=len(password)), self.assertRaises(HTTPException) as caught:
+                self.register(code, password=password)
+            self.assertEqual(caught.exception.status_code, 422)
+            self.assertIsNone(self.row().consumed_at)
+        auth.pwd_context.hash.assert_not_called()
+        auth.get_deepface.assert_not_called()
+        self.assertEqual(self.db.query(models.User).count(), 0)
+        self.assertEqual(list(Path(self.temp.name).iterdir()), [])
+        self.register(code, password="valid-new-password")
+
+    def test_valid_multibyte_password_is_not_trimmed_or_truncated(self):
+        for index, password in enumerate(["x" * 72, "ก" * 24, "😀" * 8, " padded password "]):
+            email = f"password{index}@example.com"
+            _, code = self.issue(email)
+            self.register(code, email=email, password=password)
+            auth.pwd_context.hash.assert_called_with(password)
+
+    def test_multipart_password_validation_cannot_be_bypassed_by_client(self):
+        app = FastAPI()
+        app.include_router(auth.router)
+        app.dependency_overrides[auth.get_db] = lambda: self.db
+        _, code = self.issue()
+        async def flow():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://unit.test") as client:
+                result = await client.post("/register", data={"email": self.email, "otp": code,
+                    "password": "short", "first_name": "Test", "last_name": "Policy"},
+                    files={"face_image": ("invalid.jpg", b"not-an-image", "image/jpeg")})
+                self.assertEqual(result.status_code, 422)
+                self.assertEqual(result.json()["detail"], "Password must be 8 or more characters and at most 72 UTF-8 bytes.")
+        asyncio.run(flow())
+        self.assertIsNone(self.row().consumed_at)
+        auth.get_deepface.assert_not_called()
 
     def test_issue_hash_only_and_repeat_verify_does_not_consume(self):
         challenge, code = self.issue()

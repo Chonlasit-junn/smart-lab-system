@@ -17,6 +17,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AppRegistrationIcon from '@mui/icons-material/AppRegistration';
 import { registerLocales } from '../utils/locales';
 import { BU_FACULTIES } from '../utils/buFaculties';
+import { isValidNewPassword } from '../utils/passwordPolicy';
 import { useLanguage } from '../context/language-context.js';
 import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil } from '../utils/registrationOtp';
 
@@ -154,6 +155,7 @@ export default function Register() {
     e.preventDefault();
     setError(''); setSuccess('');
     if (!formData.first_name || !formData.last_name || !formData.password) return setError(t.errFieldsReq);
+    if (!isValidNewPassword(formData.password)) return setError(t.passwordInvalid);
     if (accountType === 'student' && (!selectedFaculty || !selectedDepartment)) return setError(t.errFieldsReq);
     if (accountType === 'general' && !consentChecked) return setError(t.errConsent);
     setStep(4);
@@ -163,6 +165,7 @@ export default function Register() {
   const handleCompleteRegistration = async (e) => {
     e.preventDefault();
     if (submittingRef.current) return;
+    if (!isValidNewPassword(formData.password)) return setError(t.passwordInvalid);
     if (!faceImage) return setError(t.errFaceReq);
     submittingRef.current = true;
     setLoading(true); setError('');
@@ -418,7 +421,7 @@ export default function Register() {
         <TextField
           fullWidth label={t.password} name="password" type={showPassword ? 'text' : 'password'}
           variant="outlined" value={formData.password} onChange={handleChange}
-          sx={{ mb: 3.5, ...inputSx }} inputProps={{ maxLength: 50 }}
+          sx={{ mb: 3.5, ...inputSx }} helperText={t.passwordHint} autoComplete="new-password"
           InputProps={{
             endAdornment: (
               <InputAdornment position="end">

@@ -6,6 +6,7 @@ import {
 import { CheckCircle } from '@mui/icons-material';
 import axios from 'axios';
 import AdminShell from '../components/AdminShell';
+import LoadError from '../components/LoadError';
 import { formatDateTime } from '../utils/dateFormat';
 import { useLanguage } from '../context/language-context.js';
 
@@ -13,9 +14,11 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 export default function TicketManager() {
   const PAGE_SIZE = 20;
-  const [tickets, setTickets] = useState([]);
+  const [ticketData, setTicketData] = useState({ page: 0, items: [] });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [page, setPage] = useState(1);
+  const tickets = ticketData.page === page ? ticketData.items : [];
   const [total, setTotal] = useState(0);
   const ticketsControllerRef = useRef(null);
   const { t } = useLanguage();
@@ -31,6 +34,7 @@ export default function TicketManager() {
     ticketsControllerRef.current = controller;
     try {
       setLoading(true);
+      setLoadError(false);
       const token = localStorage.getItem('access_token');
       const response = await axios.get(`${API_URL}/tickets`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -38,11 +42,12 @@ export default function TicketManager() {
         params: { page, page_size: PAGE_SIZE },
       });
       if (ticketsControllerRef.current !== controller) return;
-      setTickets(response.data?.data || []);
+      setTicketData({ page, items: response.data?.data || [] });
       setTotal(Number(response.data?.total) || 0);
     } catch (error) {
       if (!axios.isCancel(error) && ticketsControllerRef.current === controller) {
         console.error('[TicketManager] Failed to fetch tickets:', error);
+        setLoadError(true);
       }
     } finally {
       if (ticketsControllerRef.current === controller) {
@@ -68,7 +73,9 @@ export default function TicketManager() {
         { headers: { Authorization: `Bearer ${token}` } },
       );
       // อัปเดต State ในหน้าจอให้เปลี่ยนเป็น closed ทันทีโดยไม่ต้องรีเฟรชหน้า
-      setTickets((currentTickets) => currentTickets.map(t => t.id === ticketId ? { ...t, status: 'closed' } : t));
+      setTicketData(previous => ({ ...previous,
+        items: previous.items.map(ticket => ticket.id === ticketId ? { ...ticket, status: 'closed' } : ticket),
+      }));
     } catch (error) {
       console.error('Failed to close ticket:', error);
       alert(t("admin.ticketStatusUpdateFailed"));
@@ -85,6 +92,7 @@ export default function TicketManager() {
           </Box>
         ) : (
           <>
+          {loadError && <LoadError onRetry={fetchTickets} />}
           <TableContainer>
             <Table>
               <TableHead>
@@ -137,7 +145,7 @@ export default function TicketManager() {
                       </TableCell>
                     </TableRow>
                   ))
-                ) : (
+                ) : loadError ? null : (
                   <TableRow>
                     <TableCell colSpan={7} align="center" sx={{ py: 4, color: '#94a3b8' }}>
                       {t('admin.noTickets')}

@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from PIL import Image
 import models, schemas
 import otp_service
+from password_policy import validate_new_password, PASSWORD_POLICY_ERROR
 from database import get_db
 from face_service import get_deepface
 from utils import (
@@ -77,6 +78,10 @@ async def register(
     face_image: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    try:
+        validate_new_password(password)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=PASSWORD_POLICY_ERROR) from None
     normalized_email = normalize_email(email)
 
     # re-verify OTP at registration time so you can't skip step 2

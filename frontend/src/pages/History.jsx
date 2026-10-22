@@ -40,6 +40,7 @@ import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import { formatDate } from "../utils/dateFormat";
 import NotificationBell from "../components/NotificationBell";
+import LoadError from "../components/LoadError";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -49,24 +50,28 @@ export default function History() {
   const { t } = useLanguage();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [pastBookings, setPastBookings] = useState([]);
+  const [historyData, setHistoryData] = useState({ identity: null, page: 0, items: [] });
+  const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const PAGE_SIZE = 20;
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const historyControllerRef = useRef(null);
+  const userIdentity = currentUser?.email;
+  const pastBookings = historyData.identity === userIdentity && historyData.page === page ? historyData.items : [];
 
   const fetchMyHistory = useCallback(async () => {
     historyControllerRef.current?.abort();
     historyControllerRef.current = null;
-    if (!currentUser) return;
+    if (!userIdentity) return;
     const controller = new AbortController();
     historyControllerRef.current = controller;
     try {
       setLoading(true);
+      setLoadError(false);
       const token = localStorage.getItem("access_token");
       const response = await axios.get(
-        `${API_URL}/bookings/user/${currentUser.email}`,
+        `${API_URL}/bookings/user/${userIdentity}`,
         {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
@@ -74,11 +79,12 @@ export default function History() {
         },
       );
       if (historyControllerRef.current !== controller) return;
-      setPastBookings(response.data?.data || []);
+      setHistoryData({ identity: userIdentity, page, items: response.data?.data || [] });
       setTotal(Number(response.data?.total) || 0);
     } catch (error) {
       if (!axios.isCancel(error) && historyControllerRef.current === controller) {
         console.error("[API Error] Failed to fetch history:", error);
+        setLoadError(true);
       }
     } finally {
       if (historyControllerRef.current === controller) {
@@ -86,7 +92,7 @@ export default function History() {
         setLoading(false);
       }
     }
-  }, [currentUser, page]);
+  }, [userIdentity, page]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -443,6 +449,7 @@ export default function History() {
               >
                 {t("user.pastReservations")}
               </Typography>
+              {loadError && <LoadError onRetry={fetchMyHistory} />}
 
               {pastBookings.length > 0 ? (
                 <>
@@ -525,7 +532,7 @@ export default function History() {
                   </Box>
                 )}
                 </>
-              ) : (
+              ) : loadError ? null : (
                 <Box
                   className="empty-state history-empty-state"
                   sx={{

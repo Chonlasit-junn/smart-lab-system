@@ -56,6 +56,7 @@ import {
   getLabNowReference,
 } from "../utils/labTime";
 import SupportModal from "./SupportModal";
+import { useNotificationReadState } from "../context/useNotificationReadState.js";
 
 // API Endpoint configuration
 const API_URL = import.meta.env.VITE_API_URL;
@@ -82,9 +83,6 @@ const HIDDEN_POINT_NOTIFICATION_REASONS = new Set([
   "admin_test_deduction",
   "admin_test_reset",
 ]);
-
-// localStorage key prefix used to remember which point-log notification the user last saw
-const LAST_SEEN_POINT_LOG_KEY = "last_seen_point_log_id";
 
 // ============================================================================
 // 2. MAIN COMPONENT
@@ -113,10 +111,10 @@ export default function Booking() {
   const [availability, setAvailability] = useState(null);
   const [pointStatus, setPointStatus] = useState(null);
   const [pointsLoading, setPointsLoading] = useState(false);
-  const [pointLogs, setPointLogs] = useState([]);
-  const [lastSeenLogId, setLastSeenLogId] = useState(
-    () => Number(localStorage.getItem(LAST_SEEN_POINT_LOG_KEY)) || 0,
-  );
+  const [pointLogState, setPointLogState] = useState({ email: null, logs: [] });
+  const pointLogs = useMemo(() => pointLogState.email === currentUser?.email ? pointLogState.logs : [],
+    [pointLogState, currentUser?.email]);
+  const [lastSeenLogId, markNotificationsRead] = useNotificationReadState(currentUser?.email);
   const [pointsError, setPointsError] = useState("");
   const [pointRequestLoading, setPointRequestLoading] = useState(false);
 
@@ -189,7 +187,7 @@ export default function Booking() {
   // Fetch recent point-change history to populate the notification bell.
   useEffect(() => {
     if (!currentUser?.email) {
-      setPointLogs([]);
+      setPointLogState({ email: null, logs: [] });
       return undefined;
     }
 
@@ -210,7 +208,7 @@ export default function Booking() {
             signal: controller.signal,
           },
         );
-        if (!cancelled) setPointLogs(response.data?.data || []);
+        if (!cancelled) setPointLogState({ email: currentUser.email, logs: response.data?.data || [] });
       } catch (error) {
         if (!cancelled && !axios.isCancel(error)) {
           console.error("[API Error] Failed to fetch point logs:", error);
@@ -501,8 +499,7 @@ export default function Booking() {
     if (visiblePointLogs.length > 0) {
       const latestId = Math.max(...visiblePointLogs.map((log) => log.id));
       if (latestId > lastSeenLogId) {
-        setLastSeenLogId(latestId);
-        localStorage.setItem(LAST_SEEN_POINT_LOG_KEY, String(latestId));
+        markNotificationsRead(latestId);
       }
     }
   };

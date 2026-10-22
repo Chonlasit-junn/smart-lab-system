@@ -232,6 +232,12 @@ class PasswordResetTests(unittest.TestCase):
             with self.subTest(value_length=len(value)), self.assertRaises(ValidationError):
                 schemas.PasswordReset(email=self.email, otp="123456", new_password=value)
 
+    def test_existing_short_password_can_still_log_in(self):
+        self.user.password = pwd_context.hash("short")
+        self.db.commit()
+        result = auth.login(SimpleNamespace(username=self.email, password="short"), self.db)
+        self.assertIn("access_token", result)
+
     def test_legacy_and_versioned_sessions_are_revoked_after_reset(self):
         tokens = [create_access_token({"sub": self.email}),
                   create_access_token({"sub": self.email, "auth_version": 0})]

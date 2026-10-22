@@ -1,4 +1,5 @@
 import { registerLocales } from './locales.js';
+import { isValidNewPassword } from './passwordPolicy.js';
 
 export const passwordResetLocales = {
   en: {
@@ -30,7 +31,7 @@ export const passwordResetLocales = {
 };
 
 export function passwordResetError(password, confirmation, t) {
-  if (Array.from(password).length < 8 || !password.trim() || new TextEncoder().encode(password).length > 72) {
+  if (!isValidNewPassword(password)) {
     return t.passwordInvalid;
   }
   return password === confirmation ? '' : t.passwordMismatch;
