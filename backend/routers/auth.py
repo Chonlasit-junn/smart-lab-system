@@ -1,14 +1,16 @@
 import io
 import os
-import random
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from fastapi.security import OAuth2PasswordRequestForm
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from PIL import Image
 import models, schemas
+import otp_service
 from database import get_db
 from face_service import get_deepface
 from utils import (
@@ -45,31 +47,19 @@ async def request_otp(request: schemas.OTPRequest, db: Session = Depends(get_db)
     domain = normalized_email.split("@")[-1]
     account_type = "student" if domain == "bumail.net" else "general"
 
-    otp_code = str(random.randint(100000, 999999))
-
-    # clear any old OTP for this email before issuing a new one
-    db.query(models.UserOTP).filter(
-        func.lower(models.UserOTP.email) == normalized_email,
-    ).delete(synchronize_session=False)
-    db.add(models.UserOTP(email=normalized_email, otp_code=otp_code))
-    db.commit()
-
+    challenge_id, otp_code = await run_in_threadpool(otp_service.reserve_otp, db, normalized_email)
     try:
         await send_otp_mail(normalized_email, otp_code)
-        return {"message": f"OTP sent to {normalized_email}", "account_type": account_type}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+    except Exception:
+        await run_in_threadpool(otp_service.finish_delivery, db, normalized_email, challenge_id, success=False)
+    timing = await run_in_threadpool(otp_service.finish_delivery, db, normalized_email, challenge_id, success=True)
+    return {"message": f"OTP sent to {normalized_email}", "account_type": account_type, **timing}
 
 
 @router.post("/verify-otp")
 def verify_otp(request: schemas.OTPVerify, db: Session = Depends(get_db)):
     normalized_email = normalize_email(request.email)
-    db_otp = db.query(models.UserOTP).filter(
-        func.lower(models.UserOTP.email) == normalized_email,
-        models.UserOTP.otp_code == request.otp,
-    ).first()
-    if not db_otp:
-        raise HTTPException(status_code=400, detail="Invalid or expired OTP.")
+    otp_service.verify_otp(db, normalized_email, request.otp)
     return {"message": "OTP Verified Successfully!"}
 
 
@@ -90,12 +80,7 @@ async def register(
     normalized_email = normalize_email(email)
 
     # re-verify OTP at registration time so you can't skip step 2
-    db_otp = db.query(models.UserOTP).filter(
-        func.lower(models.UserOTP.email) == normalized_email,
-        models.UserOTP.otp_code == otp,
-    ).first()
-    if not db_otp:
-        raise HTTPException(status_code=400, detail="Invalid or expired OTP.")
+    challenge_id = await run_in_threadpool(otp_service.verify_otp, db, normalized_email, otp)
 
     local_file_path = None
     temporary_file_path = None
@@ -163,7 +148,9 @@ async def register(
             face_embedding=face_embedding_vector,
         )
         db.add(new_user)
-        db.flush()  # get new_user.id before inserting child records
+        # Unique-key waits must not block the async event loop while another
+        # registration is awaiting profile storage.
+        await run_in_threadpool(db.flush)  # get new_user.id before child records
 
         if uses_supabase_storage():
             uploaded_object_path = profile_object_path(new_user.id)
@@ -193,8 +180,13 @@ async def register(
         if role:
             db.add(models.UserRole(user_id=new_user.id, role_id=role.id))
 
-        db.delete(db_otp)  # OTP is single-use
-        db.commit()
+        # No external I/O after this lock: authorize the exact issuance at the
+        # final boundary, atomically with account creation and OTP consumption.
+        await run_in_threadpool(
+            otp_service.verify_otp, db, normalized_email, otp, consume=True,
+            expected_challenge_id=challenge_id,
+        )
+        await run_in_threadpool(db.commit)
         keep_local_file = True
         return {"message": "Registration successful!"}
     except ProfileStorageError:
@@ -205,11 +197,21 @@ async def register(
             status_code=503,
             detail="Profile image storage is unavailable. Please try again later.",
         )
-    except Exception as e:
+    except HTTPException:
         db.rollback()
         if uploaded_object_path:
             await delete_profile_image(uploaded_object_path)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise
+    except IntegrityError:
+        db.rollback()
+        if uploaded_object_path:
+            await delete_profile_image(uploaded_object_path)
+        raise HTTPException(status_code=409, detail="Registration details are already in use.")
+    except Exception:
+        db.rollback()
+        if uploaded_object_path:
+            await delete_profile_image(uploaded_object_path)
+        raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
     finally:
         if temporary_file_path and os.path.exists(temporary_file_path):
             os.remove(temporary_file_path)

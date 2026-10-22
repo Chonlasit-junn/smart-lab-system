@@ -18,6 +18,7 @@ import AppRegistrationIcon from '@mui/icons-material/AppRegistration';
 import { registerLocales } from '../utils/locales';
 import { BU_FACULTIES } from '../utils/buFaculties';
 import { useLanguage } from '../context/language-context.js';
+import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil } from '../utils/registrationOtp';
 
 const API_URL = import.meta.env.VITE_API_URL;
 const videoConstraints = { width: 400, height: 400, facingMode: 'user' };
@@ -32,6 +33,23 @@ export default function Register() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
   const [success, setSuccess]     = useState('');
+  const submittingRef = useRef(false);
+  const formPanelRef = useRef(null);
+  const [otpExpiresAt, setOtpExpiresAt] = useState(0);
+  const [resendAt, setResendAt] = useState(0);
+  const [clock, setClock] = useState(Date.now);
+  const expirySeconds = secondsUntil(otpExpiresAt, clock);
+  const resendSeconds = secondsUntil(resendAt, clock);
+
+  useEffect(() => {
+    if (!otpExpiresAt && !resendAt) return;
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [otpExpiresAt, resendAt]);
+
+  useEffect(() => {
+    formPanelRef.current?.scrollTo({ top: 0 });
+  }, [step]);
 
   const [accountType, setAccountType]       = useState('general');
   const [consentChecked, setConsentChecked] = useState(false);
@@ -56,7 +74,12 @@ export default function Register() {
   }, [step, t]);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value, ...(name === 'email' ? { otp: '' } : {}) }));
+    if (name === 'email') {
+      setOtpExpiresAt(0);
+      setResendAt(0);
+    }
     if (error) setError('');
     if (success) setSuccess('');
   };
@@ -64,16 +87,35 @@ export default function Register() {
   // step 1 — ส่งอีเมลขอ OTP
   const handleRequestOTP = async (e) => {
     e.preventDefault();
+    if (submittingRef.current || resendSeconds > 0) return;
     if (!formData.email) return setError(t.errEmailReq);
+    submittingRef.current = true;
     setLoading(true); setError(''); setSuccess('');
     try {
       const response = await axios.post(`${API_URL}/request-otp`, { email: formData.email });
       setAccountType(response.data.account_type);
+      const now = Date.now();
+      const timing = otpDeadlines(response.data, now);
+      setClock(now);
+      setOtpExpiresAt(timing.expiresAt);
+      setResendAt(timing.resendAt);
+      setFormData(prev => ({ ...prev, otp: '' }));
       setSuccess(t.otpSent);
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.detail || t.connectionError);
+      setError(otpErrorMessage(err, t, t.connectionError));
+      if (requiresNewOtp(err)) {
+        const now = Date.now();
+        setClock(now);
+        setOtpExpiresAt(now);
+      }
+      if (err.response?.status === 429 || err.response?.status === 503) {
+        const now = Date.now();
+        setClock(now);
+        setResendAt(now + retrySeconds(err) * 1000);
+      }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -81,15 +123,28 @@ export default function Register() {
   // step 2 — ยืนยัน OTP
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!formData.otp) return setError(t.errOtpReq);
+    submittingRef.current = true;
     setLoading(true); setError(''); setSuccess('');
     try {
       await axios.post(`${API_URL}/verify-otp`, { email: formData.email, otp: formData.otp });
       setSuccess(t.otpVerified);
       setStep(3);
     } catch (err) {
-      setError(err.response?.data?.detail || t.invalidOtp);
+      setError(otpErrorMessage(err, t, t.invalidOtp));
+      if (requiresNewOtp(err)) {
+        const now = Date.now();
+        setClock(now);
+        setOtpExpiresAt(now);
+      }
+      if (err.response?.status === 429) {
+        const now = Date.now();
+        setClock(now);
+        setResendAt(now + retrySeconds(err) * 1000);
+      }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -107,7 +162,9 @@ export default function Register() {
   // step 4 — ส่งข้อมูลทั้งหมดพร้อมภาพใบหน้า
   const handleCompleteRegistration = async (e) => {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!faceImage) return setError(t.errFaceReq);
+    submittingRef.current = true;
     setLoading(true); setError('');
 
     const submitData = new FormData();
@@ -132,8 +189,22 @@ export default function Register() {
       alert(t.registrationSuccess);
       navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.detail || t.registrationFailed);
+      setError(otpErrorMessage(err, t, t.registrationFailed));
+      if (isOtpError(err)) {
+        if (requiresNewOtp(err)) {
+          const now = Date.now();
+          setClock(now);
+          setOtpExpiresAt(now);
+        }
+        setStep(2); // Keep profile, faculty, consent and face image for retry.
+        if (err.response?.status === 429) {
+          const now = Date.now();
+          setClock(now);
+          setResendAt(now + retrySeconds(err) * 1000);
+        }
+      }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -241,10 +312,10 @@ export default function Register() {
       <p className="login-subtitle">{t.step1Sub}</p>
       <form onSubmit={handleRequestOTP}>
         <TextField fullWidth label={t.emailLabel} name="email" type="email" variant="outlined"
-          value={formData.email} onChange={handleChange} sx={{ mb: 3, ...inputSx }} />
-        <Button fullWidth type="submit" variant="contained" disabled={loading}
+          value={formData.email} onChange={handleChange} disabled={loading} sx={{ mb: 3, ...inputSx }} />
+        <Button fullWidth type="submit" variant="contained" disabled={loading || resendSeconds > 0}
           endIcon={!loading && <ArrowForwardIcon />} sx={{ ...primaryBtnSx, py: 1.5 }}>
-          {loading ? <CircularProgress size={24} color="inherit" /> : t.reqOtpBtn}
+          {loading ? <CircularProgress size={24} color="inherit" /> : resendSeconds > 0 ? t.otpResendWait.replace('{seconds}', resendSeconds) : t.reqOtpBtn}
         </Button>
       </form>
       <DevBypass onClick={bypassStep1} label={t.devSkipStep2} />
@@ -259,7 +330,7 @@ export default function Register() {
         <TextField fullWidth label={t.otpLabel} name="otp" type="text" variant="outlined"
           inputProps={{ maxLength: 6 }} value={formData.otp} onChange={handleChange} sx={{ mb: 4, ...inputSx }} />
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button fullWidth variant="outlined" onClick={() => setStep(1)} startIcon={<ArrowBackIcon />} sx={outlinedBtnSx}>
+          <Button fullWidth variant="outlined" disabled={loading} onClick={() => setStep(1)} startIcon={<ArrowBackIcon />} sx={outlinedBtnSx}>
             {t.changeEmailBtn}
           </Button>
           <Button fullWidth type="submit" variant="contained" disabled={loading}
@@ -427,7 +498,7 @@ export default function Register() {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             variant="outlined"
-            onClick={() => setStep(3)}
+            onClick={() => setStep(3)} disabled={loading}
             startIcon={<ArrowBackIcon />}
             sx={{ ...outlinedBtnSx, flexBasis: '35%', flexShrink: 0 }}
           >
@@ -460,10 +531,25 @@ export default function Register() {
         </div>
 
         {/* ฝั่งขวา: multi-step form */}
-        <div className="login-form-section">
-          <div className="login-form-content">
+        <div className="login-form-section" ref={formPanelRef} style={{ justifyContent: 'flex-start' }}>
+          <div className="login-form-content" style={{ marginBlock: 'auto' }}>
             {error   && <Alert severity="error"   sx={{ mb: 3, borderRadius: '8px' }}>{error}</Alert>}
             {success && step !== 4 && <Alert severity="success" sx={{ mb: 3, borderRadius: '8px' }}>{success}</Alert>}
+
+            {step >= 2 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ color: 'var(--text-gray)' }} aria-live="polite">
+                  {otpExpiresAt > 0
+                    ? expirySeconds > 0
+                      ? t.otpExpiresIn.replace('{seconds}', expirySeconds)
+                      : t.otpExpired
+                    : t.otpLifetime}
+                </Typography>
+                <Button type="button" onClick={handleRequestOTP} disabled={loading || resendSeconds > 0}>
+                  {resendSeconds > 0 ? t.otpResendWait.replace('{seconds}', resendSeconds) : t.otpResend}
+                </Button>
+              </Box>
+            )}
 
             {step === 1 && renderStep1()}
             {step === 2 && renderStep2()}

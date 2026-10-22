@@ -7,7 +7,10 @@ from database import engine, Base
 from routers import auth, users, labs, agent, devices, gatekeeper, admin, blacklist, points, tickets
 from utils import UPLOAD_ROOT
 
-Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(
+    bind=engine,
+    tables=[table for table in Base.metadata.sorted_tables if not table.info.get("manual_migration")],
+)
 
 app = FastAPI(title="Smart Lab API")
 
@@ -17,6 +20,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Retry-After"],
 )
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
