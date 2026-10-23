@@ -6,6 +6,7 @@ PostgreSQL upsert + row locks for first issuance, retries and consumption.
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import math
 import os
@@ -14,11 +15,13 @@ import secrets
 from datetime import timedelta, timezone
 from uuid import uuid4
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.orm import Session
 
-from models import PasswordResetOTP, RegistrationOTP
+from database import get_db
+from models import OTPIPRateLimit, PasswordResetOTP, RegistrationOTP
 from time_utils import as_utc, utc_now
 
 
@@ -26,6 +29,8 @@ TTL_SECONDS = 600
 RESEND_SECONDS = 60
 MAX_ATTEMPTS = 5
 ATTEMPT_WINDOW_SECONDS = 600
+IP_RATE_LIMIT_WINDOW_SECONDS = 600
+IP_RATE_LIMIT_MAX_REQUESTS = 30
 
 INVALID = "Invalid OTP. Please try again."
 EXPIRED = "OTP expired. Please request a new code."
@@ -46,6 +51,51 @@ def _key():
     if len(key.encode("utf-8")) < 32:
         raise HTTPException(status_code=503, detail=NOT_CONFIGURED)
     return key.encode("utf-8")
+
+
+def enforce_ip_rate_limit(request: Request, db: Session = Depends(get_db)):
+    """Apply one shared OTP request budget per trusted client IP.
+
+    The raw IP is never stored. ``request.client`` must reflect the actual
+    client, either directly or through the ASGI server's trusted-proxy setup.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    try:
+        client_ip = ipaddress.ip_address(client_ip).compressed
+    except ValueError:
+        client_ip = str(client_ip).strip().lower() or "unknown"
+    ip_hash = hmac.new(
+        _key(), b"otp-ip-rate-limit:v1:" + client_ip.encode("utf-8"), hashlib.sha256,
+    ).hexdigest()
+
+    dialect = db.get_bind().dialect.name
+    insert = pg_insert if dialect == "postgresql" else sqlite_insert
+    db.execute(insert(OTPIPRateLimit).values(
+        ip_hash=ip_hash,
+        window_started_at=utc_now(),
+        request_count=0,
+    ).on_conflict_do_nothing(index_elements=[OTPIPRateLimit.ip_hash]))
+    row = db.query(OTPIPRateLimit).filter(
+        OTPIPRateLimit.ip_hash == ip_hash,
+    ).populate_existing().with_for_update().first()
+    now = utc_now()
+    window_started = _instant(row.window_started_at)
+    if now >= window_started + timedelta(seconds=IP_RATE_LIMIT_WINDOW_SECONDS):
+        row.window_started_at = now
+        row.request_count = 0
+        window_started = now
+    if row.request_count >= IP_RATE_LIMIT_MAX_REQUESTS:
+        retry_after = math.ceil((
+            window_started + timedelta(seconds=IP_RATE_LIMIT_WINDOW_SECONDS) - now
+        ).total_seconds())
+        _reject(
+            db,
+            "Too many OTP requests. Please try again later.",
+            status=429,
+            retry_after=retry_after,
+        )
+    row.request_count += 1
+    db.commit()
 
 
 def _digest(email, challenge_id, code, *, purpose="registration"):

@@ -353,7 +353,6 @@ def get_all_bookings(
     """Fetch all bookings for Admin Dashboard"""
     page_number = page if isinstance(page, int) else 1
     page_limit = page_size if isinstance(page_size, int) else 50
-    mark_due_no_shows(db, now=_lab_now())
     query = db.query(models.Booking)
     total = query.order_by(None).count()
     bookings = query\
@@ -400,7 +399,6 @@ def get_all_bookings(
 
 @router.get("/labs/{lab_id}/availability")
 def check_availability(lab_id: int, target_date: date, db: Session = Depends(get_db)):
-    mark_due_no_shows(db, now=_lab_now())
     lab = db.query(models.Lab).filter(models.Lab.id == lab_id).first()
     if not lab: raise HTTPException(status_code=404, detail="Lab not found.")
     max_seats = lab.capacity or 0 
@@ -533,7 +531,6 @@ def get_user_bookings(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
-    mark_due_no_shows(db, now=_lab_now())
     scope_value = scope if isinstance(scope, str) else "all"
     clean_email = normalize_email(unquote(email))
     if clean_email != normalize_email(current_user.email) and not is_admin_user(current_user.id, db):

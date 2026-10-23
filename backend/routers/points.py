@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import and_, case, cast, func, or_, String
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,8 @@ ADMIN_TEST_DEDUCTION = 10
 ADMIN_TEST_RESET_POINTS = MAX_POINTS
 TEST_BAN_MARKER = "[admin_test]"
 NO_SHOW_GRACE = timedelta(minutes=15)
+MAX_NO_SHOW_BATCH_SIZE = 100
+DEFAULT_NO_SHOW_BATCH_SIZE = MAX_NO_SHOW_BATCH_SIZE
 MAX_EVENT_ID_LENGTH = 256
 BUSINESS_TIMEZONE = LAB_TIMEZONE
 
@@ -635,33 +637,53 @@ def deduct_points(
     return apply_point_event(user_id, reason, db, note=note)
 
 
+def _due_no_show_filters(now_naive: datetime):
+    cutoff = now_naive - NO_SHOW_GRACE
+    return (
+        models.Booking.status == "reserved",
+        models.Booking.end_time.is_not(None),
+        or_(
+            models.Booking.booking_date < cutoff.date(),
+            and_(
+                models.Booking.booking_date == cutoff.date(),
+                models.Booking.end_time <= cutoff.time(),
+            ),
+        ),
+    )
+
+
+def _has_due_no_shows(db: Session, now: datetime) -> bool:
+    now_naive = _as_naive(now)
+    return db.query(models.Booking.id).filter(
+        *_due_no_show_filters(now_naive),
+    ).first() is not None
+
+
 def mark_due_no_shows(
     db: Session,
     now: Optional[datetime] = None,
     commit: bool = True,
     policy: Optional[models.PointPolicy] = None,
+    batch_size: int = DEFAULT_NO_SHOW_BATCH_SIZE,
 ) -> int:
-    """Mark expired reserved bookings and charge each booking once.
+    """Process at most one bounded batch of expired reserved bookings.
 
-    The row lock plus deterministic event id keeps repeated API calls safe.
-    The application calls this opportunistically; a scheduler can call the
-    admin reconcile endpoint if no traffic occurs after a slot ends.
+    Only due rows are locked, in deterministic order. ``skip_locked`` lets
+    concurrent workers claim different rows without waiting on each other.
     """
     policy = policy or get_or_create_point_policy(db)
     now_naive = _as_naive(now) if now is not None else _business_now_naive()
+    batch_limit = min(max(int(batch_size), 1), MAX_NO_SHOW_BATCH_SIZE)
     candidates = db.query(models.Booking).filter(
-        models.Booking.status == "reserved",
-        models.Booking.booking_date <= now_naive.date(),
-    ).with_for_update().all()
+        *_due_no_show_filters(now_naive),
+    ).order_by(
+        models.Booking.booking_date.asc(),
+        models.Booking.end_time.asc(),
+        models.Booking.id.asc(),
+    ).limit(batch_limit).with_for_update(skip_locked=True).all()
 
     changed_count = 0
     for booking in candidates:
-        if not booking.end_time:
-            continue
-        due_at = datetime.combine(booking.booking_date, booking.end_time) + NO_SHOW_GRACE
-        if due_at > now_naive:
-            continue
-
         booking.status = "no_show"
         booking.no_show_at = now_naive
         apply_point_event(
@@ -806,8 +828,6 @@ def get_my_points(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    policy = get_or_create_point_policy(db)
-    mark_due_no_shows(db, policy=policy)
     result = _points_response(current_user.id, db)
     db.commit()  # persist a legacy user's initial account if one was created
     return result
@@ -821,7 +841,6 @@ def get_user_points(
 ):
     _get_user_or_404(user_id, db)
     _require_user_access(user_id, current_user, db)
-    mark_due_no_shows(db)
     result = _points_response(user_id, db)
     db.commit()
     return result
@@ -838,7 +857,6 @@ def get_my_point_logs(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    mark_due_no_shows(db)
     ensure_daily_bonus(current_user.id, db)
     result = _logs_response(
         current_user.id,
@@ -861,7 +879,6 @@ def get_point_logs(
 ):
     _get_user_or_404(user_id, db)
     _require_user_access(user_id, current_user, db)
-    mark_due_no_shows(db)
     ensure_daily_bonus(user_id, db)
     result = _logs_response(user_id, db, limit, before_id)
     db.commit()
@@ -875,7 +892,6 @@ def get_my_daily_scores(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    mark_due_no_shows(db)
     ensure_daily_bonus(current_user.id, db)
     query = db.query(models.UserDailyScore).filter(
         models.UserDailyScore.user_id == current_user.id,
@@ -897,14 +913,30 @@ def get_my_daily_scores(
     return result
 
 
-@router.post("/admin/points/reconcile-no-shows")
+@router.post(
+    "/admin/points/reconcile-no-shows",
+    summary="Reconcile one bounded batch of due no-show bookings",
+)
 def reconcile_no_shows(
+    batch_size: int = Query(
+        DEFAULT_NO_SHOW_BATCH_SIZE,
+        ge=1,
+        le=MAX_NO_SHOW_BATCH_SIZE,
+    ),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Process one batch; a scheduler can repeat while ``has_more`` is true."""
     if not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="Admin access required.")
-    return {"processed": mark_due_no_shows(db)}
+    batch_limit = batch_size if isinstance(batch_size, int) else DEFAULT_NO_SHOW_BATCH_SIZE
+    now_naive = _business_now_naive()
+    processed = mark_due_no_shows(db, now=now_naive, batch_size=batch_limit)
+    return {
+        "processed": processed,
+        "batch_size": batch_limit,
+        "has_more": _has_due_no_shows(db, now_naive),
+    }
 
 
 @router.get("/admin/points")
@@ -917,7 +949,7 @@ def get_all_user_points(
     filter_mode: str = Query("all", alias="filter", pattern="^(all|low|banned|allowed)$"),
     sort_by: str = Query("pointsAsc", pattern="^(pointsAsc|pointsDesc|name)$"),
 ):
-    """Return the current point status for every user for the Admin dashboard."""
+    """Return one SQL-paginated page plus bounded aggregate summaries."""
     if not is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="Admin access required.")
 
@@ -930,24 +962,102 @@ def get_all_user_points(
     sort_value = sort_by if isinstance(sort_by, str) else "pointsAsc"
 
     policy = get_or_create_point_policy(db)
-    mark_due_no_shows(db, policy=policy)
-
     today = _business_today()
-    rows = db.query(models.User, models.UserPoints).outerjoin(
-        models.UserPoints,
-        models.UserPoints.user_id == models.User.id,
+    now = _now_utc()
+    warning_threshold = _policy_value(policy, "warning_threshold")
+
+    raw_points = func.coalesce(models.UserPoints.points, MAX_POINTS)
+    points_expr = case(
+        (raw_points < 0, 0),
+        (raw_points > MAX_POINTS, MAX_POINTS),
+        else_=raw_points,
+    )
+    raw_daily_score = func.coalesce(models.UserDailyScore.score, MAX_POINTS)
+    daily_score_expr = case(
+        (raw_daily_score < 0, 0),
+        (raw_daily_score > MAX_POINTS, MAX_POINTS),
+        else_=raw_daily_score,
+    )
+    active_bans = db.query(
+        models.BanRecord.user_id.label("user_id"),
+        func.max(models.BanRecord.ban_until).label("ban_until"),
     ).filter(
-        ~models.User.roles.any(models.Role.name == "admin"),
-    ).order_by(models.User.id.asc()).all()
+        models.BanRecord.ban_until > now,
+    ).group_by(models.BanRecord.user_id).subquery()
+    not_admin = ~models.User.roles.any(models.Role.name == "admin")
 
-    user_ids = [user.id for user, _ in rows]
+    summary_row = db.query(
+        func.count(models.User.id),
+        func.coalesce(func.avg(points_expr), 0),
+        func.coalesce(func.sum(case((points_expr <= warning_threshold, 1), else_=0)), 0),
+        func.coalesce(func.sum(case((active_bans.c.ban_until.is_not(None), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((active_bans.c.ban_until.is_(None), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((points_expr == 0, 1), else_=0)), 0),
+    ).select_from(models.User).outerjoin(
+        models.UserPoints, models.UserPoints.user_id == models.User.id,
+    ).outerjoin(
+        active_bans, active_bans.c.user_id == models.User.id,
+    ).filter(not_admin).one()
+
+    page_filters = [not_admin]
+    if filter_value == "low":
+        page_filters.append(points_expr <= warning_threshold)
+    elif filter_value == "banned":
+        page_filters.append(active_bans.c.ban_until.is_not(None))
+    elif filter_value == "allowed":
+        page_filters.append(active_bans.c.ban_until.is_(None))
+
+    normalized_search = (search_value or "").strip()
+    if normalized_search:
+        escaped_search = (
+            normalized_search.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        pattern = f"%{escaped_search}%"
+        full_name = func.trim(models.User.first_name + " " + models.User.last_name)
+        page_filters.append(or_(
+            full_name.ilike(pattern, escape="\\"),
+            models.User.email.ilike(pattern, escape="\\"),
+            cast(models.User.id, String).ilike(pattern, escape="\\"),
+        ))
+
+    total = db.query(func.count(models.User.id)).select_from(models.User).outerjoin(
+        models.UserPoints, models.UserPoints.user_id == models.User.id,
+    ).outerjoin(
+        active_bans, active_bans.c.user_id == models.User.id,
+    ).filter(*page_filters).scalar() or 0
+    page_query = db.query(
+        models.User,
+        points_expr.label("points"),
+        daily_score_expr.label("daily_score"),
+        active_bans.c.ban_until,
+        models.UserPoints.updated_at,
+    ).select_from(models.User).outerjoin(
+        models.UserPoints, models.UserPoints.user_id == models.User.id,
+    ).outerjoin(
+        models.UserDailyScore,
+        and_(
+            models.UserDailyScore.user_id == models.User.id,
+            models.UserDailyScore.score_date == today,
+        ),
+    ).outerjoin(
+        active_bans, active_bans.c.user_id == models.User.id,
+    ).filter(*page_filters)
+    full_name = func.trim(models.User.first_name + " " + models.User.last_name)
+    if sort_value == "pointsDesc":
+        page_query = page_query.order_by(points_expr.desc(), models.User.id.asc())
+    elif sort_value == "name":
+        page_query = page_query.order_by(func.lower(full_name), models.User.id.asc())
+    else:
+        page_query = page_query.order_by(points_expr.asc(), models.User.id.asc())
+    page_rows = page_query.offset((page_number - 1) * page_limit).limit(page_limit).all()
+
+    user_ids = [user.id for user, *_ in page_rows]
     role_names = {}
-    pending_requests = {}
-
     if user_ids:
         role_rows = db.query(models.UserRole.user_id, models.Role.name).join(
-            models.Role,
-            models.Role.id == models.UserRole.role_id,
+            models.Role, models.Role.id == models.UserRole.role_id,
         ).filter(models.UserRole.user_id.in_(user_ids)).all()
         role_priority = {"admin": 0, "student": 1, "guest": 2}
         for user_id, role_name in role_rows:
@@ -955,113 +1065,46 @@ def get_all_user_points(
             if current_role is None or role_priority.get(role_name, 99) < role_priority.get(current_role, 99):
                 role_names[user_id] = role_name
 
-        request_rows = db.query(models.PointRequest, models.User).join(
-            models.User,
-            models.User.id == models.PointRequest.user_id,
-        ).filter(
-            models.PointRequest.user_id.in_(user_ids),
-            models.PointRequest.status == "pending",
-        ).order_by(models.PointRequest.created_at.asc(), models.PointRequest.id.asc()).all()
-        pending_requests = {
-            request.user_id: (request, user)
-            for request, user in request_rows
-        }
+    latest_pending_id = db.query(models.PointRequest.id).filter(
+        models.PointRequest.user_id == models.User.id,
+        models.PointRequest.status == "pending",
+    ).order_by(
+        models.PointRequest.created_at.desc(), models.PointRequest.id.desc(),
+    ).limit(1).correlate(models.User).scalar_subquery()
+    pending_rows = db.query(models.PointRequest, models.User).join(
+        models.User, models.User.id == models.PointRequest.user_id,
+    ).filter(
+        models.PointRequest.id == latest_pending_id,
+        not_admin,
+    ).order_by(models.PointRequest.created_at.asc(), models.PointRequest.id.asc()).all()
+    pending_by_user = {
+        request.user_id: (request, user)
+        for request, user in pending_rows
+    }
 
-    ensure_daily_bonuses_for_users(
-        user_ids,
-        db,
-        effective_at=_now_utc(),
-        policy=policy,
-    )
-
-    point_records = {}
-    for user, point_record in rows:
-        # Reuse the ORM-loaded point row instead of querying it again for the
-        # response. Missing legacy rows are created by the bulk preloader.
-        if point_record is None:
-            point_record = db.get(models.UserPoints, user.id)
-            if point_record is None:
-                point_record = get_or_create_points(user.id, db)
-        point_records[user.id] = point_record
-
-    ban_until_by_user = {}
-    daily_score_by_user = {}
-    if user_ids:
-        active_bans = db.query(
-            models.BanRecord.user_id,
-            func.max(models.BanRecord.ban_until),
-        ).filter(
-            models.BanRecord.user_id.in_(user_ids),
-            models.BanRecord.ban_until > _now_utc(),
-        ).group_by(models.BanRecord.user_id).all()
-        ban_until_by_user = dict(active_bans)
-
-        daily_scores = db.query(
-            models.UserDailyScore.user_id,
-            models.UserDailyScore.score,
-        ).filter(
-            models.UserDailyScore.user_id.in_(user_ids),
-            models.UserDailyScore.score_date == today,
-        ).all()
-        daily_score_by_user = {
-            user_id: _clamp_score(score)
-            for user_id, score in daily_scores
-        }
-
-    result = []
-    for user, _ in rows:
-        point_record = point_records[user.id]
-        points = _clamp_score(point_record.points if point_record else MAX_POINTS)
-        ban_until = ban_until_by_user.get(user.id)
-        daily_score = daily_score_by_user.get(user.id, MAX_POINTS)
-        request_row = pending_requests.get(user.id)
-        result.append({
+    paged_result = []
+    for user, points, daily_score, ban_until, updated_at in page_rows:
+        request_row = pending_by_user.get(user.id)
+        paged_result.append({
             "user_id": user.id,
             "first_name": user.first_name,
             "last_name": user.last_name,
             "name": f"{user.first_name} {user.last_name}".strip(),
             "email": user.email,
             "role": role_names.get(user.id, "guest"),
-            "points": points,
-            "daily_score": daily_score,
+            "points": int(points),
+            "daily_score": int(daily_score),
             "daily_score_date": today,
             "booking_allowed": ban_until is None,
             "is_banned": ban_until is not None,
             "ban_until": ban_until,
-            "warning_level": _warning_level(points, policy),
-            "points_warning_threshold": _policy_value(policy, "warning_threshold"),
+            "warning_level": _warning_level(int(points), policy),
+            "points_warning_threshold": warning_threshold,
             "point_request_amount": _policy_value(policy, "point_request_amount"),
             "point_request": _serialize_point_request(*request_row) if request_row else None,
-            "updated_at": point_record.updated_at if point_record else None,
+            "updated_at": updated_at,
         })
 
-    warning_threshold = _policy_value(policy, "warning_threshold")
-    all_scores = [item["points"] for item in result]
-    normalized_search = (search_value or "").strip().casefold()
-    filtered_result = [
-        item for item in result
-        if (
-            not normalized_search
-            or normalized_search in (
-                f"{item['name']} {item['email']} {item['user_id']}"
-            ).casefold()
-        )
-        and (
-            filter_value == "all"
-            or (filter_value == "low" and item["points"] <= warning_threshold)
-            or (filter_value == "banned" and item["is_banned"])
-            or (filter_value == "allowed" and item["booking_allowed"])
-        )
-    ]
-    if sort_value == "pointsDesc":
-        filtered_result.sort(key=lambda item: item["points"], reverse=True)
-    elif sort_value == "name":
-        filtered_result.sort(key=lambda item: item["name"].casefold())
-    else:
-        filtered_result.sort(key=lambda item: item["points"])
-
-    total = len(filtered_result)
-    paged_result = filtered_result[(page_number - 1) * page_limit:page_number * page_limit]
     db.commit()
     return {
         "data": paged_result,
@@ -1074,18 +1117,16 @@ def get_all_user_points(
         "point_request_amount": _policy_value(policy, "point_request_amount"),
         "point_requests": [
             _serialize_point_request(request, user)
-            for request, user in pending_requests.values()
+            for request, user in pending_rows
         ],
         "summary": {
-            "total_users": len(result),
-            "average_points": round(sum(all_scores) / len(all_scores), 1) if all_scores else 0,
-            "low_point_users": sum(
-                item["points"] <= warning_threshold for item in result
-            ),
-            "banned_users": sum(item["is_banned"] for item in result),
-            "booking_allowed": sum(item["booking_allowed"] for item in result),
-            "zero_point_users": sum(item["points"] == 0 for item in result),
-            "pending_point_requests": len(pending_requests),
+            "total_users": int(summary_row[0]),
+            "average_points": round(float(summary_row[1]), 1),
+            "low_point_users": int(summary_row[2]),
+            "banned_users": int(summary_row[3]),
+            "booking_allowed": int(summary_row[4]),
+            "zero_point_users": int(summary_row[5]),
+            "pending_point_requests": len(pending_rows),
         },
     }
 
@@ -1395,7 +1436,6 @@ def get_low_point_users(
         raise HTTPException(status_code=403, detail="Admin access required.")
 
     policy = get_or_create_point_policy(db)
-    mark_due_no_shows(db, policy=policy)
     rows = db.query(models.UserPoints, models.User).join(
         models.User,
         models.User.id == models.UserPoints.user_id,
@@ -1434,7 +1474,6 @@ def get_admin_user_details(
     if role == "admin":
         raise HTTPException(status_code=404, detail="User not found.")
 
-    mark_due_no_shows(db)
     ensure_daily_bonus(user.id, db)
 
     student = db.query(models.Student).filter(

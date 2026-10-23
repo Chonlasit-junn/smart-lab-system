@@ -134,7 +134,7 @@ class PaginationTests(unittest.TestCase):
             self.student.email,
         ])
 
-        with patch.object(labs, "mark_due_no_shows"), patch.object(
+        with patch.object(labs, "mark_due_no_shows") as reconcile, patch.object(
             labs,
             "_lab_now",
             return_value=datetime(2026, 9, 25, 12, 0),
@@ -147,6 +147,7 @@ class PaginationTests(unittest.TestCase):
                 page=2,
                 page_size=1,
             )
+        reconcile.assert_not_called()
 
         self.assertEqual(result["scope"], "upcoming")
         self.assertEqual(result["total"], 2)

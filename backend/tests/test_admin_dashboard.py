@@ -19,6 +19,7 @@ os.environ["SQLALCHEMY_DATABASE_URL"] = "sqlite:///:memory:"
 import models  # noqa: E402
 from database import Base  # noqa: E402
 from routers import admin as admin_router  # noqa: E402
+from routers import points  # noqa: E402
 
 
 @compiles(JSONB, "sqlite")
@@ -74,7 +75,8 @@ class AdminDashboardTests(unittest.TestCase):
         self.engine.dispose()
 
     def test_dashboard_returns_aggregate_counts_and_only_latest_ten_bookings(self):
-        with patch.object(admin_router, "mark_due_no_shows") as mark_due_no_shows:
+        self.assertFalse(hasattr(admin_router, "mark_due_no_shows"))
+        with patch.object(points, "mark_due_no_shows") as mark_due_no_shows:
             result = admin_router.get_dashboard_summary(self.admin, self.session)
 
         data = result["data"]
@@ -88,7 +90,7 @@ class AdminDashboardTests(unittest.TestCase):
         )
         self.assertEqual(data["recent_reservations"][0]["user"]["id"], self.student.id)
         self.assertEqual(data["recent_reservations"][0]["lab"]["code"], "LAB01")
-        mark_due_no_shows.assert_called_once()
+        mark_due_no_shows.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -40,6 +40,8 @@ TEST_TABLES = [
         "point_logs",
         "point_requests",
         "ban_records",
+        "labs",
+        "bookings",
     )
 ]
 
@@ -179,6 +181,76 @@ class PointSystemTests(unittest.TestCase):
         )
 
         self.assertEqual([row["reason"] for row in result["data"]], ["daily_bonus"])
+
+    def test_notification_get_does_not_reconcile_bookings(self):
+        with patch.object(points, "mark_due_no_shows") as reconcile:
+            points.get_my_point_logs(
+                limit=20,
+                before_id=None,
+                notifications_only=True,
+                current_user=self.student,
+                db=self.session,
+            )
+
+        reconcile.assert_not_called()
+
+    def test_no_show_reconciliation_is_bounded_and_reports_remaining_work(self):
+        lab = models.Lab(name="Batch Lab", code="LAB-BATCH", capacity=10, status="active")
+        self.session.add(lab)
+        self.session.flush()
+        due_date = date(2026, 10, 22)
+        for index in range(2):
+            self.session.add(models.Booking(
+                lab_id=lab.id,
+                user_id=self.student.id,
+                booking_date=due_date,
+                start_time=datetime(2026, 10, 22, 9 + index).time(),
+                end_time=datetime(2026, 10, 22, 10 + index).time(),
+                total_participants=1,
+                status="reserved",
+            ))
+        not_yet_due = models.Booking(
+            lab_id=lab.id,
+            user_id=self.student.id,
+            booking_date=date(2026, 10, 23),
+            start_time=datetime(2026, 10, 23, 11, 0).time(),
+            end_time=datetime(2026, 10, 23, 11, 50).time(),
+            total_participants=1,
+            status="reserved",
+        )
+        self.session.add(not_yet_due)
+        self.session.commit()
+        now = datetime(2026, 10, 23, 12, 0)
+
+        with patch.object(points, "_business_now_naive", return_value=now):
+            first_batch = points.reconcile_no_shows(
+                current_user=self.admin,
+                db=self.session,
+                batch_size=1,
+            )
+            second_batch = points.reconcile_no_shows(
+                current_user=self.admin,
+                db=self.session,
+                batch_size=1,
+            )
+
+        self.assertEqual(first_batch, {
+            "processed": 1,
+            "batch_size": 1,
+            "has_more": True,
+        })
+        self.assertEqual(second_batch, {
+            "processed": 1,
+            "batch_size": 1,
+            "has_more": False,
+        })
+        self.assertEqual(self._point_record().points, 90)
+        self.assertEqual(
+            self.session.query(models.PointLog).filter_by(reason="no_show").count(),
+            2,
+        )
+        self.session.refresh(not_yet_due)
+        self.assertEqual(not_yet_due.status, "reserved")
 
     def test_reset_clears_only_test_bans(self):
         self._point_record().points = 80

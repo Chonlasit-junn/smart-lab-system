@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from jose import jwt
 from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
@@ -20,8 +21,9 @@ os.environ["SQLALCHEMY_DATABASE_URL"] = "sqlite:///:memory:"
 
 import models  # noqa: E402
 from database import Base  # noqa: E402
+from device_registry import hash_device_token  # noqa: E402
 from policy import sign_policy_snapshot  # noqa: E402
-from routers import agent  # noqa: E402
+from routers import agent, users  # noqa: E402
 
 
 @compiles(JSONB, "sqlite")
@@ -48,10 +50,22 @@ class AgentTelemetryTests(unittest.TestCase):
         self.lab = models.Lab(name="Lab", code="LAB1", capacity=20, status="active")
         self.db.add_all([self.user, self.lab])
         self.db.flush()
+        self.device_token = "test-device-token"
+        self.device = models.LabDevice(
+            device_id="test-agent-device",
+            lab_id=self.lab.id,
+            device_name="Test workstation",
+            device_mac="aa:bb:cc:dd:ee:ff",
+            agent_token_hash=hash_device_token(self.device_token),
+        )
+        self.db.add(self.device)
+        self.db.flush()
         self.session = models.LabAccessLog(
-            user_id=self.user.id, lab_id=self.lab.id, access_type="manual",
+            user_id=self.user.id, lab_id=self.lab.id, lab_device_id=self.device.id,
+            access_type="manual",
             status="success", session_status="active",
             entry_time=self.detected_at - timedelta(hours=1),
+            device_mac="aa:bb:cc:dd:ee:ff",
         )
         self.rule = models.BlacklistedApp(
             app_name="Blocked", match_type="process_name", match_value="blocked", enabled=True,
@@ -72,6 +86,7 @@ class AgentTelemetryTests(unittest.TestCase):
             exe_path=None, window_title=None, detection_source="process_name",
             detected_at=self.detected_at.isoformat(), policy_version=self.policy["version"],
             policy_token=self.policy["policy_token"], db=self.db,
+            device_id=self.device.device_id, device_token=self.device_token,
             executable_identity=json.dumps({"original_filename": "blocked.exe"}),
             browser_domain=None,
         )
@@ -94,6 +109,230 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertEqual(row.matched_rule_id, rule_id)
         self.assertEqual(points.call_count, 1)
         self.assertEqual(points.call_args.kwargs["effective_at"], self.detected_at)
+
+    def test_usage_endpoint_rejects_missing_or_unbound_device_credentials(self):
+        other_token = "other-device-token"
+        other_device = models.LabDevice(
+            device_id="other-agent-device",
+            lab_id=self.lab.id,
+            device_name="Other workstation",
+            agent_token_hash=hash_device_token(other_token),
+        )
+        self.db.add(other_device)
+        self.db.commit()
+
+        for device_id, device_token in ((None, None), (other_device.device_id, other_token)):
+            with self.subTest(device_id=device_id), self.assertRaises(HTTPException) as raised:
+                agent.log_usage(
+                    session_id=self.session.id,
+                    usage_data="[]",
+                    device_id=device_id,
+                    device_token=device_token,
+                    db=self.db,
+                )
+            self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(self.db.query(models.ProgramUsageLog).count(), 0)
+
+    def test_bound_device_can_submit_idempotent_usage_after_session_closes(self):
+        usage_data = json.dumps([{
+            "event_id": "usage-event-001",
+            "name": "Notepad",
+            "started_at": self.detected_at.isoformat(),
+            "ended_at": (self.detected_at + timedelta(minutes=1)).isoformat(),
+            "duration": 60,
+        }])
+        self.session.session_status = "completed"
+        self.session.exit_time = self.detected_at + timedelta(minutes=2)
+        self.db.commit()
+
+        first = agent.log_usage(
+            session_id=self.session.id,
+            usage_data=usage_data,
+            device_id=self.device.device_id,
+            device_token=self.device_token,
+            db=self.db,
+        )
+        second = agent.log_usage(
+            session_id=self.session.id,
+            usage_data=usage_data,
+            device_id=self.device.device_id,
+            device_token=self.device_token,
+            db=self.db,
+        )
+
+        self.assertEqual(first["created_count"], 1)
+        self.assertEqual(second["duplicate_count"], 1)
+        self.assertEqual(self.db.query(models.ProgramUsageLog).count(), 1)
+
+    def test_usage_endpoint_rejects_oversized_batches_before_writing(self):
+        usage_data = json.dumps([{"name": f"Program {index}"} for index in range(
+            agent.MAX_USAGE_BATCH_SIZE + 1
+        )])
+        with self.assertRaises(HTTPException) as raised:
+            agent.log_usage(
+                session_id=self.session.id,
+                usage_data=usage_data,
+                device_id=self.device.device_id,
+                device_token=self.device_token,
+                db=self.db,
+            )
+        self.assertEqual(raised.exception.status_code, 413)
+        self.assertEqual(self.db.query(models.ProgramUsageLog).count(), 0)
+
+    def test_violation_endpoint_authenticates_before_duplicate_acknowledgment(self):
+        with patch.object(agent, "apply_point_event", return_value={}) as points:
+            self.deliver()
+            with self.assertRaises(HTTPException) as raised:
+                self.deliver(device_id=None, device_token=None)
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(points.call_count, 1)
+        self.assertEqual(self.db.query(models.UsageViolation).count(), 1)
+
+    def test_end_session_requires_the_bound_device_before_mutating_session(self):
+        with self.assertRaises(HTTPException) as raised:
+            agent.end_session(
+                session_id=self.session.id,
+                end_reason="logout",
+                db=self.db,
+            )
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(self.session.session_status, "active")
+        self.assertIsNone(self.session.exit_time)
+
+    def test_legacy_session_telemetry_requires_owner_and_registered_device(self):
+        self.session.lab_device_id = None
+        self.db.commit()
+        registered_credentials = {
+            "device_id": self.device.device_id,
+            "device_token": self.device_token,
+        }
+        denied_calls = (
+            lambda: agent.log_usage(
+                session_id=self.session.id,
+                usage_data="[]",
+                **registered_credentials,
+                current_user=None,
+                db=self.db,
+            ),
+            lambda: agent.log_violation(
+                session_id=self.session.id,
+                program_name="legacy.exe",
+                **registered_credentials,
+                current_user=None,
+                db=self.db,
+            ),
+            lambda: agent.heartbeat(
+                session_id=self.session.id,
+                device_mac="aa:bb:cc:dd:ee:ff",
+                **registered_credentials,
+                current_user=None,
+                db=self.db,
+            ),
+            lambda: agent.end_session(
+                session_id=self.session.id,
+                **registered_credentials,
+                current_user=None,
+                db=self.db,
+            ),
+        )
+        for call in denied_calls:
+            with self.subTest(call=call), self.assertRaises(HTTPException) as raised:
+                call()
+            self.assertEqual(raised.exception.status_code, 403)
+
+        usage = agent.log_usage(
+            session_id=self.session.id,
+            usage_data="[]",
+            **registered_credentials,
+            current_user=self.user,
+            db=self.db,
+        )
+        violation = agent.log_violation(
+            session_id=self.session.id,
+            program_name="legacy.exe",
+            executable_identity="{}",
+            detection_source="process_name",
+            browser_domain=None,
+            **registered_credentials,
+            current_user=self.user,
+            db=self.db,
+        )
+        heartbeat = agent.heartbeat(
+            session_id=self.session.id,
+            device_mac="aa:bb:cc:dd:ee:ff",
+            **registered_credentials,
+            current_user=self.user,
+            db=self.db,
+        )
+        ended = agent.end_session(
+            session_id=self.session.id,
+            end_reason="logout",
+            **registered_credentials,
+            current_user=self.user,
+            db=self.db,
+        )
+
+        self.assertEqual(usage["count"], 0)
+        self.assertTrue(violation["ignored"])
+        self.assertEqual(heartbeat["session_id"], self.session.id)
+        self.assertEqual(ended["session_status"], "completed")
+
+    def test_legacy_session_rejects_owner_with_another_device_token(self):
+        self.session.lab_device_id = None
+        other_device = models.LabDevice(
+            device_id="another-device",
+            lab_id=self.lab.id,
+            device_name="Other workstation",
+            device_mac="11:22:33:44:55:66",
+            agent_token_hash=hash_device_token("other-token"),
+        )
+        self.db.add(other_device)
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as raised:
+            agent.log_usage(
+                session_id=self.session.id,
+                usage_data="[]",
+                device_id=other_device.device_id,
+                device_token="other-token",
+                current_user=self.user,
+                db=self.db,
+            )
+
+        self.assertEqual(raised.exception.status_code, 403)
+
+    def test_optional_agent_auth_resolves_only_a_valid_user_token(self):
+        token = jwt.encode(
+            {"sub": self.user.email, "auth_version": self.user.auth_version},
+            users.SECRET_KEY,
+            algorithm=users.ALGORITHM,
+        )
+
+        resolved_user = agent._get_optional_agent_user(token, self.db)
+
+        self.assertEqual(resolved_user.id, self.user.id)
+        self.assertIsNone(agent._get_optional_agent_user("invalid-token", self.db))
+
+    def test_bound_device_can_end_session_and_completion_points_remain_idempotent(self):
+        with patch.object(agent, "apply_point_event", return_value={"change": 5}) as points:
+            first = agent.end_session(
+                session_id=self.session.id,
+                end_reason="logout",
+                device_id=self.device.device_id,
+                device_token=self.device_token,
+                db=self.db,
+            )
+            second = agent.end_session(
+                session_id=self.session.id,
+                end_reason="logout",
+                device_id=self.device.device_id,
+                device_token=self.device_token,
+                db=self.db,
+            )
+
+        self.assertEqual(first["session_status"], "completed")
+        self.assertEqual(second["session_status"], "completed")
+        self.assertEqual(points.call_count, 1)
 
     def test_changed_rule_uses_the_signed_original_matching_value(self):
         self.rule.match_value = "another-app"

@@ -35,7 +35,7 @@ router = APIRouter(tags=["Authentication"])
 MAX_FACE_IMAGE_BYTES = 5 * 1024 * 1024
 
 
-@router.post("/request-otp")
+@router.post("/request-otp", dependencies=[Depends(otp_service.enforce_ip_rate_limit)])
 async def request_otp(request: schemas.OTPRequest, db: Session = Depends(get_db)):
     normalized_email = normalize_email(request.email)
 
@@ -58,14 +58,14 @@ async def request_otp(request: schemas.OTPRequest, db: Session = Depends(get_db)
     return {"message": f"OTP sent to {normalized_email}", "account_type": account_type, **timing}
 
 
-@router.post("/verify-otp")
+@router.post("/verify-otp", dependencies=[Depends(otp_service.enforce_ip_rate_limit)])
 def verify_otp(request: schemas.OTPVerify, db: Session = Depends(get_db)):
     normalized_email = normalize_email(request.email)
     otp_service.verify_otp(db, normalized_email, request.otp)
     return {"message": "OTP Verified Successfully!"}
 
 
-@router.post("/register")
+@router.post("/register", dependencies=[Depends(otp_service.enforce_ip_rate_limit)])
 async def register(
     email: str = Form(...),
     otp: str = Form(...),

@@ -43,14 +43,21 @@ def make_response(status_code, payload):
 
 class AgentHttpTests(unittest.TestCase):
     def test_heartbeat_preserves_http_conflict_status(self):
-        instance = SimpleNamespace(flush_outbox=Mock())
+        instance = SimpleNamespace(
+            flush_outbox=Mock(),
+            current_access_token="legacy-owner-token",
+        )
         conflict = make_response(409, {"detail": "Session is no longer active."})
 
-        with patch.object(agent, "post_with_retry", return_value=conflict):
+        with patch.object(agent, "post_with_retry", return_value=conflict) as post:
             result = agent.SmartLabAgent._send_heartbeat_request(instance, 12)
 
         self.assertEqual(result["status"], 409)
         instance.flush_outbox.assert_not_called()
+        self.assertEqual(
+            post.call_args.kwargs["headers"],
+            {"Authorization": "Bearer legacy-owner-token"},
+        )
 
     def test_closed_session_request_retries_with_a_fresh_key(self):
         overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
@@ -80,6 +87,15 @@ class AgentHttpTests(unittest.TestCase):
             {"kind": "success", "session_id": 42, "email": "student@example.invalid"},
         )
         self.assertEqual(post.call_count, 3)
+        self.assertEqual(
+            post.call_args_list[1].kwargs["headers"],
+            {"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(
+            post.call_args_list[2].kwargs["headers"],
+            {"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(overlay.agent.current_access_token, "test-token")
         overlay.agent.discard_session_attempt.assert_called_once_with("client-key-1")
         overlay.agent.confirm_session_attempt.assert_called_once_with("client-key-2")
 
@@ -104,6 +120,79 @@ class AgentHttpTests(unittest.TestCase):
             )
 
         self.assertEqual(result, {"kind": "session_error", "status": 422})
+
+    def test_login_response_without_access_token_does_not_start_a_session(self):
+        overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
+        overlay.agent = SimpleNamespace(
+            flush_outbox=Mock(),
+            get_or_create_session_attempt=Mock(),
+            discard_session_attempt=Mock(),
+            confirm_session_attempt=Mock(),
+        )
+
+        with patch.object(
+            agent,
+            "post_with_retry",
+            return_value=make_response(200, {}),
+        ) as post:
+            result = agent.LoginOverlay._authenticate_and_start_session(
+                overlay,
+                "student@example.invalid",
+                "test-password",
+            )
+
+        self.assertEqual(result, {"kind": "invalid_credentials"})
+        self.assertEqual(post.call_count, 1)
+        overlay.agent.get_or_create_session_attempt.assert_not_called()
+
+    def test_outbox_delivery_attaches_current_registered_device_credentials(self):
+        outbox = SimpleNamespace(
+            pending=Mock(return_value=[{
+                "kind": "usage",
+                "payload": json.dumps({"session_id": 42, "usage_data": "[]"}),
+                "event_id": "usage-event",
+            }]),
+            mark_sent=Mock(),
+            mark_failed=Mock(),
+        )
+        instance = SimpleNamespace(
+            outbox=outbox,
+            current_access_token="legacy-owner-token",
+        )
+
+        with patch.object(agent, "REGISTERED_DEVICE_ID", "device-1"), patch.object(
+            agent, "DEVICE_TOKEN", "device-secret",
+        ), patch.object(agent, "post_with_retry", return_value=make_response(200, {})) as post:
+            sent = agent.SmartLabAgent._flush_outbox_locked(instance)
+
+        self.assertEqual(sent, 1)
+        request_data = post.call_args.kwargs["data"]
+        self.assertEqual(request_data["device_id"], "device-1")
+        self.assertEqual(request_data["device_token"], "device-secret")
+        self.assertEqual(
+            post.call_args.kwargs["headers"],
+            {"Authorization": "Bearer legacy-owner-token"},
+        )
+        outbox.mark_sent.assert_called_once_with("usage-event")
+
+    def test_fallback_usage_summary_is_sent_in_bounded_batches(self):
+        instance = SimpleNamespace(current_access_token="agent-token")
+        summary = [{"name": f"Program {index}", "event_id": f"usage-{index}"}
+                   for index in range(205)]
+
+        with patch.object(agent, "post_with_retry", return_value=make_response(200, {})) as post:
+            agent.SmartLabAgent._send_fallback_session_logs(
+                instance, 42, summary, "logout", [],
+            )
+
+        usage_calls = [call for call in post.call_args_list
+                       if call.args[0].endswith("/agent/log-usage")]
+        sent_batches = [json.loads(call.kwargs["data"]["usage_data"]) for call in usage_calls]
+        self.assertEqual([len(batch) for batch in sent_batches], [100, 100, 5])
+        self.assertEqual(
+            [item["event_id"] for batch in sent_batches for item in batch],
+            [item["event_id"] for item in summary],
+        )
 
 
 class AgentOutboxRetryTests(unittest.TestCase):

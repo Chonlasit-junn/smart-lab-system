@@ -226,8 +226,8 @@ python agent.pyw
 
 - `API_URL`: URL ของ Backend ที่ Agent จะเรียก
 - `SMART_LAB_API_URL`: override URL ของ Backend โดยไม่ต้องแก้ source
-- `SMART_LAB_CODE`: ใช้เฉพาะโหมด Legacy/ทดสอบ เมื่อ Backend ตั้ง `SMART_LAB_REQUIRE_DEVICE_REGISTRATION=0`
-- `SMART_LAB_REQUIRE_DEVICE_REGISTRATION=1`: บังคับให้ Backend รับเฉพาะเครื่องที่ลงทะเบียนแล้ว (ค่าเริ่มต้น)
+- `SMART_LAB_CODE`: คงไว้เป็นข้อมูล compatibility สำหรับ Agent รุ่นเดิม แต่ Backend ปัจจุบันกำหนด Lab จากเครื่องที่ลงทะเบียนเท่านั้น
+- Backend บังคับการลงทะเบียนเครื่องเสมอ; ไม่รองรับการปิดข้อกำหนดผ่าน `SMART_LAB_REQUIRE_DEVICE_REGISTRATION=0`
 - `SMART_LAB_AGENT_DEBUG=1`: ป้องกันการ logout Windows ระหว่างทดสอบ; ตั้งเป็น `0` ตอนใช้งานจริง
 - `SMART_LAB_SESSION_CLEANUP=1`: เปิดการ cleanup แบบ opt-in; ค่าเริ่มต้นของทั้ง source และ executable คือปิด (`0`)
 - `SMART_LAB_AGENT_DATA_DIR`: โฟลเดอร์สำหรับ local SQLite outbox; ค่าเริ่มต้นคือ `%LOCALAPPDATA%\SmartLabAgent`
@@ -263,11 +263,11 @@ Credential Manager อาจทำให้ข้อมูลบางอย่�
 
 ข้อมูลที่ Agent ส่งตามปกติ:
 
-- ตอน login: `POST /login`
-- ตอนเริ่ม session: `POST /agent/start-session` พร้อม `client_session_id` ที่เก็บไว้จนกว่า Backend จะตอบสำเร็จ
+- ตอน login: `POST /login`; Agent ใช้ access token ที่ได้ส่งเป็น Bearer token ตอนเริ่ม session และ Backend จะตรวจว่า email ตรงกับผู้ใช้ที่ login
+- ตอนเริ่ม session: `POST /agent/start-session` ต้องส่ง Bearer token จากผู้ใช้ที่ login และ credential ของเครื่องที่ลงทะเบียน (`device_id`, `device_token`) พร้อม `client_session_id` ที่เก็บไว้จนกว่า Backend จะตอบสำเร็จ; Backend ใช้ผู้ใช้จาก token และปฏิเสธ email ที่ไม่ตรงกัน
 - ตอนเริ่มและระหว่าง session: `GET /agent/policy` เพื่อโหลดกฎ Blacklist และ refresh ทุก 60 วินาที
-- ระหว่างใช้งาน: `POST /agent/heartbeat` ทุก 30 วินาที
-- ตอนจบ session: `POST /agent/log-usage` และ `POST /agent/end-session`
+- ระหว่างใช้งาน: `POST /agent/heartbeat` ทุก 30 วินาที โดย credential ต้องตรงกับเครื่องที่ผูกกับ session
+- ระหว่างและหลัง session: `POST /agent/log-usage`, `POST /agent/log-violation` และ `POST /agent/end-session` ต้องมี credential ที่ตรงกับเครื่องซึ่งผูกกับ session; session เก่าที่ยังไม่ผูก device จะยอมรับเฉพาะเมื่อมีทั้ง Bearer token ของเจ้าของ sessionและ MAC/Lab ตรงกับเครื่องที่ลงทะเบียน แล้วจึงผูก device ให้ session
 - Agent เก็บ usage และ violation ลง local SQLite outbox ก่อนส่ง โดยแต่ละ usage/violation มี `event_id`; ถ้าเน็ตหลุดจะ retry อัตโนมัติเมื่อ Heartbeat กลับมาสำเร็จ
 - Agent ส่ง usage เป็น JSON list ที่มี `event_id`, `name`, `started_at`, `ended_at`, `duration`
 

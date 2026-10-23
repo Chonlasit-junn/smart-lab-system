@@ -6,7 +6,7 @@ from jose import jwt, JWTError
 import os
 import models
 from database import get_db
-from profile_storage import get_profile_image_url
+from profile_storage import get_profile_image_url, get_profile_image_urls
 from utils import normalize_email
 
 router = APIRouter(tags=["Users"])
@@ -69,6 +69,7 @@ def get_all_users(
     users = query.order_by(models.User.id.asc()).offset(
         (page_number - 1) * page_limit
     ).limit(page_limit).all()
+    profile_urls = get_profile_image_urls([user.profile_pic for user in users])
     return {
         "data": [
             {
@@ -76,10 +77,10 @@ def get_all_users(
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "email": user.email,
-                "profile_pic": get_profile_image_url(user.profile_pic),
+                "profile_pic": profile_url,
                 "created_at": user.created_at,
             }
-            for user in users
+            for user, profile_url in zip(users, profile_urls)
         ],
         "page": page_number,
         "page_size": page_limit,

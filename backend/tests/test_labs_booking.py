@@ -89,6 +89,14 @@ class LabBookingLogicTests(unittest.TestCase):
         self.assertEqual(result["slots"][1]["status"], "class")
         self.assertEqual(result["slots"][2]["status"], "available")
 
+    def test_availability_does_not_reconcile_bookings_on_read(self):
+        target_date = self._future_date("Monday")
+
+        with patch.object(labs, "mark_due_no_shows") as reconcile:
+            labs.check_availability(self.lab.id, target_date, self.session)
+
+        reconcile.assert_not_called()
+
     def test_booking_rejects_a_scheduled_class_even_when_weekday_is_thai(self):
         target_date = self._future_date("Monday")
         self._schedule(target_date, day_of_week="วันจันทร์", slot_number=1)

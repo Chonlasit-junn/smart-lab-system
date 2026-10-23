@@ -1,8 +1,8 @@
 import json
-import os
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,14 +15,17 @@ from policy import (
     sign_policy_snapshot, verify_policy_snapshot,
 )
 from routers.points import apply_point_event, mark_due_no_shows
+from routers.users import get_current_user
 from time_utils import as_utc, lab_now_naive, utc_now
 from utils import normalize_email
 from url_policy import normalize_domain
 
 router = APIRouter(tags=["Hardware Agent"])
+optional_agent_oauth2 = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
 STALE_SESSION_AFTER = timedelta(minutes=2)
 MAX_IDEMPOTENCY_KEY_LENGTH = 128
+MAX_USAGE_BATCH_SIZE = 100
 VALID_END_REASONS = {
     "logout",
     "violation",
@@ -31,12 +34,6 @@ VALID_END_REASONS = {
     "error",
     "admin",
 }
-REQUIRE_DEVICE_REGISTRATION = os.getenv(
-    "SMART_LAB_REQUIRE_DEVICE_REGISTRATION",
-    "1",
-).strip().lower() in {"1", "true", "yes", "on"}
-
-
 @router.get("/agent/policy")
 def get_agent_policy(db: Session = Depends(get_db)):
     """Return the active, versioned policy used by Windows Agents."""
@@ -111,6 +108,75 @@ def _require_active_session(access_log: models.LabAccessLog) -> None:
         raise HTTPException(status_code=409, detail="Session is no longer active.")
 
 
+def _get_optional_agent_user(
+    token: Optional[str] = Depends(optional_agent_oauth2),
+    db: Session = Depends(get_db),
+) -> Optional[models.User]:
+    if not token:
+        return None
+    try:
+        return get_current_user(token, db)
+    except HTTPException as exc:
+        if exc.status_code in {401, 404}:
+            return None
+        raise
+
+
+def _require_session_device(
+    db: Session,
+    access_log: models.LabAccessLog,
+    device_id: Optional[str],
+    device_token: Optional[str],
+    current_user: Optional[models.User] = None,
+) -> models.LabDevice:
+    registered_device = require_registered_device(db, device_id, device_token)
+    if access_log.lab_device_id is not None:
+        if registered_device.id != access_log.lab_device_id:
+            raise HTTPException(status_code=403, detail="Workstation is not authorized for this session.")
+        return registered_device
+
+    # Compatibility for sessions created before device registration became
+    # mandatory: require both the authenticated owner and the matching Lab
+    # workstation. New sessions are always bound to lab_device_id.
+    session_mac = _clean_device_mac(access_log.device_mac)
+    registered_mac = _clean_device_mac(registered_device.device_mac)
+    if (
+        current_user is None
+        or current_user.id != access_log.user_id
+        or registered_device.lab_id != access_log.lab_id
+        or not session_mac
+        or session_mac != registered_mac
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Workstation and authenticated user are not authorized for this session.",
+        )
+    return registered_device
+
+
+def _bind_recovered_session_device(
+    db: Session,
+    access_log: models.LabAccessLog,
+    registered_device: models.LabDevice,
+) -> None:
+    if access_log.lab_device_id is not None:
+        if access_log.lab_device_id != registered_device.id:
+            raise HTTPException(status_code=409, detail="Session belongs to another workstation.")
+        return
+
+    if (
+        access_log.lab_id != registered_device.lab_id
+        or _clean_device_mac(access_log.device_mac)
+        != _clean_device_mac(registered_device.device_mac)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Legacy session cannot be recovered from this workstation.",
+        )
+    access_log.lab_device_id = registered_device.id
+    db.commit()
+
+
 def _parse_usage_time(value: Optional[str], fallback: datetime) -> datetime:
     """Parse an Agent timestamp as UTC while accepting legacy local payloads."""
     if not value:
@@ -136,30 +202,18 @@ def start_session(
     device_token: Optional[str] = Form(None),
     agent_version: Optional[str] = Form(None),
     client_session_id: Optional[str] = Form(None),
+    current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     normalized_email = normalize_email(email)
-    user = db.query(models.User).filter(
-        func.lower(models.User.email) == normalized_email,
-    ).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Invalid credentials.")
+    if normalized_email != normalize_email(current_user.email):
+        raise HTTPException(status_code=403, detail="Authenticated user does not match session user.")
+    user = current_user
 
-    registered_device = None
-    if device_id or device_token:
-        registered_device = require_registered_device(db, device_id, device_token)
-        lab = db.query(models.Lab).filter(
-            models.Lab.id == registered_device.lab_id,
-        ).first()
-    else:
-        if REQUIRE_DEVICE_REGISTRATION:
-            raise HTTPException(
-                status_code=403,
-                detail="This workstation must be registered before starting a session.",
-            )
-        lab = db.query(models.Lab).filter(
-            models.Lab.code == (lab_code or "").strip(),
-        ).first()
+    registered_device = require_registered_device(db, device_id, device_token)
+    lab = db.query(models.Lab).filter(
+        models.Lab.id == registered_device.lab_id,
+    ).first()
 
     if not lab:
         raise HTTPException(status_code=404, detail="Assigned Lab not found.")
@@ -180,12 +234,7 @@ def start_session(
     if not resolved_device_mac:
         raise HTTPException(status_code=422, detail="device_mac is required.")
 
-    resolved_lab_device_id = registered_device.id if registered_device else None
-    if registered_device:
-        registered_device.device_name = resolved_device_name
-        registered_device.device_mac = resolved_device_mac
-        registered_device.agent_version = (agent_version or "").strip()[:64] or registered_device.agent_version
-        registered_device.last_seen_at = utc_now()
+    resolved_lab_device_id = registered_device.id
 
     resolved_client_session_id = _clean_idempotency_key(
         client_session_id,
@@ -205,6 +254,7 @@ def start_session(
                     resolved_device_mac,
                     resolved_lab_device_id,
                 ):
+                    _bind_recovered_session_device(db, existing_request, registered_device)
                     return {"session_id": existing_request.id, "recovered": True}
                 raise HTTPException(
                     status_code=409,
@@ -230,6 +280,7 @@ def start_session(
             resolved_device_mac,
             resolved_lab_device_id,
         ):
+            _bind_recovered_session_device(db, active_user_session, registered_device)
             return {"session_id": active_user_session.id, "recovered": True}
         raise HTTPException(
             status_code=409,
@@ -257,6 +308,11 @@ def start_session(
             status_code=409,
             detail="This device already has an active lab session.",
         )
+
+    registered_device.device_name = resolved_device_name
+    registered_device.device_mac = resolved_device_mac
+    registered_device.agent_version = (agent_version or "").strip()[:64] or registered_device.agent_version
+    registered_device.last_seen_at = utc_now()
 
     lab_now = lab_now_naive()
     now_utc = utc_now()
@@ -304,6 +360,7 @@ def start_session(
                 resolved_device_mac,
                 resolved_lab_device_id,
             ):
+                _bind_recovered_session_device(db, recovered_session, registered_device)
                 return {"session_id": recovered_session.id, "recovered": True}
         raise HTTPException(
             status_code=409,
@@ -317,6 +374,9 @@ def start_session(
 def log_usage(
     session_id: int = Form(...),
     usage_data: str = Form(...),
+    device_id: Optional[str] = Form(None),
+    device_token: Optional[str] = Form(None),
+    current_user: Optional[models.User] = Depends(_get_optional_agent_user),
     db: Session = Depends(get_db),
 ):
     access_log = db.query(models.LabAccessLog).filter(
@@ -324,11 +384,17 @@ def log_usage(
     ).first()
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
+    _require_session_device(db, access_log, device_id, device_token, current_user)
 
     try:
         logs = json.loads(usage_data)
         if not isinstance(logs, list):
             raise HTTPException(status_code=422, detail="usage_data must be a JSON list.")
+        if len(logs) > MAX_USAGE_BATCH_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"A usage batch cannot contain more than {MAX_USAGE_BATCH_SIZE} items.",
+            )
 
         now = utc_now()
         parsed_logs = []
@@ -432,6 +498,9 @@ def log_violation(
     policy_token: Optional[str] = Form(None),
     executable_identity: Optional[str] = Form(None),
     browser_domain: Optional[str] = Form(None),
+    device_id: Optional[str] = Form(None),
+    device_token: Optional[str] = Form(None),
+    current_user: Optional[models.User] = Depends(_get_optional_agent_user),
     db: Session = Depends(get_db),
 ):
     access_log = db.query(models.LabAccessLog).filter(
@@ -439,6 +508,7 @@ def log_violation(
     ).first()
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
+    _require_session_device(db, access_log, device_id, device_token, current_user)
 
     cleaned_program_name = program_name.strip()
     if not cleaned_program_name:
@@ -595,6 +665,7 @@ def heartbeat(
     device_mac: Optional[str] = Form(None),
     device_id: Optional[str] = Form(None),
     device_token: Optional[str] = Form(None),
+    current_user: Optional[models.User] = Depends(_get_optional_agent_user),
     db: Session = Depends(get_db),
 ):
     access_log = db.query(models.LabAccessLog).filter(
@@ -604,12 +675,10 @@ def heartbeat(
         raise HTTPException(status_code=404, detail="Session not found.")
 
     _require_active_session(access_log)
-
-    if access_log.lab_device_id is not None:
-        registered_device = require_registered_device(db, device_id, device_token)
-        if registered_device.id != access_log.lab_device_id:
-            raise HTTPException(status_code=409, detail="Device does not match session.")
-        registered_device.last_seen_at = utc_now()
+    registered_device = _require_session_device(
+        db, access_log, device_id, device_token, current_user,
+    )
+    registered_device.last_seen_at = utc_now()
 
     reported_mac = _clean_device_mac(device_mac)
     stored_mac = _clean_device_mac(access_log.device_mac)
@@ -630,6 +699,9 @@ def heartbeat(
 def end_session(
     session_id: int = Form(...),
     end_reason: str = Form("logout"),
+    device_id: Optional[str] = Form(None),
+    device_token: Optional[str] = Form(None),
+    current_user: Optional[models.User] = Depends(_get_optional_agent_user),
     db: Session = Depends(get_db),
 ):
     access_log = db.query(models.LabAccessLog).filter(
@@ -637,6 +709,7 @@ def end_session(
     ).with_for_update().first()
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
+    _require_session_device(db, access_log, device_id, device_token, current_user)
 
     cleaned_reason = (end_reason or "logout").strip().lower()
     if cleaned_reason not in VALID_END_REASONS:

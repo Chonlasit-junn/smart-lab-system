@@ -47,8 +47,10 @@ class PasswordResetPostgresTests(unittest.TestCase):
         cls.addClassCleanup(cls.cleanup)
         models.User.__table__.create(cls.engine)
         migration = (Path(__file__).resolve().parents[1] / "migrations/015_password_reset_otp.sql").read_text(encoding="utf-8")
+        ip_migration = (Path(__file__).resolve().parents[1] / "migrations/016_otp_ip_rate_limit.sql").read_text(encoding="utf-8")
         with cls.raw.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
             connection.exec_driver_sql(migration.replace("public.", f'"{cls.schema}".'))
+            connection.exec_driver_sql(ip_migration.replace("public.", f'"{cls.schema}".'))
         cls.sessions = sessionmaker(bind=cls.engine, autoflush=False)
 
     @classmethod

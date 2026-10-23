@@ -1,14 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pydantic import BaseModel, Field
 import models
 from database import get_db
-from routers.points import mark_due_no_shows
 from routers.users import require_admin_user
-from profile_storage import delete_profile_image_sync, get_profile_image_url
-from time_utils import lab_now_naive
+from profile_storage import delete_profile_image_sync, get_profile_image_url, get_profile_image_urls
+from maintenance import MAX_CLEANUP_BATCH_SIZE, cleanup_expired_data
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -36,8 +35,6 @@ def get_dashboard_summary(
     db: Session = Depends(get_db),
 ):
     """Return only aggregate counts and the latest bookings for the dashboard."""
-    mark_due_no_shows(db, now=lab_now_naive())
-
     total_requests = db.query(func.count(models.Booking.id)).scalar() or 0
     active_users = db.query(func.count(models.User.id)).scalar() or 0
     pending_approvals = (
@@ -87,6 +84,16 @@ def get_dashboard_summary(
             ],
         },
     }
+
+
+@router.post("/maintenance/cleanup-expired")
+def run_expired_data_cleanup(
+    batch_size: int = Query(100, ge=1, le=MAX_CLEANUP_BATCH_SIZE),
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Run one bounded cleanup pass; an external scheduler may call repeatedly."""
+    return cleanup_expired_data(db, batch_size=batch_size)
 
 
 def _primary_role(roles: list[models.Role]) -> models.Role | None:
@@ -248,6 +255,7 @@ def get_pending_users(
         .filter(models.UserPassport.is_active == False)
         .all()
     )
+    profile_urls = get_profile_image_urls([user.profile_pic for user, _ in pending])
 
     return {
         "data": [
@@ -256,11 +264,11 @@ def get_pending_users(
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "email": user.email,
-                "profile_pic": get_profile_image_url(user.profile_pic),
+                "profile_pic": profile_url,
                 "phone": passport.phone,
                 "created_at": user.created_at,
             }
-            for user, passport in pending
+            for (user, passport), profile_url in zip(pending, profile_urls)
         ]
     }
 

@@ -50,6 +50,17 @@ class PasswordResetOTP(Base):
     credential_hash = Column(String(64), nullable=True)
 
 
+class OTPIPRateLimit(Base):
+    """Hashed client identity and a short-lived OTP request counter."""
+
+    __tablename__ = "otp_ip_rate_limits"
+    __table_args__ = {"info": {"manual_migration": True}}
+
+    ip_hash = Column(String(64), primary_key=True)
+    window_started_at = Column(DateTime(timezone=True), nullable=False)
+    request_count = Column(Integer, nullable=False, default=0, server_default="0")
+
+
 class User(Base):
     __tablename__ = "users"
 

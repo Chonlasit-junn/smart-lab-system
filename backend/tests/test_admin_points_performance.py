@@ -140,32 +140,61 @@ class AdminPointsPerformanceTests(unittest.TestCase):
         self.assertFalse(users[1]["is_banned"])
         self.assertEqual(result["summary"]["banned_users"], 1)
 
-        ban_queries = [statement for statement in statements if "from ban_records" in statement]
         daily_score_queries = [
             statement for statement in statements
-            if "from user_daily_scores" in statement
+            if "user_daily_scores" in statement
         ]
-        # Users with an existing daily bonus no longer re-check bans one by
-        # one. The response data uses one batched ban lookup and one daily
-        # score read.
-        self.assertEqual(len(ban_queries), 1)
+        page_queries = [
+            statement for statement in statements
+            if "limit" in statement and "offset" in statement
+            and "from users" in statement
+        ]
+        # User rows, scores and active bans are joined in one paged query.
         self.assertEqual(len(daily_score_queries), 1)
+        self.assertEqual(len(page_queries), 1)
+        self.assertIn("limit", page_queries[0])
+        self.assertIn("offset", page_queries[0])
 
-    def test_admin_points_still_grants_daily_bonus_once(self):
+    def test_admin_read_does_not_award_daily_bonus_to_every_user(self):
         self.session.query(models.PointLog).delete(synchronize_session=False)
         self.session.commit()
 
         first_result = self._get_admin_points()["data"]
         second_result = self._get_admin_points()["data"]
 
-        self.assertEqual([user["points"] for user in first_result], [76, 77, 78, 79, 80])
-        self.assertEqual([user["points"] for user in second_result], [76, 77, 78, 79, 80])
-        for student in self.students:
-            daily_events = self.session.query(models.PointLog).filter_by(
-                user_id=student.id,
-                event_id=f"daily:{student.id}:{self.today.isoformat()}",
-            ).count()
-            self.assertEqual(daily_events, 1)
+        self.assertEqual([user["points"] for user in first_result], [75, 76, 77, 78, 79])
+        self.assertEqual([user["points"] for user in second_result], [75, 76, 77, 78, 79])
+        self.assertEqual(self.session.query(models.PointLog).count(), 0)
+
+    def test_admin_points_filters_search_and_paginates_in_database(self):
+        result = points.get_all_user_points(
+            self.admin,
+            self.session,
+            page=2,
+            page_size=2,
+            filter_mode="all",
+            sort_by="pointsAsc",
+        )
+        self.assertEqual(result["total"], 5)
+        self.assertEqual([row["points"] for row in result["data"]], [77, 78])
+        self.assertEqual(result["summary"]["total_users"], 5)
+
+        filtered = points.get_all_user_points(
+            self.admin,
+            self.session,
+            search="student4@",
+            filter_mode="banned",
+            sort_by="name",
+        )
+        self.assertEqual(filtered["total"], 0)
+        allowed = points.get_all_user_points(
+            self.admin,
+            self.session,
+            search="student4@",
+            filter_mode="allowed",
+            sort_by="name",
+        )
+        self.assertEqual([row["email"] for row in allowed["data"]], ["student4@example.test"])
 
     def test_pending_recovery_request_keeps_legacy_points_account_behavior(self):
         student = self.students[0]

@@ -316,6 +316,40 @@ class PasswordResetTests(unittest.TestCase):
         with patch.object(reset, "send_otp_mail", mail):
             asyncio.run(flow())
 
+    def test_registration_and_password_reset_share_one_ip_request_budget(self):
+        app = FastAPI()
+        app.include_router(reset.router)
+        app.include_router(auth.router)
+        app.dependency_overrides[reset.get_db] = lambda: self.db
+
+        async def flow():
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://unit.test",
+            ) as client:
+                allowed = await client.post(
+                    "/password-reset/request-otp", json={"email": self.email},
+                )
+                blocked = await client.post(
+                    "/request-otp", json={"email": "new@example.test"},
+                )
+                self.assertEqual(allowed.status_code, 200)
+                self.assertEqual(blocked.status_code, 429)
+                self.assertIn("Retry-After", blocked.headers)
+                self.now += timedelta(seconds=otp.IP_RATE_LIMIT_WINDOW_SECONDS)
+                allowed_after_window = await client.post(
+                    "/password-reset/request-otp", json={"email": self.email},
+                )
+                self.assertEqual(allowed_after_window.status_code, 200)
+
+        with patch.object(otp, "IP_RATE_LIMIT_MAX_REQUESTS", 1), patch.object(
+            reset, "send_otp_mail", AsyncMock(),
+        ), patch.object(auth, "send_otp_mail", AsyncMock()):
+            asyncio.run(flow())
+
+        row = self.db.query(models.OTPIPRateLimit).one()
+        self.assertEqual(row.request_count, 1)
+        self.assertEqual(len(row.ip_hash), 64)
+
     def test_provider_failure_does_not_authorize_or_leak(self):
         with patch.object(reset, "send_otp_mail", AsyncMock(side_effect=RuntimeError("private provider error"))):
             result = asyncio.run(reset.request_otp(SimpleNamespace(email=self.email), self.db))
@@ -325,6 +359,7 @@ class PasswordResetTests(unittest.TestCase):
 
     def test_table_is_excluded_from_startup_creation(self):
         self.assertTrue(models.PasswordResetOTP.__table__.info["manual_migration"])
+        self.assertTrue(models.OTPIPRateLimit.__table__.info["manual_migration"])
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import unittest
@@ -5,7 +6,8 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import HTTPException
+import httpx
+from fastapi import FastAPI, HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
@@ -21,7 +23,7 @@ import models  # noqa: E402
 from database import Base  # noqa: E402
 from routers import agent, devices  # noqa: E402
 from device_registry import hash_device_token, require_registered_device  # noqa: E402
-from routers.users import require_admin_user  # noqa: E402
+from routers.users import get_current_user, require_admin_user  # noqa: E402
 
 
 @compiles(JSONB, "sqlite")
@@ -127,6 +129,41 @@ class DeviceRegistrationTests(unittest.TestCase):
             any(dependency.call is require_admin_user for dependency in route.dependant.dependencies)
         )
 
+    def test_agent_start_session_requires_authenticated_user_dependency(self):
+        route = next(
+            route
+            for route in agent.router.routes
+            if getattr(route, "path", None) == "/agent/start-session"
+        )
+
+        self.assertTrue(
+            any(dependency.call is get_current_user for dependency in route.dependant.dependencies)
+        )
+
+    def test_start_session_http_request_without_login_token_is_rejected(self):
+        app = FastAPI()
+        app.include_router(agent.router)
+        app.dependency_overrides[agent.get_db] = lambda: self.session
+
+        async def send_request():
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://unit.test",
+            ) as client:
+                return await client.post(
+                    "/agent/start-session",
+                    data={
+                        "email": "student@example.com",
+                        "device": "LAB-PC-04",
+                        "device_mac": "11:22:33:44:55:66",
+                        "device_id": "device-test-004",
+                        "device_token": "untrusted-token",
+                    },
+                )
+
+        response = asyncio.run(send_request())
+        self.assertEqual(response.status_code, 401)
+
     def test_direct_registration_rejects_inactive_labs(self):
         self.lab.status = "maintenance"
         self.session.commit()
@@ -200,6 +237,7 @@ class DeviceRegistrationTests(unittest.TestCase):
             device_token=registration["device_token"],
             agent_version="source",
             client_session_id="client-session-004",
+            current_user=student,
             db=self.session,
         )
 
@@ -269,6 +307,7 @@ class DeviceRegistrationTests(unittest.TestCase):
                 device_token=registration["device_token"],
                 agent_version="source",
                 client_session_id="client-session-timezone",
+                current_user=student,
                 db=self.session,
             )
 
@@ -281,6 +320,176 @@ class DeviceRegistrationTests(unittest.TestCase):
             checked_in_at,
             datetime(2026, 9, 22, 2, 0, tzinfo=timezone.utc),
         )
+
+    def test_start_session_rejects_email_that_differs_from_login_identity(self):
+        enrollment = devices.create_enrollment_code(
+            devices.EnrollmentCodeCreate(lab_id=self.lab.id),
+            self.admin,
+            self.session,
+        )
+        registration = devices.register_device(
+            enrollment_code=enrollment["enrollment_code"],
+            device_id="device-test-identity",
+            device_name="LAB-PC-IDENTITY",
+            device_mac="33:44:55:66:77:88",
+            agent_version="source",
+            db=self.session,
+        )
+        intended_user = models.User(
+            first_name="Intended", last_name="User",
+            email="intended@example.com", password="hashed",
+        )
+        logged_in_user = models.User(
+            first_name="Logged", last_name="User",
+            email="logged@example.com", password="hashed",
+        )
+        self.session.add_all([intended_user, logged_in_user])
+        self.session.commit()
+
+        with self.assertRaises(HTTPException) as raised:
+            agent.start_session(
+                email=intended_user.email,
+                device="LAB-PC-IDENTITY",
+                device_mac="33:44:55:66:77:88",
+                device_id=registration["device_id"],
+                device_token=registration["device_token"],
+                current_user=logged_in_user,
+                db=self.session,
+            )
+
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(self.session.query(models.LabAccessLog).count(), 0)
+
+    def test_start_session_rejects_unregistered_device_even_if_legacy_flag_is_disabled(self):
+        student = models.User(
+            first_name="Test", last_name="Student",
+            email="legacy@example.com", password="hashed",
+        )
+        self.session.add(student)
+        self.session.commit()
+
+        with patch.dict(os.environ, {"SMART_LAB_REQUIRE_DEVICE_REGISTRATION": "0"}):
+            with self.assertRaises(HTTPException) as raised:
+                agent.start_session(
+                    email=student.email,
+                    lab_code=self.lab.code,
+                    device="UNREGISTERED-PC",
+                    device_mac="55:66:77:88:99:00",
+                    current_user=student,
+                    db=self.session,
+                )
+
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(self.session.query(models.LabAccessLog).count(), 0)
+
+    def test_legacy_active_session_is_bound_only_to_its_registered_workstation(self):
+        enrollment = devices.create_enrollment_code(
+            devices.EnrollmentCodeCreate(lab_id=self.lab.id),
+            self.admin,
+            self.session,
+        )
+        registration = devices.register_device(
+            enrollment_code=enrollment["enrollment_code"],
+            device_id="device-legacy-recovery",
+            device_name="LAB-PC-LEGACY",
+            device_mac="44:55:66:77:88:99",
+            agent_version="source",
+            db=self.session,
+        )
+        student = models.User(
+            first_name="Legacy", last_name="Student",
+            email="legacy-session@example.com", password="hashed",
+        )
+        self.session.add(student)
+        self.session.flush()
+        legacy_session = models.LabAccessLog(
+            user_id=student.id,
+            lab_id=self.lab.id,
+            device_mac="44:55:66:77:88:99",
+            session_status="active",
+            status="success",
+            access_type="manual",
+        )
+        self.session.add(legacy_session)
+        self.session.commit()
+
+        result = agent.start_session(
+            email=student.email,
+            device="LAB-PC-LEGACY",
+            device_mac="44:55:66:77:88:99",
+            device_id=registration["device_id"],
+            device_token=registration["device_token"],
+            current_user=student,
+            db=self.session,
+        )
+
+        self.session.refresh(legacy_session)
+        self.assertTrue(result["recovered"])
+        self.assertEqual(result["session_id"], legacy_session.id)
+        self.assertEqual(legacy_session.lab_device_id, registration["device"]["id"])
+
+    def test_legacy_active_session_cannot_be_bound_when_registered_device_mac_differs(self):
+        enrollment = devices.create_enrollment_code(
+            devices.EnrollmentCodeCreate(lab_id=self.lab.id),
+            self.admin,
+            self.session,
+        )
+        registration = devices.register_device(
+            enrollment_code=enrollment["enrollment_code"],
+            device_id="device-legacy-mismatch",
+            device_name="LAB-PC-MISMATCH",
+            device_mac="10:20:30:40:50:60",
+            agent_version="source",
+            db=self.session,
+        )
+        student = models.User(
+            first_name="Legacy", last_name="Mismatch",
+            email="legacy-mismatch@example.com", password="hashed",
+        )
+        self.session.add(student)
+        self.session.flush()
+        legacy_session = models.LabAccessLog(
+            user_id=student.id,
+            lab_id=self.lab.id,
+            device_mac="44:55:66:77:88:99",
+            session_status="active",
+            status="success",
+            access_type="manual",
+        )
+        self.session.add(legacy_session)
+        self.session.commit()
+
+        with self.assertRaises(HTTPException) as raised:
+            agent.start_session(
+                email=student.email,
+                device="LAB-PC-MISMATCH",
+                device_mac="44:55:66:77:88:99",
+                device_id=registration["device_id"],
+                device_token=registration["device_token"],
+                current_user=student,
+                db=self.session,
+            )
+
+        self.assertEqual(raised.exception.status_code, 409)
+        self.session.refresh(legacy_session)
+        self.assertIsNone(legacy_session.lab_device_id)
+
+    def test_telemetry_routes_resolve_optional_owner_token_for_legacy_sessions(self):
+        protected_routes = {
+            "/agent/log-usage",
+            "/agent/log-violation",
+            "/agent/heartbeat",
+            "/agent/end-session",
+        }
+        for route in agent.router.routes:
+            if getattr(route, "path", None) in protected_routes:
+                self.assertTrue(
+                    any(
+                        dependency.call is agent._get_optional_agent_user
+                        for dependency in route.dependant.dependencies
+                    ),
+                    route.path,
+                )
 
 
 if __name__ == "__main__":

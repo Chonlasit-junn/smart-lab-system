@@ -16,6 +16,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import HTTPException
+from starlette.requests import Request
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
@@ -56,6 +57,8 @@ class RegistrationOTPPostgresTests(unittest.TestCase):
             connection.exec_driver_sql(f'CREATE SCHEMA "{cls.schema}"')
             migration = (BACKEND_DIR / "migrations/014_registration_otp_security.sql").read_text(encoding="utf-8")
             connection.exec_driver_sql(migration.replace("public.registration_otps", f'"{cls.schema}".registration_otps'))
+            ip_migration = (BACKEND_DIR / "migrations/016_otp_ip_rate_limit.sql").read_text(encoding="utf-8")
+            connection.exec_driver_sql(ip_migration.replace("public.", f'"{cls.schema}".'))
         cls.engine = cls.raw_engine.execution_options(schema_translate_map={None: cls.schema})
         cls.sessions = sessionmaker(bind=cls.engine, autoflush=False)
 
@@ -107,6 +110,13 @@ class RegistrationOTPPostgresTests(unittest.TestCase):
         self.assertCountEqual(results, ["ok", 429])
         self.assertEqual(self.db.query(models.RegistrationOTP).count(), 1)
 
+    def test_shared_ip_budget_is_atomic_across_concurrent_requests(self):
+        request = Request({"type": "http", "client": ("203.0.113.10", 12345)})
+        with patch.object(otp, "IP_RATE_LIMIT_MAX_REQUESTS", 1):
+            results = self.parallel(2, lambda db: otp.enforce_ip_rate_limit(request, db))
+        self.assertCountEqual(results, ["ok", 429])
+        self.assertEqual(self.db.query(models.OTPIPRateLimit).count(), 1)
+
     def test_concurrent_guesses_do_not_lose_attempt_counts(self):
         self.issue()
         results = self.parallel(5, lambda db: otp.verify_otp(db, self.email, "xxxxxx"))
@@ -141,6 +151,11 @@ class RegistrationOTPPostgresTests(unittest.TestCase):
                 "WHERE n.nspname=:schema AND c.relname='registration_otps'"
             ), {"schema": self.schema}).scalar_one()
             self.assertTrue(rls)
+            ip_rls = connection.execute(text(
+                "SELECT relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname=:schema AND c.relname='otp_ip_rate_limits'"
+            ), {"schema": self.schema}).scalar_one()
+            self.assertTrue(ip_rls)
         self.db.add(models.RegistrationOTP(email="UPPER@example.test"))
         with self.assertRaises(IntegrityError):
             self.db.flush()

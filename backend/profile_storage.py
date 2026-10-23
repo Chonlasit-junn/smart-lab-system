@@ -31,6 +31,7 @@ try:
     )
 except ValueError:
     PROFILE_SIGNED_URL_TTL = 3600
+PROFILE_SIGNED_URL_BATCH_SIZE = 100
 
 
 class ProfileStorageError(RuntimeError):
@@ -71,6 +72,13 @@ def _object_url(path: str, endpoint: str = "object") -> str:
 def _bucket_object_url() -> str:
     return (
         f"{SUPABASE_URL}/storage/v1/object/"
+        f"{quote(SUPABASE_PROFILE_BUCKET, safe='')}"
+    )
+
+
+def _bucket_sign_url() -> str:
+    return (
+        f"{SUPABASE_URL}/storage/v1/object/sign/"
         f"{quote(SUPABASE_PROFILE_BUCKET, safe='')}"
     )
 
@@ -141,41 +149,74 @@ def delete_profile_image_sync(path: str | None) -> None:
         return
 
 
-def get_profile_image_url(profile_pic: str | None) -> str | None:
-    """Resolve the database path to a frontend-safe URL.
+def _frontend_signed_url(signed_url: str) -> str:
+    if signed_url.startswith(("http://", "https://")):
+        return signed_url
+    if signed_url.startswith("/storage/v1"):
+        return f"{SUPABASE_URL}{signed_url}"
+    if signed_url.startswith("/"):
+        return f"{SUPABASE_URL}/storage/v1{signed_url}"
+    return f"{SUPABASE_URL}/storage/v1/{signed_url}"
 
-    Supabase paths receive a short-lived signed URL. Legacy local paths are
-    returned unchanged so the existing Backend ``/uploads`` route continues
-    to work during development and migration.
-    """
 
-    if not profile_pic:
-        return None
-    if profile_pic.startswith(("http://", "https://")):
-        return profile_pic
-    if not uses_supabase_storage() or not profile_pic.startswith("profiles/"):
-        return profile_pic
+def get_profile_image_urls(profile_pics: list[str | None]) -> list[str | None]:
+    """Resolve local, external, and private Supabase avatar paths in one batch."""
+    resolved = []
+    private_paths = []
+    for profile_pic in profile_pics:
+        if not profile_pic or profile_pic.startswith(("http://", "https://")):
+            resolved.append(profile_pic)
+        elif uses_supabase_storage() and profile_pic.startswith("profiles/"):
+            resolved.append(None)
+            private_paths.append(profile_pic)
+        else:
+            resolved.append(profile_pic)
+
+    if not private_paths:
+        return resolved
 
     try:
         _require_supabase_config()
-        response = httpx.post(
-            _object_url(profile_pic, endpoint="object/sign"),
-            json={"expiresIn": PROFILE_SIGNED_URL_TTL},
-            headers=_auth_headers("application/json"),
-            timeout=10,
-        )
-        response.raise_for_status()
-        signed_url = response.json().get("signedURL")
-        if not signed_url:
-            raise ProfileStorageError("Supabase did not return a signed URL.")
-        if signed_url.startswith("http://") or signed_url.startswith("https://"):
-            return signed_url
-        if signed_url.startswith("/storage/v1"):
-            return f"{SUPABASE_URL}{signed_url}"
-        if signed_url.startswith("/"):
-            return f"{SUPABASE_URL}/storage/v1{signed_url}"
-        return f"{SUPABASE_URL}/storage/v1/{signed_url}"
+        unique_paths = list(dict.fromkeys(private_paths))
+        signed_by_path = {}
+        for offset in range(0, len(unique_paths), PROFILE_SIGNED_URL_BATCH_SIZE):
+            batch = unique_paths[offset:offset + PROFILE_SIGNED_URL_BATCH_SIZE]
+            try:
+                response = httpx.post(
+                    _bucket_sign_url(),
+                    json={"expiresIn": PROFILE_SIGNED_URL_TTL, "paths": batch},
+                    headers=_auth_headers("application/json"),
+                    timeout=10,
+                )
+                response.raise_for_status()
+                signed_rows = response.json()
+                if not isinstance(signed_rows, list):
+                    continue
+                for row in signed_rows:
+                    if not isinstance(row, dict):
+                        continue
+                    path = row.get("path")
+                    signed_url = row.get("signedURL") or row.get("signedUrl")
+                    if (
+                        path in batch
+                        and isinstance(signed_url, str)
+                        and signed_url
+                        and not row.get("error")
+                    ):
+                        signed_by_path[path] = _frontend_signed_url(signed_url)
+            except (httpx.HTTPError, ProfileStorageError, ValueError, TypeError):
+                # A signing failure should not fail an otherwise healthy list API.
+                continue
+        return [
+            signed_by_path.get(profile_pic)
+            if profile_pic and uses_supabase_storage() and profile_pic.startswith("profiles/")
+            else value
+            for profile_pic, value in zip(profile_pics, resolved)
+        ]
     except (httpx.HTTPError, ProfileStorageError, ValueError, TypeError):
-        # A missing avatar should not make an otherwise healthy profile API
-        # fail. The next profile request will try signing again.
-        return None
+        return resolved
+
+
+def get_profile_image_url(profile_pic: str | None) -> str | None:
+    """Resolve one profile path using the same batch signing implementation."""
+    return get_profile_image_urls([profile_pic])[0]

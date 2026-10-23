@@ -45,12 +45,12 @@ from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QFont, QColor
 
 # Hugging Face Space อาจ sleep อยู่ — retry ให้อัตโนมัติ
-def post_with_retry(url, data=None, json_data=None, retries=3, timeout=15):
+def post_with_retry(url, data=None, json_data=None, headers=None, retries=3, timeout=15):
     for attempt in range(retries):
         try:
             if json_data is not None:
-                return requests.post(url, json=json_data, timeout=timeout)
-            return requests.post(url, data=data, timeout=timeout)
+                return requests.post(url, json=json_data, headers=headers, timeout=timeout)
+            return requests.post(url, data=data, headers=headers, timeout=timeout)
         except requests.exceptions.ConnectionError:
             if attempt < retries - 1:
                 time.sleep(3)
@@ -73,6 +73,19 @@ def response_detail(response):
     return ""
 
 
+def _with_device_credentials(payload):
+    return {
+        **payload,
+        "device_id": REGISTERED_DEVICE_ID or None,
+        "device_token": DEVICE_TOKEN or None,
+    }
+
+
+def _session_auth_headers(agent):
+    token = str(getattr(agent, "current_access_token", "") or "").strip()
+    return {"Authorization": f"Bearer {token}"} if token else None
+
+
 def _is_agent_window(window):
     """Check a window's owning process without relying on its mutable title."""
     handle = getattr(window, "_hWnd", None)
@@ -89,6 +102,7 @@ def _is_agent_window(window):
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 DEFAULT_API_URL = "https://h0sh1na-smart-lab-backend.hf.space"
+USAGE_LOG_BATCH_SIZE = 100
 DEVICE_REGISTRATION = load_device_registration() or {}
 API_URL = os.getenv(
     "SMART_LAB_API_URL",
@@ -101,10 +115,6 @@ LAB_CODE   = str(
     or os.getenv("SMART_LAB_CODE", "LAB01")
 ).strip()
 AGENT_VERSION = os.getenv("SMART_LAB_AGENT_VERSION", "source")
-ALLOW_UNREGISTERED_DEVICE = os.getenv(
-    "SMART_LAB_ALLOW_UNREGISTERED_DEVICE",
-    "0",
-).strip().lower() in {"1", "true", "yes", "on"}
 DEBUG_MODE = os.getenv("SMART_LAB_AGENT_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
 # Keep workstation cleanup opt-in while it is being validated on Lab machines.
 # Set SMART_LAB_SESSION_CLEANUP=1 explicitly when this feature is ready.
@@ -524,9 +534,7 @@ class LoginOverlay(QWidget):
             self._show_error("กรุณากรอกข้อมูลให้ครบถ้วน")
             return
 
-        if not ALLOW_UNREGISTERED_DEVICE and (
-            not REGISTERED_DEVICE_ID or not DEVICE_TOKEN
-        ):
+        if not REGISTERED_DEVICE_ID or not DEVICE_TOKEN:
             self._show_error("เครื่องนี้ยังไม่ได้ลงทะเบียนกับ Lab กรุณาติดต่อผู้ดูแล")
             return
 
@@ -554,6 +562,14 @@ class LoginOverlay(QWidget):
             return {"kind": "approval_required"}
         if response.status_code != 200:
             return {"kind": "invalid_credentials"}
+        try:
+            access_token = response.json().get("access_token")
+        except (AttributeError, ValueError):
+            access_token = None
+        if not isinstance(access_token, str) or not access_token.strip():
+            return {"kind": "invalid_credentials"}
+        self.agent.current_access_token = access_token
+        session_headers = {"Authorization": f"Bearer {access_token}"}
 
         # Deliver any prior session's durable requests before claiming this device.
         self.agent.flush_outbox(limit=5)
@@ -571,6 +587,7 @@ class LoginOverlay(QWidget):
         session_response = post_with_retry(
             f"{API_URL}/agent/start-session",
             data=session_data,
+            headers=session_headers,
         )
 
         # Retry once with a fresh idempotency key if the old request was closed.
@@ -583,6 +600,7 @@ class LoginOverlay(QWidget):
                 session_response = post_with_retry(
                     f"{API_URL}/agent/start-session",
                     data=session_data,
+                    headers=session_headers,
                 )
 
         if session_response is not None and session_response.status_code == 200:
@@ -653,6 +671,7 @@ class SmartLabAgent:
         self.current_activity_name = None
         self.current_activity_started_at = None
         self.current_session_id = None
+        self.current_access_token = None
         self.info_bar       = None
         self.overlay        = None
         self.policy_rules = []
@@ -747,9 +766,11 @@ class SmartLabAgent:
 
             try:
                 payload = json.loads(item["payload"])
+                payload = _with_device_credentials(payload)
                 response = post_with_retry(
                     f"{API_URL}{endpoint}",
                     data=payload,
+                    headers=_session_auth_headers(self),
                     retries=1,
                     timeout=10,
                 )
@@ -937,6 +958,7 @@ class SmartLabAgent:
                 "device_id": REGISTERED_DEVICE_ID or None,
                 "device_token": DEVICE_TOKEN or None,
             },
+            headers=_session_auth_headers(self),
             retries=1,
             timeout=10,
         )
@@ -1347,31 +1369,39 @@ class SmartLabAgent:
             try:
                 response = post_with_retry(
                     f"{API_URL}/agent/log-violation",
-                    data=payload,
+                    data=_with_device_credentials(payload),
+                    headers=_session_auth_headers(self),
                 )
                 print(f"Violation response: {response.status_code if response is not None else 'Timeout'}")
             except Exception as error:
                 print(f"บันทึก violation ไม่ได้: {error}")
 
         if summary:
-            try:
-                response = post_with_retry(
-                    f"{API_URL}/agent/log-usage",
-                    data={
-                        "session_id": session_id,
-                        "usage_data": json.dumps(summary, ensure_ascii=False),
-                    },
-                )
-                print(f"Server Response: {response.status_code if response is not None else 'Timeout'}")
-            except Exception as error:
-                print(f"ส่งข้อมูลไม่ได้: {error}")
+            for offset in range(0, len(summary), USAGE_LOG_BATCH_SIZE):
+                batch = summary[offset:offset + USAGE_LOG_BATCH_SIZE]
+                try:
+                    response = post_with_retry(
+                        f"{API_URL}/agent/log-usage",
+                        data=_with_device_credentials({
+                            "session_id": session_id,
+                            "usage_data": json.dumps(batch, ensure_ascii=False),
+                        }),
+                        headers=_session_auth_headers(self),
+                    )
+                    print(f"Server Response: {response.status_code if response is not None else 'Timeout'}")
+                except Exception as error:
+                    print(f"ส่งข้อมูลไม่ได้: {error}")
         else:
             print("ไม่มีสถิติการใช้งานที่บันทึกได้")
 
         try:
             response = post_with_retry(
                 f"{API_URL}/agent/end-session",
-                data={"session_id": session_id, "end_reason": end_reason},
+                data=_with_device_credentials({
+                    "session_id": session_id,
+                    "end_reason": end_reason,
+                }),
+                headers=_session_auth_headers(self),
             )
             print(f"End session response: {response.status_code if response is not None else 'Timeout'}")
         except Exception as error:

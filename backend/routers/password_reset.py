@@ -46,7 +46,7 @@ def _password_reset_eligible(db, user):
     return True
 
 
-@router.post("/request-otp")
+@router.post("/request-otp", dependencies=[Depends(otp.enforce_ip_rate_limit)])
 async def request_otp(request: schemas.OTPRequest, db: Session = Depends(get_db)):
     email = normalize_email(request.email)
     challenge, code, exists = await run_in_threadpool(_reserve, db, email)
@@ -82,13 +82,13 @@ def _verify(db, email, code):
     return challenge
 
 
-@router.post("/verify-otp")
+@router.post("/verify-otp", dependencies=[Depends(otp.enforce_ip_rate_limit)])
 def verify_otp(request: schemas.OTPVerify, db: Session = Depends(get_db)):
     _verify(db, normalize_email(request.email), request.otp)
     return {"message": "OTP Verified Successfully!"}
 
 
-@router.post("/confirm")
+@router.post("/confirm", dependencies=[Depends(otp.enforce_ip_rate_limit)])
 def confirm(request: schemas.PasswordReset, db: Session = Depends(get_db)):
     email = normalize_email(request.email)
     challenge = _verify(db, email, request.otp)
