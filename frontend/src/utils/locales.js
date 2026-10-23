@@ -1,3 +1,9 @@
+export function translateLocaleMessage(message, sourceLocale, targetLocale) {
+  if (!message) return message;
+  const entry = Object.entries(sourceLocale || {}).find(([, value]) => value === message);
+  return entry ? targetLocale?.[entry[0]] ?? message : message;
+}
+
 // locales สำหรับหน้า Register
 export const registerLocales = {
   en: {
@@ -55,6 +61,7 @@ export const registerLocales = {
     errFieldsReq: 'Please fill in all required fields.',
     errConsent: 'You must accept the privacy and consent agreement to proceed.',
     errFaceReq: 'A face image is required for biometric access.',
+    errPhoneInvalid: 'Enter a valid phone number using 9–15 digits.',
     connectionError: 'Connection error. Please try again.',
     invalidOtp: 'Invalid OTP. Please try again.',
     registrationFailed: 'Registration failed. Please contact support.',
@@ -134,6 +141,7 @@ export const registerLocales = {
     errFieldsReq: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน',
     errConsent: 'คุณต้องยอมรับข้อตกลงการเก็บข้อมูลเพื่อดำเนินการต่อ',
     errFaceReq: 'จำเป็นต้องใช้ภาพถ่ายใบหน้าสำหรับการยืนยันตัวตน',
+    errPhoneInvalid: 'กรุณากรอกเบอร์โทรศัพท์ที่ถูกต้อง 9–15 หลัก',
     connectionError: 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองอีกครั้ง',
     invalidOtp: 'รหัส OTP ไม่ถูกต้อง กรุณาลองอีกครั้ง',
     registrationFailed: 'ลงทะเบียนไม่สำเร็จ กรุณาติดต่อฝ่ายสนับสนุน',

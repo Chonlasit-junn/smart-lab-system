@@ -35,6 +35,10 @@ export function secondsUntil(deadline, now) {
   return Math.max(0, Math.ceil((deadline - now) / 1000));
 }
 
+export function shouldShowRegistrationOtpControls(step) {
+  return step === 2;
+}
+
 export function otpDeadlines(data, now) {
   const expiry = Number(data?.expires_in_seconds ?? 600);
   const retry = Number(data?.retry_after_seconds ?? 60);

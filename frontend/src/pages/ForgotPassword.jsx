@@ -7,12 +7,14 @@ import { Link } from 'react-router-dom';
 import { useLanguage } from '../context/language-context.js';
 import { otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil } from '../utils/registrationOtp';
 import { passwordResetError, passwordResetLocales } from '../utils/passwordReset';
+import { translateLocaleMessage } from '../utils/locales';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 export default function ForgotPassword() {
   const { language } = useLanguage();
   const t = passwordResetLocales[language] || passwordResetLocales.th;
+  const previousLanguage = useRef(language);
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -27,6 +29,14 @@ export default function ForgotPassword() {
   const panel = useRef(null);
 
   useEffect(() => { document.title = t.tabTitle; }, [t.tabTitle]);
+  useEffect(() => {
+    const previous = previousLanguage.current;
+    if (previous === language) return;
+    setError(message => translateLocaleMessage(
+      message, passwordResetLocales[previous], passwordResetLocales[language],
+    ));
+    previousLanguage.current = language;
+  }, [language]);
   useEffect(() => {
     if (step === 4 || (step === 1 && deadlines.resendAt === 0)) return undefined;
     const timer = setInterval(() => setNow(Date.now()), 1000);

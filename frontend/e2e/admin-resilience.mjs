@@ -14,7 +14,8 @@ const browser = await chromium.launch({ headless: true,
 });
 const routes = ['/admin', '/admin/points', '/admin/points/policy', '/admin/roles', '/admin/devices', '/manage-labs', '/verify-users', '/blacklist', '/ticket'];
 const email = 'admin.qa@example.com';
-const token = 'qa.' + Buffer.from(JSON.stringify({ sub: email, role: 'admin', exp: 4000000000 })).toString('base64url') + '.qa';
+const tokenForRole = role => 'qa.' + Buffer.from(JSON.stringify({ sub: email, role, exp: 4000000000 })).toString('base64url') + '.qa';
+const token = tokenForRole('admin');
 const lab = { id: 1, code: 'QA-LAB', name: 'Synthetic Lab', capacity: 30, location: 'QA location', status: 'active' };
 const user = { id: 2, user_id: 2, first_name: 'Synthetic', last_name: 'User', name: 'Synthetic User', email: 'user.qa@example.com', role: 'student', roles: [{ id: 1, name: 'student' }], points: 90, daily_score: 100, booking_allowed: true };
 const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' };
@@ -22,16 +23,17 @@ const retryName = language => language === 'en' ? 'Retry' : 'ลองใหม�
 const failureText = language => language === 'en' ? 'Unable to load data' : 'โหลดข้อมูลไม่สำเร็จ';
 const shots = [];
 
-async function fixture(language) {
+async function fixture(language, roleName = 'admin') {
   const context = await browser.newContext({ viewport: { width: language === 'en' ? 1280 : 390, height: 844 } });
+  const sessionToken = tokenForRole(roleName);
   await context.addInitScript(({ language, token }) => {
     if (localStorage.getItem('qa-seeded')) return;
     localStorage.clear(); localStorage.setItem('qa-seeded', '1');
     localStorage.setItem('access_token', token);
     localStorage.setItem('smart-lab-language', language);
     localStorage.setItem('smart-lab-theme', language === 'en' ? 'light' : 'dark');
-  }, { language, token });
-  const state = { mode: 'loading', waiting: [], errors: [], consoleIssues: [], unexpected: [], writes: [], schedule: 'error', detail: 'error', crash: false, chunk: false, writeFailure: false, expectedBoundary: false };
+  }, { language, token: sessionToken });
+  const state = { mode: 'loading', waiting: [], errors: [], consoleIssues: [], unexpected: [], writes: [], schedule: 'error', detail: 'error', crash: false, chunk: false, writeFailure: false, rejectCommitted: false, expectedBoundary: false };
   const page = await context.newPage();
   page.on('pageerror', error => state.errors.push(error.message));
   page.on('console', message => {
@@ -49,13 +51,17 @@ async function fixture(language) {
       state.chunk = false;
       return route.fulfill({ status: 503, contentType: 'text/javascript', body: '' });
     }
-    if (pathname.endsWith('/users/me')) return reply({ id: 1, email, first_name: 'QA', last_name: 'Admin', role: 'admin' });
+    if (pathname.endsWith('/users/me')) return reply({ id: 1, email, first_name: 'QA', last_name: 'Admin', role: roleName });
     if (pathname.endsWith('/users/me/points/logs')) return reply({ data: [] });
     const isApi = pathname === '/labs' || pathname === '/tickets' || pathname.startsWith('/admin/') || /^\/labs\/\d+\/schedules$/.test(pathname);
     // Frontend routes on the same origin must still be served by Vite.
     if (isApi && !(url.origin === base.origin && request.isNavigationRequest())) {
       if (request.method() !== 'GET') {
         state.writes.push({ method: request.method(), pathname });
+        if (request.method() === 'PUT' && /^\/admin\/users\/\d+\/verify$/.test(pathname)) {
+          state.rejectCommitted = true;
+          return reply({ detail: 'Synthetic response lost after commit' }, 503);
+        }
         if (state.writeFailure) return reply({ detail: 'Synthetic save failure' }, 500);
         return reply({ data: DEFAULT_POINT_POLICY, message: 'Synthetic success' });
       }
@@ -68,7 +74,8 @@ async function fixture(language) {
       if (pathname === '/admin/points/policy') return reply({ data: data ? DEFAULT_POINT_POLICY : null });
       if (pathname === '/labs') return reply({ data: data ? [lab] : [] });
       if (pathname === '/admin/roles') return reply({ data: data ? [{ id: 1, name: 'student', display_name: 'QA Role', user_count: 1, is_system: true, assignable: true }] : [] });
-      if (pathname === '/admin/roles/users' || pathname === '/admin/users/pending') return reply({ data: data ? [user] : [] });
+      if (pathname === '/admin/roles/users') return reply({ data: data ? [user] : [] });
+      if (pathname === '/admin/users/pending') return reply({ data: data && !state.rejectCommitted ? [{ ...user, role: 'guest' }] : [] });
       if (pathname === '/admin/points') return reply({ data: data ? [user] : [], total: data ? 40 : 0, point_requests: [], score_date: '2026-10-22' });
       if (pathname === '/admin/lab-devices') return reply({ data: data ? [{ id: 1, device_id: 'qa-device', device_name: 'QA Device', status: 'active', lab, agent_version: 'QA' }] : [] });
       if (pathname === '/admin/blacklist') return reply({ data: data ? [{ id: 1, app_name: 'QA Rule', match_type: 'process_name', match_value: 'qa.exe', description: 'Synthetic rule' }] : [] });
@@ -98,6 +105,18 @@ try {
       const { context, page, state } = await fixture(language);
       await page.goto(new URL(pathname, base).href);
       const content = page.locator('.admin-content-area');
+      if (language === 'th') {
+        if (pathname === '/ticket') {
+          await page.locator('.admin-menu-toggle').click();
+          await page.locator('.admin-sidebar.open').waitFor();
+        } else {
+          await page.locator('.admin-global-menu-toggle').click();
+          await page.locator('.admin-mobile-drawer').waitFor();
+        }
+        await page.locator('.admin-navigation').waitFor();
+        await page.locator('.sidebar-overlay').click({ position: { x: 300, y: 40 } });
+        await page.locator('.admin-sidebar.open, .admin-mobile-drawer').waitFor({ state: 'detached' });
+      }
       const emptyText = ({
         '/admin': ['No data available', 'ยังไม่มีข้อมูล'],
         '/admin/points': ['No users match the selected filters', 'ไม่พบข้อมูลผู้ใช้ตามเงื่อนไขที่เลือก'],
@@ -198,6 +217,64 @@ try {
       console.log(`PASS ${language} ${failure}: localized fallback -> manual reload -> recovered, token retained`);
       await context.close();
     }
+  }
+  // Account links from both Admin layouts must keep the Admin navigation shell.
+  for (const origin of ['/manage-labs', '/ticket']) {
+    const { context, page, state } = await fixture('en');
+    state.mode = 'data';
+    await page.goto(new URL(origin, base).href);
+    await page.locator('.admin-content-area').waitFor();
+    if (origin === '/manage-labs') {
+      await page.locator('.admin-top-header button').last().click();
+      await page.getByRole('button', { name: 'Manage Account', exact: true }).click();
+    } else {
+      await page.getByRole('button', { name: 'Profile', exact: true }).click();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    }
+    await page.waitForURL(url => url.pathname === '/profile');
+    await page.locator('.admin-layout .admin-content-area').waitFor();
+    assert.equal(await page.locator('.app-layout:not(.admin-layout) .sidebar').count(), 0);
+    await healthy(page, state, '/profile');
+    console.log(`PASS ${origin} account entry keeps the Admin shell on /profile`);
+    await context.close();
+  }
+  {
+    const { context, page, state } = await fixture('en');
+    state.mode = 'data';
+    await page.goto(new URL('/ticket', base).href);
+    await page.locator('.admin-content-area').waitFor();
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await page.getByRole('button', { name: 'Open Lab Booking', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/booking');
+    await page.locator('.top-header').waitFor();
+    await page.getByRole('button', { name: 'Open user menu', exact: true }).click();
+    await page.getByRole('button', { name: 'Return to Admin', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/ticket');
+    console.log('PASS Admin profile menu switches to Lab Booking and returns to the originating Admin page');
+    await context.close();
+  }
+  {
+    const { context, page, state } = await fixture('en', 'student');
+    state.mode = 'data';
+    await page.goto(new URL('/booking', base).href);
+    await page.getByRole('button', { name: 'Open user menu', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Return to Admin', exact: true }).count(), 0,
+      'non-admin accounts must not see the Admin mode switch');
+    await context.close();
+  }
+  {
+    const { context, page, state } = await fixture('en');
+    state.mode = 'data';
+    page.on('dialog', dialog => dialog.accept());
+    await page.goto(new URL('/verify-users', base).href);
+    await page.getByText('Synthetic User', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Reject', exact: true }).click();
+    await page.getByText('No pending verifications', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('alert').count(), 0,
+      'do not report a rejection failure if the authoritative pending list confirms deletion');
+    await healthy(page, state, '/verify-users');
+    console.log('PASS rejected Guest: post-commit HTTP error is reconciled against the pending list');
+    await context.close();
   }
   console.log(JSON.stringify({ passed: true, screenshots: shots }));
 } finally { await browser.close(); }

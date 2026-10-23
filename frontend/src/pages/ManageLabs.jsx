@@ -56,6 +56,7 @@ import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 import NotificationBell from "../components/NotificationBell";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 
 // นำเข้า MUI DatePicker
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -643,6 +644,7 @@ export default function ManageLabs() {
 
                 {/* settings + sign out */}
                 <Box sx={{ px: 1, py: 1 }}>
+                  <AdminModeSwitch destination="booking" onNavigate={handleCloseUserMenu} />
                   <Box
                     onClick={handleCloseUserMenu}
                     sx={{

@@ -49,6 +49,7 @@ import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import NotificationBell from "../components/NotificationBell";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -369,6 +370,7 @@ export default function RoleManagement() {
                   </IconButton>
                 </Box>
                 <Box sx={{ px: 2, py: 1.5 }}>
+                  <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
                   <Button
                     fullWidth
                     onClick={handleLogout}

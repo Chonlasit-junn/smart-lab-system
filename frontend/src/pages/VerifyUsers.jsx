@@ -36,6 +36,8 @@ import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 import NotificationBell from "../components/NotificationBell";
+import AdminModeSwitch from "../components/AdminModeSwitch";
+import { isPendingUser } from "./verifyUsersUtils";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -91,10 +93,13 @@ export default function VerifyUsers() {
         signal: controller.signal,
       });
       if (pendingUsersControllerRef.current !== controller) return;
-      setPendingUsers(response.data?.data || []);
+      const users = response.data?.data || [];
+      setPendingUsers(users);
+      return users;
     } catch (requestError) {
       if (axios.isCancel(requestError) || pendingUsersControllerRef.current !== controller) return;
       setLoadFailed(true);
+      return null;
     } finally {
       if (pendingUsersControllerRef.current === controller) {
         pendingUsersControllerRef.current = null;
@@ -125,12 +130,21 @@ export default function VerifyUsers() {
       setProcessingId(userId);
       setError("");
       await axios.put(`${API_URL}/admin/users/${userId}/verify`, { action }, authConfig());
-      await fetchPendingUsers();
-    } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
-      setError(
-        typeof detail === "string" ? detail : t("admin.verifyUserFailed"),
-      );
+      const refreshedUsers = await fetchPendingUsers();
+      if (action === "reject" && refreshedUsers && isPendingUser(refreshedUsers, userId)) {
+        setError("admin.verifyActionUnconfirmed");
+      }
+    } catch {
+      // The server may commit a rejection before a client/network error is
+      // observed. Confirm against the authoritative pending list before
+      // reporting failure so a deleted Guest is not shown as an error.
+      const refreshedUsers = await fetchPendingUsers();
+      if (action === "reject" && refreshedUsers && !isPendingUser(refreshedUsers, userId)) {
+        return;
+      }
+      setError(refreshedUsers === null
+        ? "admin.verifyActionUnconfirmed"
+        : "admin.verifyUserFailed");
     } finally {
       setProcessingId(null);
     }
@@ -360,6 +374,7 @@ export default function VerifyUsers() {
                   </IconButton>
                 </Box>
                 <Box sx={{ px: 2, py: 1.5 }}>
+                  <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
                   <Button
                     fullWidth
                     onClick={handleLogout}
@@ -423,7 +438,7 @@ export default function VerifyUsers() {
 
               {error && (
                 <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>
-                  {error}
+                  {t(error)}
                 </Alert>
               )}
 

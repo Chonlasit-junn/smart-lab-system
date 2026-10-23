@@ -33,6 +33,7 @@ import AdminNavigation from "../components/AdminNavigation";
 import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import NotificationBell from "../components/NotificationBell";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 import {
   DEFAULT_POINT_POLICY,
   normalizePointPolicy,
@@ -460,6 +461,7 @@ export default function AdminPointPolicy() {
                   </IconButton>
                 </Box>
                 <Box sx={{ px: 2, py: 1.5 }}>
+                  <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
                   <Button
                     fullWidth
                     onClick={handleLogout}

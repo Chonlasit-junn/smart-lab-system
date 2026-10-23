@@ -73,6 +73,20 @@ def response_detail(response):
     return ""
 
 
+def _is_agent_window(window):
+    """Check a window's owning process without relying on its mutable title."""
+    handle = getattr(window, "_hWnd", None)
+    user32 = getattr(getattr(ctypes, "windll", None), "user32", None)
+    if not handle or user32 is None:
+        return False
+    process_id = ctypes.c_ulong()
+    try:
+        user32.GetWindowThreadProcessId(int(handle), ctypes.byref(process_id))
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
+    return process_id.value == os.getpid()
+
+
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 DEFAULT_API_URL = "https://h0sh1na-smart-lab-backend.hf.space"
 DEVICE_REGISTRATION = load_device_registration() or {}
@@ -1124,6 +1138,8 @@ class SmartLabAgent:
             return False
         for process in psutil.process_iter(["pid", "name"]):
             try:
+                if process.info.get("pid") == os.getpid():
+                    continue
                 name = process.info.get("name") or ""
                 path = process.exe()
                 identity = read_executable_identity(path)
@@ -1197,6 +1213,8 @@ class SmartLabAgent:
                 if process_id is None:
                     continue
                 current_process_ids.add(process_id)
+                if process_id == os.getpid():
+                    continue
                 if process_id in self.seen_process_ids:
                     continue
 
@@ -1278,6 +1296,10 @@ class SmartLabAgent:
             # Window titles are used for usage statistics, never enforcement.
             active_win = gw.getActiveWindow()
             if not active_win or not active_win.title:
+                self._close_current_activity(_utc_now())
+                return
+
+            if _is_agent_window(active_win):
                 self._close_current_activity(_utc_now())
                 return
 

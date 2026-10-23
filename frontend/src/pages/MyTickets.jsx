@@ -39,6 +39,7 @@ import { formatDateTime } from "../utils/dateFormat";
 import SupportModal from "./SupportModal";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -349,6 +350,7 @@ export default function MyTickets() {
 
                   <Divider />
                   <Box sx={{ px: 1, py: 1 }}>
+                    <AdminModeSwitch destination="admin" onNavigate={() => setAnchorEl(null)} />
                     <Box
                       onClick={() => {
                         setAnchorEl(null);

@@ -52,6 +52,7 @@ import {
   getLabNowReference,
 } from "../utils/labTime";
 import SupportModal from "./SupportModal";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 import NotificationBell from "../components/NotificationBell";
 
 // API Endpoint configuration
@@ -565,6 +566,7 @@ export default function Booking() {
                 {/* ปุ่ม Avatar สำหรับกดเปิด Popover */}
                 <IconButton
                   onClick={handleAvatarClick}
+                  aria-label={t("common.openUserMenu")}
                   sx={{ p: 0.5, "&:hover": { bgcolor: "#f1f5f9" } }}
                 >
                   <Avatar
@@ -680,6 +682,7 @@ export default function Booking() {
 
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
+                    <AdminModeSwitch destination="admin" onNavigate={handleCloseUserMenu} />
                     <Box
                       onClick={() => {
                         handleCloseUserMenu();

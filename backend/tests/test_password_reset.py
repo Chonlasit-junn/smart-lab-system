@@ -205,21 +205,48 @@ class PasswordResetTests(unittest.TestCase):
         self.assertEqual(self.db.get(models.User, self.user.id).password, "password-changed-concurrently")
         self.assertIsNone(self.row().consumed_at)
 
-    def test_reset_does_not_approve_pending_guest_or_change_roles(self):
+    def test_pending_guest_cannot_request_or_use_reset_otp_until_approved(self):
+        role = models.Role(name="guest")
+        self.db.add(role)
+        self.db.flush()
+        passport = models.UserPassport(user_id=self.user.id, phone="0000000000", is_active=False)
+        self.db.add_all([models.UserRole(user_id=self.user.id, role_id=role.id), passport])
+        self.db.commit()
+
+        _, code, eligible = reset._reserve(self.db, self.email)
+        self.assertFalse(eligible)
+        with self.assertRaises(HTTPException):
+            otp.finish_delivery(self.db, self.email, self.row().challenge_id,
+                                success=False, purpose=reset.PURPOSE)
+        with self.assertRaises(HTTPException):
+            reset._verify(self.db, self.email, code)
+        self.assertEqual(self.user.password, self.old_hash)
+        self.assertFalse(passport.is_active)
+
+        passport.is_active = True
+        self.db.commit()
+        self.now += timedelta(seconds=otp.RESEND_SECONDS)
+        _, approved_code = self.issue()
+        self.confirm(approved_code)
+        self.assertEqual([item.name for item in self.user.roles], ["guest"])
+        self.assertTrue(passport.is_active)
+        self.assertTrue(pwd_context.verify("New-test-password2!", self.user.password))
+
+    def test_request_endpoint_does_not_send_reset_code_to_pending_guest(self):
         role = models.Role(name="guest")
         self.db.add(role)
         self.db.flush()
         self.db.add_all([models.UserRole(user_id=self.user.id, role_id=role.id),
                          models.UserPassport(user_id=self.user.id, phone="0000000000", is_active=False)])
         self.db.commit()
-        _, code = self.issue()
-        self.confirm(code)
-        self.assertEqual([item.name for item in self.user.roles], ["guest"])
-        passport = self.db.query(models.UserPassport).filter_by(user_id=self.user.id).one()
-        self.assertFalse(passport.is_active)
-        with self.assertRaises(HTTPException) as caught:
-            auth.login(SimpleNamespace(username=self.email, password="New-test-password2!"), self.db)
-        self.assertEqual(caught.exception.status_code, 403)
+        mail = AsyncMock()
+
+        with patch.object(reset, "send_otp_mail", mail):
+            result = asyncio.run(reset.request_otp(SimpleNamespace(email=self.email), self.db))
+
+        self.assertEqual(result["message"], reset.REQUEST_MESSAGE)
+        mail.assert_not_awaited()
+        self.assertIsNone(self.row().delivered_at)
 
     def test_unknown_email_cannot_reset_even_with_internal_code(self):
         _, code, exists = reset._reserve(self.db, "absent@example.com")

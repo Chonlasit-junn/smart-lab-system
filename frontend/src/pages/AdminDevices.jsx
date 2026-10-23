@@ -35,6 +35,7 @@ import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -239,6 +240,7 @@ export default function AdminDevices() {
 
       {Boolean(anchorEl) && (
         <Paper className="surface-card" sx={{ position: "fixed", right: 28, top: 68, zIndex: 20, p: 1, width: 190, border: "1px solid #e2e8f0" }}>
+          <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
           <Button fullWidth startIcon={<Logout />} onClick={handleLogout} sx={{ justifyContent: "flex-start", textTransform: "none", color: "#ef4444" }}>{t("common.logout")}</Button>
           <IconButton size="small" onClick={() => setAnchorEl(null)} sx={{ position: "absolute", top: 3, right: 3 }}><Close fontSize="small" /></IconButton>
         </Paper>

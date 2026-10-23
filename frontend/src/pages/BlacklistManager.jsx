@@ -46,6 +46,7 @@ import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import NotificationBell from "../components/NotificationBell";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 import { blacklistFormError, serializeBlacklistForm } from "../utils/blacklistPolicy";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -451,6 +452,7 @@ export default function BlacklistManager() {
 
                 {/* settings + sign out */}
                 <Box sx={{ px: 1, py: 1 }}>
+                  <AdminModeSwitch destination="booking" onNavigate={handleCloseUserMenu} />
                   <Box
                     onClick={handleCloseUserMenu}
                     sx={{

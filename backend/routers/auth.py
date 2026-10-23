@@ -29,6 +29,7 @@ from profile_storage import (
     upload_profile_image,
     uses_supabase_storage,
 )
+from phone_utils import normalize_phone_number
 
 router = APIRouter(tags=["Authentication"])
 MAX_FACE_IMAGE_BYTES = 5 * 1024 * 1024
@@ -83,6 +84,11 @@ async def register(
     except ValueError:
         raise HTTPException(status_code=422, detail=PASSWORD_POLICY_ERROR) from None
     normalized_email = normalize_email(email)
+    if normalized_email.split("@")[-1] != "bumail.net":
+        try:
+            phone = normalize_phone_number(phone)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid phone number.") from None
 
     # re-verify OTP at registration time so you can't skip step 2
     challenge_id = await run_in_threadpool(otp_service.verify_otp, db, normalized_email, otp)

@@ -48,6 +48,7 @@ import { useLanguage } from "../context/language-context.js";
 import { formatDate } from "../utils/dateFormat";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -369,6 +370,7 @@ export default function Reserved() {
 
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
+                    <AdminModeSwitch destination="admin" onNavigate={handleCloseUserMenu} />
                     <Box
                       onClick={() => {
                         handleCloseUserMenu();

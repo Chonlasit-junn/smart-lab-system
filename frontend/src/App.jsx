@@ -10,6 +10,7 @@ import { useTheme } from './context/theme-context.js';
 import ThemeToggle from './components/ThemeToggle';
 import { LanguageProvider } from './context/language-context.jsx';
 import LanguageToggle from './components/LanguageToggle';
+import AdminMobileNavigation from './components/AdminMobileNavigation';
 
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
@@ -26,6 +27,7 @@ const History = lazy(() => import('./pages/History'));
 const VerifyUsers = lazy(() => import('./pages/VerifyUsers'));
 const BlacklistManager = lazy(() => import('./pages/BlacklistManager'));
 const Profile = lazy(() => import('./pages/Profile'));
+const AdminProfile = lazy(() => import('./pages/AdminProfile'));
 const TicketManager = lazy(() => import('./pages/TicketManager'));
 const MyTickets = lazy(() => import('./pages/MyTickets'));
 
@@ -40,6 +42,11 @@ function AdminRoute({ children }) {
   if (loading) return <LoadingState />;
   if (!currentUser) return <Navigate to="/" replace />;
   return currentUser.roleName === "admin" ? children : <Navigate to="/booking" replace />;
+}
+
+function ProfileRoute() {
+  const { currentUser } = useAuth();
+  return currentUser?.roleName === "admin" ? <AdminProfile /> : <Profile />;
 }
 
 function RouteErrorBoundary({ children }) {
@@ -197,7 +204,7 @@ function AppContent() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reserved" element={<ProtectedRoute><Reserved /></ProtectedRoute>} />
               <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
-              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
               <Route path="/my-tickets" element={<ProtectedRoute><MyTickets /></ProtectedRoute>} />
               <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
               <Route path="/admin/points" element={<AdminRoute><AdminPoints /></AdminRoute>} />
@@ -210,6 +217,7 @@ function AppContent() {
               <Route path="/ticket" element={<AdminRoute><TicketManager /></AdminRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+          <AdminMobileNavigation />
           </Suspense>
           </RouteErrorBoundary>
           <LanguageToggle className="global-language-toggle" />

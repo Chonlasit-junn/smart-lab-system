@@ -566,6 +566,44 @@ class AgentTelemetryTests(unittest.TestCase):
         instance._queue_outbox.assert_called_once()
         self.assertEqual(instance.current_activity_name, "Editor")
 
+    def test_agent_owned_window_is_not_recorded_as_an_application(self):
+        instance = self.make_agent()
+        instance.violation_state = SimpleNamespace(
+            clear_expired_grace=Mock(return_value=False),
+            is_grace_active=Mock(return_value=True),
+        )
+        with patch.object(agent, "_is_agent_window", return_value=True), patch.object(
+            agent.gw, "getActiveWindow", return_value=SimpleNamespace(title="Smart Lab Access"),
+        ):
+            instance.track_usage()
+
+        self.assertIsNone(instance.current_activity_name)
+        instance._queue_outbox.assert_not_called()
+
+    def test_agent_process_is_not_matched_as_a_forbidden_application(self):
+        instance = self.make_agent()
+        process = SimpleNamespace(info={"pid": 123, "name": "SmartLabAgent.exe"})
+        with patch.object(agent.os, "getpid", return_value=123), patch.object(
+            agent.psutil, "process_iter", return_value=[process],
+        ), patch.object(agent, "read_executable_identity") as read_identity:
+            result = instance._find_new_process_match()
+
+        self.assertIsNone(result)
+        read_identity.assert_not_called()
+
+    def test_agent_window_detection_uses_owning_process_id(self):
+        process_id = 4321
+
+        def get_window_process_id(_handle, output):
+            output._obj.value = process_id
+
+        user32 = SimpleNamespace(GetWindowThreadProcessId=get_window_process_id)
+        with patch.object(agent.ctypes, "windll", SimpleNamespace(user32=user32), create=True), patch.object(
+            agent.os, "getpid", return_value=process_id,
+        ):
+            self.assertTrue(agent._is_agent_window(SimpleNamespace(_hWnd=99)))
+            self.assertFalse(agent._is_agent_window(SimpleNamespace(_hWnd=0)))
+
     def test_violation_metadata_is_saved_in_the_durable_payload(self):
         instance = self.make_agent()
         instance.report_violation(

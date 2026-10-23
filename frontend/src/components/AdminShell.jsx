@@ -19,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import AdminNavigation from "./AdminNavigation";
+import AdminModeSwitch from "./AdminModeSwitch";
 import NotificationBell from "./NotificationBell";
 
 export default function AdminShell({ title, children }) {
@@ -41,7 +42,7 @@ export default function AdminShell({ title, children }) {
   };
 
   return (
-    <Box className="app-layout admin-layout">
+    <Box className="app-layout admin-layout admin-shell">
       {isSidebarOpen && (
         <Box
           className="sidebar-overlay"
@@ -121,6 +122,8 @@ export default function AdminShell({ title, children }) {
         transformOrigin={{ vertical: "top", horizontal: "right" }}
         PaperProps={{ className: "admin-account-menu" }}
       >
+        <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
+        <Divider sx={{ my: 0.5 }} />
         <Button
           fullWidth
           startIcon={<Settings />}

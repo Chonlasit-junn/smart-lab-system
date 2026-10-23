@@ -42,6 +42,7 @@ import { getPointReasonLabel } from "../utils/pointReason";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
 import { useNotifications } from "../context/useNotifications.js";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -453,6 +454,7 @@ export default function Profile() {
 
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
+                    <AdminModeSwitch destination="admin" onNavigate={handleCloseUserMenu} />
                     <Box
                       onClick={() => {
                         handleCloseUserMenu();
@@ -677,6 +679,8 @@ export default function Profile() {
                         border: "1px solid #e2e8f0",
                         borderRadius: 4,
                         bgcolor: "white",
+                        minWidth: 0,
+                        overflow: "hidden",
                       }}
                     >
                       <Typography
@@ -691,16 +695,20 @@ export default function Profile() {
                         sx={{
                           display: "flex",
                           justifyContent: "space-around",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: 1,
                           mt: 2,
                           textAlign: "center",
                         }}
                       >
-                        <Box>
+                        <Box sx={{ minWidth: 0, flex: "1 1 64px" }}>
                           <Typography
                             variant="h3"
                             fontWeight="700"
                             color="#1e293b"
                             lineHeight={1}
+                            sx={{ fontSize: "clamp(1.5rem, 8vw, 3rem)", overflowWrap: "anywhere" }}
                           >
                             {profile.stats?.total_bookings ?? 0}
                           </Typography>
@@ -715,14 +723,15 @@ export default function Profile() {
                         <Divider
                           orientation="vertical"
                           flexItem
-                          sx={{ mx: 2 }}
+                          sx={{ mx: 0.5, display: { xs: "none", sm: "block" } }}
                         />
-                        <Box>
+                        <Box sx={{ minWidth: 0, flex: "1 1 64px" }}>
                           <Typography
                             variant="h3"
                             fontWeight="700"
                             lineHeight={1}
                             color={pointColor}
+                            sx={{ fontSize: "clamp(1.5rem, 8vw, 3rem)", overflowWrap: "anywhere" }}
                           >
                             {numericPoints ?? "—"}
                           </Typography>

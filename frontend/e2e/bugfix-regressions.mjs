@@ -115,6 +115,16 @@ try {
         await page.getByRole('button', { name: language === 'en' ? 'Close ticket' : 'ปิด Ticket', exact: true }).click();
         await page.getByText(language === 'en' ? 'Resolved' : 'ดำเนินการแล้ว', { exact: true }).waitFor();
       }
+      if (pathname === '/history') {
+        if (language === 'th') {
+          await page.locator('.top-header button').first().click();
+          await page.locator('.sidebar.open').waitFor();
+        }
+        await page.getByRole('button', { name: language === 'en' ? 'Support' : 'ช่วยเหลือ', exact: true }).click();
+        await page.getByRole('dialog').getByText(
+          language === 'en' ? 'Contact Support' : 'แจ้งปัญหาถึงผู้ดูแลระบบ',
+        ).waitFor();
+      }
       await assertHealthy(page, state);
       console.log(`PASS ${language} ${pathname}: error -> retry -> empty -> data -> failed next page -> retry`);
       await context.close();
@@ -145,9 +155,18 @@ try {
     await page.locator('button[type=submit]').click();
     await page.locator('input[name=otp]').fill('123456');
     await page.locator('button[type=submit]').click();
+    const otpCountdown = language === 'en' ? /Code expires in|Code expired|Codes expire after/ : /รหัสหมดอายุ|รหัสมีอายุ/;
+    assert.equal(await page.getByText(otpCountdown).count(), 0, 'OTP controls should disappear after successful verification');
+    const stepTitle = language === 'en' ? 'Step 3: Setup Profile' : 'ขั้นตอนที่ 3: ข้อมูลส่วนตัว';
+    await page.locator('.global-language-toggle').click();
+    await page.getByRole('heading', { name: language === 'en' ? 'ขั้นตอนที่ 3: ข้อมูลส่วนตัว' : 'Step 3: Setup Profile' }).waitFor();
+    await page.locator('.global-language-toggle').click();
+    await page.getByRole('heading', { name: stepTitle }).waitFor();
     await page.locator('input[name=first_name]').fill('Synthetic');
     await page.locator('input[name=last_name]').fill('QA');
-    await page.locator('input[name=phone]').fill('0000000000');
+    await page.locator('input[name=phone]').fill('user@example.com');
+    assert.equal(await page.locator('input[name=phone]').inputValue(), '');
+    await page.locator('input[name=phone]').fill('00000000');
     await page.locator('input[type=checkbox]').check();
     await page.locator('input[name=password]').fill('short');
     await page.locator('button[type=submit]').click();
@@ -157,6 +176,9 @@ try {
     assert.equal(await page.locator('input[name=password]').count(), 1);
     await page.locator('input[name=password]').fill('x'.repeat(72));
     assert.equal((await page.locator('input[name=password]').inputValue()).length, 72);
+    await page.locator('button[type=submit]').click();
+    await page.getByRole('alert').filter({ hasText: language === 'en' ? 'valid phone number' : 'เบอร์โทรศัพท์ที่ถูกต้อง' }).waitFor();
+    await page.locator('input[name=phone]').fill('0000000000');
     await page.locator('button[type=submit]').click();
     await page.locator('input[type=file]').waitFor({ state: 'attached' });
     await assertHealthy(page, state);

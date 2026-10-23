@@ -15,11 +15,12 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AppRegistrationIcon from '@mui/icons-material/AppRegistration';
-import { registerLocales } from '../utils/locales';
+import { registerLocales, translateLocaleMessage } from '../utils/locales';
 import { BU_FACULTIES } from '../utils/buFaculties';
 import { isValidNewPassword } from '../utils/passwordPolicy';
 import { useLanguage } from '../context/language-context.js';
-import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil } from '../utils/registrationOtp';
+import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil, shouldShowRegistrationOtpControls } from '../utils/registrationOtp';
+import { isValidPhoneNumber, normalizePhoneInput } from '../utils/phoneNumber';
 
 const API_URL = import.meta.env.VITE_API_URL;
 const videoConstraints = { width: 400, height: 400, facingMode: 'user' };
@@ -29,6 +30,7 @@ export default function Register() {
 
   const { language: lang } = useLanguage();
   const t = registerLocales[lang];
+  const previousLanguageRef = useRef(lang);
 
   const [step, setStep]           = useState(1);
   const [loading, setLoading]     = useState(false);
@@ -74,8 +76,21 @@ export default function Register() {
     document.title = t.tabTitles[step];
   }, [step, t]);
 
+  useEffect(() => {
+    const previousLanguage = previousLanguageRef.current;
+    if (previousLanguage === lang) return;
+    setError((message) => translateLocaleMessage(
+      message, registerLocales[previousLanguage], registerLocales[lang],
+    ));
+    setSuccess((message) => translateLocaleMessage(
+      message, registerLocales[previousLanguage], registerLocales[lang],
+    ));
+    previousLanguageRef.current = lang;
+  }, [lang]);
+
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name } = e.target;
+    const value = name === 'phone' ? normalizePhoneInput(e.target.value) : e.target.value;
     setFormData(prev => ({ ...prev, [name]: value, ...(name === 'email' ? { otp: '' } : {}) }));
     if (name === 'email') {
       setOtpExpiresAt(0);
@@ -157,6 +172,7 @@ export default function Register() {
     if (!formData.first_name || !formData.last_name || !formData.password) return setError(t.errFieldsReq);
     if (!isValidNewPassword(formData.password)) return setError(t.passwordInvalid);
     if (accountType === 'student' && (!selectedFaculty || !selectedDepartment)) return setError(t.errFieldsReq);
+    if (accountType === 'general' && !isValidPhoneNumber(formData.phone)) return setError(t.errPhoneInvalid);
     if (accountType === 'general' && !consentChecked) return setError(t.errConsent);
     setStep(4);
   };
@@ -408,8 +424,10 @@ export default function Register() {
         {accountType === 'general' && (
           <Box sx={{ px: 2.5, pt: 2, pb: 2.5, mb: 2.5, bgcolor: 'var(--surface-danger)', borderRadius: 'var(--radius-control)', border: '1px solid var(--border-light)' }}>
             <Typography variant="caption" fontWeight="600" sx={{ fontSize: '0.85rem', color: 'var(--danger-color)' }}>{t.guestDetails}</Typography>
-            <TextField fullWidth label={t.phoneNum} name="phone" size="small" type="tel"
-              value={formData.phone} onChange={handleChange} sx={{ mt: 1.5, mb: 1.5, ...inputSx }} />
+            <TextField fullWidth required label={t.phoneNum} name="phone" size="small" type="tel"
+              value={formData.phone} onChange={handleChange}
+              slotProps={{ htmlInput: { inputMode: 'numeric', autoComplete: 'tel', maxLength: 15 } }}
+              sx={{ mt: 1.5, mb: 1.5, ...inputSx }} />
             <FormControlLabel
               control={<Checkbox checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} color="error" size="small" />}
               label={<Typography variant="body2" sx={{ fontSize: '0.85rem', lineHeight: 1.5, color: 'var(--text-gray)' }}>{t.consentText}</Typography>}
@@ -539,7 +557,7 @@ export default function Register() {
             {error   && <Alert severity="error"   sx={{ mb: 3, borderRadius: '8px' }}>{error}</Alert>}
             {success && step !== 4 && <Alert severity="success" sx={{ mb: 3, borderRadius: '8px' }}>{success}</Alert>}
 
-            {step >= 2 && (
+            {shouldShowRegistrationOtpControls(step) && (
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" sx={{ color: 'var(--text-gray)' }} aria-live="polite">
                   {otpExpiresAt > 0

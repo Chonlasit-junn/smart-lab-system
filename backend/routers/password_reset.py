@@ -25,9 +25,25 @@ def _fingerprint(password):
 
 def _reserve(db, email):
     user = db.query(models.User).filter(func.lower(models.User.email) == email).first()
-    binding = (user.id, _fingerprint(user.password)) if user else None
+    eligible = _password_reset_eligible(db, user)
+    binding = (user.id, _fingerprint(user.password)) if eligible else None
     challenge, code = otp.reserve_otp(db, email, purpose=PURPOSE, binding=binding)
-    return challenge, code, user is not None
+    return challenge, code, eligible
+
+
+def _password_reset_eligible(db, user):
+    """Pending guests must not receive a password-reset OTP before approval."""
+    if user is None:
+        return False
+    is_guest = any(role.name == "guest" for role in user.roles)
+    passport = db.query(models.UserPassport).filter(
+        models.UserPassport.user_id == user.id,
+    ).first()
+    if is_guest:
+        return bool(passport and passport.is_active)
+    if passport is not None and not passport.is_active:
+        return False
+    return True
 
 
 @router.post("/request-otp")
@@ -59,7 +75,7 @@ def _verify(db, email, code):
     if row is None or row.challenge_id != challenge:
         otp._reject(db, otp.REPLACED)
     user = db.query(models.User).filter(func.lower(models.User.email) == email).first()
-    if (not user or row.user_id != user.id or not row.credential_hash
+    if (not _password_reset_eligible(db, user) or row.user_id != user.id or not row.credential_hash
             or not hmac.compare_digest(row.credential_hash, _fingerprint(user.password))):
         otp._reject(db, otp.EXPIRED)
     db.rollback()  # No locks/transaction held while hashing a new password.

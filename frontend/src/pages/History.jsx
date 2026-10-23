@@ -41,6 +41,8 @@ import { useLanguage } from "../context/language-context.js";
 import { formatDate } from "../utils/dateFormat";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
+import SupportModal from "./SupportModal";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -50,6 +52,7 @@ export default function History() {
   const { t } = useLanguage();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [historyData, setHistoryData] = useState({ identity: null, page: 0, items: [] });
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -161,7 +164,14 @@ export default function History() {
           className="sidebar-menu"
           style={{ flex: "none", paddingBottom: "24px" }}
         >
-          <div className="menu-item">
+          <div className="menu-item" role="button" tabIndex={0}
+            onClick={() => setIsSupportOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setIsSupportOpen(true);
+              }
+            }}>
             <SupportAgent /> {t("common.support")}
           </div>
         </div>
@@ -333,6 +343,7 @@ export default function History() {
 
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
+                    <AdminModeSwitch destination="admin" onNavigate={handleCloseUserMenu} />
                     <Box
                       onClick={() => {
                         handleCloseUserMenu();
@@ -548,6 +559,7 @@ export default function History() {
           )}
         </div>
       </div>
+      <SupportModal open={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
     </div>
   );
 }

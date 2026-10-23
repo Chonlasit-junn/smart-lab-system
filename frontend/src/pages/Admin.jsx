@@ -39,6 +39,7 @@ import { useLanguage } from "../context/language-context.js";
 import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import NotificationBell from "../components/NotificationBell";
+import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -382,6 +383,7 @@ export default function Admin() {
 
                 {/* settings + sign out */}
                 <Box sx={{ px: 1, py: 1 }}>
+                  <AdminModeSwitch destination="booking" onNavigate={handleCloseUserMenu} />
                   <Box
                     onClick={handleCloseUserMenu}
                     sx={{

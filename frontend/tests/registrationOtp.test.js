@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerLocales } from '../src/utils/locales.js';
-import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil } from '../src/utils/registrationOtp.js';
+import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil, shouldShowRegistrationOtpControls } from '../src/utils/registrationOtp.js';
 
 test('OTP deadlines use remaining server durations, not a client/server clock comparison', () => {
   assert.deepEqual(otpDeadlines({ expires_in_seconds: 590, retry_after_seconds: 50 }, 1000), {
@@ -35,4 +35,11 @@ test('cooldown follows Retry-After and falls back safely', () => {
   assert.equal(retrySeconds({ response: { headers: { 'retry-after': '540' } } }), 540);
   assert.equal(retrySeconds({ response: { headers: { 'retry-after': 'not-a-number' } } }), 60);
   assert.equal(retrySeconds({}), 60);
+});
+
+test('registration OTP countdown and resend controls are limited to the verification step', () => {
+  assert.equal(shouldShowRegistrationOtpControls(1), false);
+  assert.equal(shouldShowRegistrationOtpControls(2), true);
+  assert.equal(shouldShowRegistrationOtpControls(3), false);
+  assert.equal(shouldShowRegistrationOtpControls(4), false);
 });

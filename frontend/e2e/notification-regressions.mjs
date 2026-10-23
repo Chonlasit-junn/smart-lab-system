@@ -117,6 +117,17 @@ try {
   for (const language of ['en', 'th']) {
     const f = await fixture(language);
     await f.page.goto(new URL('/booking', base).href); await f.openBell();
+    await f.closeBell();
+    if (language === 'th') {
+      await f.page.locator('.top-header button').first().click();
+      await f.page.locator('.sidebar.open').waitFor();
+    }
+    await f.page.locator('.sidebar-menu .menu-item').filter({ hasText: language === 'en' ? 'Support' : 'ช่วยเหลือ' }).click();
+    await f.page.getByRole('dialog').getByText(language === 'en' ? 'Contact Support' : 'แจ้งปัญหาถึงผู้ดูแลระบบ').waitFor();
+    await f.page.getByRole('dialog').getByRole('button').first().click();
+    await f.page.getByRole('dialog').waitFor({ state: 'detached' });
+    if (language === 'th') await f.page.locator('.sidebar-overlay').click({ position: { x: 300, y: 40 } });
+    await f.openBell();
     await f.popup().getByText('NOTE-A-20', { exact: true }).waitFor();
     assert.equal(await f.popup().getByText(/^NOTE-A-/).count(), 10);
     assert.equal(await f.page.getByText('SECRET_ADMIN').count(), 0);
@@ -126,6 +137,14 @@ try {
     await f.popup().getByText('NOTE-A-20', { exact: true }).waitFor(); await f.waitCalls(1); await f.closeBell();
     await f.navigate('/profile'); await f.page.locator('.profile-point-history-item').first().waitFor();
     assert.equal(await f.page.locator('.profile-point-history-item').count(), 20);
+    const usageTitle = language === 'en' ? 'Usage Statistics' : 'สถิติการใช้งาน';
+    const usageCard = f.page.locator('.surface-card').filter({ hasText: usageTitle }).first();
+    const cardBounds = await usageCard.boundingBox();
+    for (const number of await usageCard.locator('h3').all()) {
+      const bounds = await number.boundingBox();
+      assert.ok(bounds.x >= cardBounds.x - 1 && bounds.x + bounds.width <= cardBounds.x + cardBounds.width + 1,
+        'profile usage number should stay within its card');
+    }
     await f.openBell(); assert.equal(await f.popup().getByText(/^NOTE-A-/).count(), 10); await f.waitCalls(1);
     assert.ok((await f.popup().evaluate(element => getComputedStyle(element).transitionProperty)).includes('opacity'));
     const scrollable = f.popup().locator(':scope > div').last();
