@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 import models
 from database import engine, Base
-from routers import auth, users, labs, agent, devices, gatekeeper, admin, blacklist, points, tickets, password_reset
+from routers import auth, users, labs, agent, devices, gatekeeper, admin, blacklist, points, tickets, password_reset, reports
 from utils import UPLOAD_ROOT
 
 Base.metadata.create_all(
@@ -20,7 +20,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Retry-After"],
+    expose_headers=["Retry-After", "Content-Disposition"],
 )
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
@@ -36,6 +36,7 @@ app.include_router(admin.router)
 app.include_router(blacklist.router)
 app.include_router(points.router)
 app.include_router(tickets.router)
+app.include_router(reports.router)
 
 @app.get("/")
 def root():

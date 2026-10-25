@@ -19,6 +19,7 @@ const ADMIN_NAV_GROUPS = [
     labelKey: "admin.navOverview",
     items: [
       { key: "dashboard", icon: <Dashboard sx={{ fontSize: 20 }} />, path: "/admin" },
+      { key: "usageReports", icon: <Assessment sx={{ fontSize: 20 }} />, path: "/admin/reports" },
     ],
   },
   {

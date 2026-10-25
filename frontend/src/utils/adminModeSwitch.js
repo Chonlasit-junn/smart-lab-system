@@ -4,6 +4,7 @@ const ADMIN_ROUTES = new Set([
   "/admin/points/policy",
   "/admin/roles",
   "/admin/devices",
+  "/admin/reports",
   "/manage-labs",
   "/verify-users",
   "/blacklist",

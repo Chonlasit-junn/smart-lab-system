@@ -15,7 +15,7 @@ export default function AdminMobileNavigation() {
   const [openPath, setOpenPath] = useState(null);
   const open = openPath === pathname;
   const isAdmin = currentUser?.roleName === "admin" && isAdminPage(pathname);
-  const pageHasOwnDrawer = pathname === "/ticket" || pathname === "/profile";
+  const pageHasOwnDrawer = pathname === "/ticket" || pathname === "/profile" || pathname === "/admin/reports";
 
   if (!isAdmin || pageHasOwnDrawer) return null;
 

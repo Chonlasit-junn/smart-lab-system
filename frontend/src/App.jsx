@@ -22,6 +22,7 @@ const AdminPointPolicy = lazy(() => import('./pages/AdminPointPolicy'));
 const RoleManagement = lazy(() => import('./pages/RoleManagement'));
 const ManageLabs = lazy(() => import('./pages/ManageLabs'));
 const AdminDevices = lazy(() => import('./pages/AdminDevices'));
+const AdminReports = lazy(() => import('./pages/AdminReports'));
 const Reserved = lazy(() => import('./pages/Reserved'));
 const History = lazy(() => import('./pages/History'));
 const VerifyUsers = lazy(() => import('./pages/VerifyUsers'));
@@ -212,6 +213,7 @@ function AppContent() {
               <Route path="/admin/roles" element={<AdminRoute><RoleManagement /></AdminRoute>} />
               <Route path="/manage-labs" element={<AdminRoute><ManageLabs /></AdminRoute>} />
               <Route path="/admin/devices" element={<AdminRoute><AdminDevices /></AdminRoute>} />
+              <Route path="/admin/reports" element={<AdminRoute><AdminReports /></AdminRoute>} />
               <Route path="/verify-users" element={<AdminRoute><VerifyUsers /></AdminRoute>} />
               <Route path="/blacklist" element={<AdminRoute><BlacklistManager /></AdminRoute>} />
               <Route path="/ticket" element={<AdminRoute><TicketManager /></AdminRoute>} />
