@@ -79,9 +79,9 @@ class RegistrationOTPTests(unittest.TestCase):
     def row(self, email=None):
         return self.db.get(models.RegistrationOTP, email or self.email, populate_existing=True)
 
-    def register(self, code, email=None, password="test-pass"):
+    def register(self, code, email=None, password="test-pass", image_size=(10, 10)):
         image = io.BytesIO()
-        Image.new("RGB", (10, 10)).save(image, format="JPEG")
+        Image.new("RGB", image_size).save(image, format="JPEG")
         return asyncio.run(auth.register(
             email=email or self.email, otp=code, password=password,
             first_name="Test", last_name="Account", student_id="S001",
@@ -89,6 +89,45 @@ class RegistrationOTPTests(unittest.TestCase):
             face_image=UploadFile(filename="face.jpg", file=io.BytesIO(image.getvalue())),
             db=self.db,
         ))
+
+    def test_multiple_faces_do_not_create_account_or_consume_otp_or_keep_image(self):
+        _, code = self.issue()
+        model = auth.get_deepface.return_value
+        model.represent.return_value = [{"embedding": [.1, .2]}, {"embedding": [.2, .1]}]
+        with self.assertRaises(HTTPException) as caught:
+            self.register(code)
+        self.assertEqual(caught.exception.detail, "Exactly one face is required.")
+        self.assertEqual(self.db.query(models.User).count(), 0)
+        self.assertIsNone(self.row().consumed_at)
+        self.assertEqual(list(Path(self.temp.name).iterdir()), [])
+        model.represent.return_value = [{"embedding": [.1, .2]}]
+        self.register(code)
+        self.assertEqual(self.db.query(models.User).count(), 1)
+
+    def test_no_face_and_tiny_face_are_rejected_without_consuming_otp(self):
+        _, code = self.issue()
+        for faces in ([], [{"embedding": [.1, .2], "facial_area": {"w": 20, "h": 20}}]):
+            auth.get_deepface.return_value.represent.return_value = faces
+            with self.assertRaises(HTTPException):
+                self.register(code)
+            self.assertIsNone(self.row().consumed_at)
+            self.assertEqual(self.db.query(models.User).count(), 0)
+            self.assertEqual(list(Path(self.temp.name).iterdir()), [])
+
+    def test_embedding_uses_larger_image_but_saved_avatar_stays_small(self):
+        from face_service import FACE_REPRESENT_OPTIONS
+        _, code = self.issue()
+        def represent(img_path, **options):
+            with Image.open(img_path) as image:
+                self.assertEqual(image.size, (1024, 768))
+            self.assertEqual(options, FACE_REPRESENT_OPTIONS)
+            return [{"embedding": [.1, .2]}]
+        auth.get_deepface.return_value.represent.side_effect = represent
+        self.register(code, image_size=(1600, 1200))
+        saved = list(Path(self.temp.name).glob('*.jpg'))
+        self.assertEqual(len(saved), 1)
+        with Image.open(saved[0]) as image:
+            self.assertEqual(image.size, (200, 150))
 
     def test_invalid_registration_password_does_not_spend_otp_or_process_face(self):
         _, code = self.issue()

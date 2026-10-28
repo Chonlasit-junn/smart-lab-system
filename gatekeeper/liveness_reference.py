@@ -19,7 +19,7 @@ def load_torch_reference(base_dir):
         sys.path.insert(0, str(repo))
     from src.anti_spoof_predict import AntiSpoofPredict
 
-    # The kiosk supplies Haar face crops. Skip the unused Caffe detector and
+    # The kiosk supplies face crops. Skip the redundant Caffe detector and
     # its process-global chdir; retain the original weight loader and predict.
     predictor = AntiSpoofPredict.__new__(AntiSpoofPredict)
     predictor.device = torch.device("cpu")

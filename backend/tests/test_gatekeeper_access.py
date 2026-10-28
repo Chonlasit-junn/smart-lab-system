@@ -345,6 +345,33 @@ class GatekeeperAccessTests(unittest.TestCase):
             image=False, liveness_score="0.95", liveness_passed="false", liveness_reason="no_motion",
         ), "liveness_no_motion")
         self.model.represent.assert_not_called()
+
+    def test_capture_failure_reasons_are_distinct_and_never_reach_face_matching(self):
+        for reason, code in (
+            ("insufficient_samples", "liveness_insufficient_samples"),
+            ("multiple_faces", "exactly_one_face_required"),
+            ("face_changed", "liveness_face_changed"),
+            ("untrusted-reason", "liveness_failed"),
+        ):
+            with self.subTest(reason=reason):
+                self.assert_denied(self.identify(
+                    image=False, liveness_score="0.95", liveness_passed="false", liveness_reason=reason,
+                ), code)
+        self.model.represent.assert_not_called()
+
+    def test_scan_and_enrollment_use_identical_face_options_and_small_face_guard(self):
+        from face_service import FACE_REPRESENT_OPTIONS
+        self.assertEqual(self.identify().status_code, 200)
+        options = self.model.represent.call_args.kwargs
+        self.assertEqual({key: options[key] for key in FACE_REPRESENT_OPTIONS}, FACE_REPRESENT_OPTIONS)
+        self.model.represent.return_value = [{
+            "embedding": [1, 0, 0], "facial_area": {"w": 20, "h": 20},
+        }]
+        self.assert_denied(self.identify(), "face_too_small", status=400)
+
+    def test_zero_faces_are_not_reported_as_multiple_people(self):
+        self.model.represent.return_value = []
+        self.assert_denied(self.identify(), "face_not_detected", status=400)
         self.assertTrue(all(row.user_id is None for row in self.scans()))
 
     def test_invalid_image_and_multiple_faces_are_audited(self):

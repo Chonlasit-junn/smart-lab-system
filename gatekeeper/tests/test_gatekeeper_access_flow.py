@@ -91,7 +91,7 @@ class GatekeeperAccessFlowTests(unittest.TestCase):
             anti_spoof=Mock(), _post_ui=Mock(),
         )
         frame = np.zeros((80, 80, 3), dtype=np.uint8)
-        kiosk.GatekeeperDemo._run_liveness(instance, frame, frame, 1)
+        kiosk.GatekeeperDemo._run_liveness(instance, 1)
         instance.anti_spoof.predict.assert_not_called()
         instance._identify_face.assert_not_called()
 
@@ -113,23 +113,20 @@ class GatekeeperAccessFlowTests(unittest.TestCase):
         self.assertEqual(instance._last_faces, [])
 
     def test_local_motion_failure_is_sent_for_audit_and_never_grants_access(self):
-        frame = np.zeros((80, 80, 3), dtype=np.uint8)
+        from liveness_policy import evaluate_liveness
+        decision = evaluate_liveness([.98] * 5, [0] * 4, threshold=.72,
+                                     required_samples=5, required_passes=4, min_motion_score=2)
         instance = SimpleNamespace(
-            _stop_event=SimpleNamespace(wait=Mock(return_value=False)),
+            _stop_event=threading.Event(), _camera=Mock(), _detect_faces=Mock(),
             _scan_is_current=Mock(return_value=True), _post_ui=Mock(),
-            model_path="synthetic-model",
-            anti_spoof=SimpleNamespace(predict=Mock(return_value=np.array([[0.01, 0.98, 0.01]]))),
-            _get_latest_frame=Mock(return_value=frame),
-            _detect_faces=Mock(return_value=[(0, 0, 80, 80)]),
-            _crop_face=Mock(return_value=frame),
-            _frame_motion_score=Mock(return_value=0.0),
+            model_path="synthetic-model", anti_spoof=Mock(),
             _identify_face=Mock(return_value=(False, "no motion")),
-            _show_identity_result=Mock(),
-            _reset_state=Mock(),
-            after=Mock(),
+            _show_identity_result=Mock(), _reset_state=Mock(),
         )
-        with patch.object(kiosk.time, "sleep"):
-            kiosk.GatekeeperDemo._run_liveness(instance, frame, frame, 0)
+        with patch.object(kiosk, "collect_liveness", return_value=SimpleNamespace(
+            decision=decision, identity_frame=None,
+        )):
+            kiosk.GatekeeperDemo._run_liveness(instance, 0)
         args, kwargs = instance._identify_face.call_args
         self.assertIsNone(args[0])
         self.assertIs(kwargs["liveness_passed"], False)

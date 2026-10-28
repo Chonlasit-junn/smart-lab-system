@@ -7,10 +7,11 @@ import winsound
 import cv2
 import customtkinter as ctk
 from PIL import Image
-from access_client import ScanClient
+from access_client import ScanClient, denial_title
 from camera_stream import CameraStream
 from camera_preferences import load_camera_index, save_camera_index
-from liveness_policy import evaluate_liveness
+from face_capture import FaceDetector
+from liveness_capture import collect_liveness
 from liveness_runtime import load_liveness
 from device_registration import DEFAULT_API_URL, load_device_registration
 from registration_dialog import GatekeeperRegistrationDialog
@@ -33,7 +34,8 @@ CONFIG = {
     "LIVENESS_SAMPLE_COUNT": 5,
     "LIVENESS_REQUIRED_PASSES": 4,
     "LIVENESS_SAMPLE_INTERVAL_SEC": 0.12,
-    "LIVENESS_MIN_MOTION_SCORE": 2.0,
+    "LIVENESS_MIN_MOTION_SCORE": 2.0,  # percent of face size
+    "LIVENESS_CAPTURE_TIMEOUT_SEC": 3.0,
     "LIVENESS_CROP_SCALE": 2.7,
     "CAMERA_INDEX":       0,
     "DISPLAY_SIZE":       (600, 450),
@@ -222,11 +224,11 @@ class GatekeeperDemo(ctk.CTk):
 
         status_box = ctk.CTkFrame(self.panel, fg_color=CLR["dark_bg"], corner_radius=12)
         status_box.pack(padx=20, pady=8, fill="x")
-        self.status_label = ctk.CTkLabel(status_box, text="LOADING AI...", font=ctk.CTkFont(size=22, weight="bold"), text_color=CLR["warning"])
+        self.status_label = ctk.CTkLabel(status_box, text="LOADING AI...", font=ctk.CTkFont(size=22, weight="bold"), text_color=CLR["warning"], wraplength=250)
         self.status_label.pack(pady=22)
 
-        self.sub_label = ctk.CTkLabel(self.panel, text="กรุณารอสักครู่...", font=ctk.CTkFont(size=13), text_color="#94a3b8")
-        self.sub_label.pack(pady=(6, 2))
+        self.sub_label = ctk.CTkLabel(self.panel, text="กรุณารอสักครู่...", font=ctk.CTkFont(size=13), text_color="#cbd5e1", wraplength=260, justify="center")
+        self.sub_label.pack(padx=20, pady=(6, 2), fill="x")
 
         self.score_badge = ctk.CTkLabel(self.panel, text="", font=ctk.CTkFont(size=12, weight="bold"), corner_radius=8)
         self.score_badge.pack(pady=4)
@@ -281,7 +283,7 @@ class GatekeeperDemo(ctk.CTk):
     def _build_score_bar(self):
         bar_frame = ctk.CTkFrame(self.panel, fg_color="transparent")
         bar_frame.pack(padx=20, pady=(10, 4), fill="x")
-        ctk.CTkLabel(bar_frame, text="Confidence", font=ctk.CTkFont(size=11), text_color="#475569").pack(anchor="w")
+        ctk.CTkLabel(bar_frame, text="คะแนนตรวจคนจริง", font=ctk.CTkFont(size=11), text_color="#94a3b8").pack(anchor="w")
         self.score_bar = ctk.CTkProgressBar(bar_frame, height=14, corner_radius=7, progress_color=CLR["ready"])
         self.score_bar.set(0)
         self.score_bar.pack(fill="x", pady=(4, 0))
@@ -363,66 +365,15 @@ class GatekeeperDemo(ctk.CTk):
                 print("[Gatekeeper] could not save camera preference")
 
     def _init_hardware(self):
-        haar_path = os.path.join(BASE_DIR, "cv2", "data", "haarcascade_frontalface_default.xml")
-        if not os.path.exists(haar_path):
-            haar_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        self.detector = cv2.CascadeClassifier(haar_path)
         self._camera = CameraStream(self._current_cam_index, stop_event=self._stop_event)
         self._camera.start()
         self._start_worker(self._detect_loop)
         self._start_worker(self._load_models)
         self._display_loop()
 
-    def _get_latest_frame(self):
-        packet = self._camera.snapshot()
-        return packet.frame if packet is not None else None
-
     def _detect_faces(self, frame):
-        height, width = frame.shape[:2]
-        small = cv2.resize(frame, (320, 240))
-        scale_x = width / 320
-        scale_y = height / 240
-        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
         with self._detector_lock:
-            faces = self.detector.detectMultiScale(
-                gray,
-                scaleFactor=1.1,
-                minNeighbors=4,
-                minSize=(60, 60),
-            )
-
-        return [
-            (
-                int(sx * scale_x),
-                int(sy * scale_y),
-                int(sw * scale_x),
-                int(sh * scale_y),
-            )
-            for (sx, sy, sw, sh) in faces
-        ]
-
-    @staticmethod
-    def _crop_face(frame, face, scale=2.7):
-        x, y, width, height = face
-        expansion = max(1.0, float(scale))
-        pad_x = int(width * (expansion - 1.0) / 2.0)
-        pad_y = int(height * (expansion - 1.0) / 2.0)
-        x1 = max(0, x - pad_x)
-        y1 = max(0, y - pad_y)
-        x2 = min(frame.shape[1], x + width + pad_x)
-        y2 = min(frame.shape[0], y + height + pad_y)
-        return frame[y1:y2, x1:x2]
-
-    @staticmethod
-    def _frame_motion_score(previous, current):
-        if previous is None or current is None or previous.size == 0 or current.size == 0:
-            return 0.0
-
-        previous_gray = cv2.cvtColor(previous, cv2.COLOR_BGR2GRAY)
-        current_gray = cv2.cvtColor(current, cv2.COLOR_BGR2GRAY)
-        previous_gray = cv2.resize(previous_gray, (64, 64))
-        current_gray = cv2.resize(current_gray, (64, 64))
-        return float(cv2.absdiff(previous_gray, current_gray).mean())
+            return self.detector.detect(frame)
 
     def _detect_loop(self):
         while not self._stop_event.is_set():
@@ -442,6 +393,7 @@ class GatekeeperDemo(ctk.CTk):
 
     def _load_models(self):
         try:
+            self.detector = FaceDetector(BASE_DIR)
             self.anti_spoof, self.model_path = load_liveness(BASE_DIR)
             print("[Gatekeeper] liveness runtime loaded OK.")
             self._post_ui(self._models_ready)
@@ -499,7 +451,6 @@ class GatekeeperDemo(ctk.CTk):
 
             elif len(faces) == 1:
                 x, y, fw, fh = faces[0]
-                scan_frame = packet.frame
 
                 cv2.rectangle(frame, (x, y), (x+fw, y+fh), (255, 200, 0), 2)
                 for px, py, dx, dy in [(x,y,1,1),(x+fw,y,-1,1),(x,y+fh,1,-1),(x+fw,y+fh,-1,-1)]:
@@ -508,15 +459,13 @@ class GatekeeperDemo(ctk.CTk):
 
                 cv2.ellipse(frame, (cx,cy), (oval_a,oval_b), 0, 0, 360, (56,189,248), 2)
 
-                crop = self._crop_face(scan_frame, faces[0], CONFIG["LIVENESS_CROP_SCALE"])
-                if crop.size > 0:
-                    self.is_scanning = True
-                    self._last_faces  = []
-                    self.after(0, lambda: self.status_label.configure(text="ANALYZING...", text_color=CLR["warning"]))
-                    self.after(0, lambda: self.sub_label.configure(text="กำลังตรวจสอบ — กรุณาขยับศีรษะเล็กน้อย"))
-                    self._start_worker(self._run_liveness, crop, scan_frame, packet.generation)
+                self.is_scanning = True
+                self._last_faces = []
+                self.status_label.configure(text="ANALYZING...", text_color=CLR["warning"])
+                self.sub_label.configure(text="กำลังตรวจสอบ — กรุณาขยับศีรษะเล็กน้อย")
+                self._start_worker(self._run_liveness, packet.generation)
 
-        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA))
+        image = Image.fromarray(cv2.cvtColor(cv2.flip(frame, 1), cv2.COLOR_BGR2RGBA))
         if self._preview_image is None:
             self._preview_image = ctk.CTkImage(light_image=image, size=CONFIG["DISPLAY_SIZE"])
             self.video_label.configure(image=self._preview_image, text="")
@@ -532,54 +481,26 @@ class GatekeeperDemo(ctk.CTk):
     def _scan_is_current(self, generation):
         return not self._stop_event.is_set() and generation == self._camera.generation
 
-    def _run_liveness(self, crop_img, full_frame, generation):
+    def _run_liveness(self, generation):
         try:
-            scores = []
-            motion_scores = []
-            previous_crop = crop_img
-            identity_frame = full_frame
-
-            for sample_index in range(CONFIG["LIVENESS_SAMPLE_COUNT"]):
-                if not self._scan_is_current(generation):
-                    return
-                current_crop = crop_img if sample_index == 0 else None
-                if sample_index > 0:
-                    if self._stop_event.wait(CONFIG["LIVENESS_SAMPLE_INTERVAL_SEC"]):
-                        return
-                    current_frame = self._get_latest_frame()
-                    if current_frame is None:
-                        continue
-
-                    current_faces = self._detect_faces(current_frame)
-                    if len(current_faces) != 1:
-                        continue
-
-                    current_crop = self._crop_face(
-                        current_frame,
-                        current_faces[0],
-                        CONFIG["LIVENESS_CROP_SCALE"],
-                    )
-                    if current_crop.size > 0:
-                        identity_frame = current_frame
-
-                if current_crop is None or current_crop.size == 0:
-                    continue
-
-                resized = cv2.resize(current_crop, (80, 80))
-                score = float(self.anti_spoof.predict(resized, self.model_path)[0][1])
-                scores.append(score)
-                if sample_index > 0:
-                    motion_scores.append(self._frame_motion_score(previous_crop, current_crop))
-                previous_crop = current_crop
-
-            decision = evaluate_liveness(
-                scores,
-                motion_scores,
-                threshold=CONFIG["LIVENESS_THRESHOLD"],
-                required_samples=CONFIG["LIVENESS_SAMPLE_COUNT"],
+            if not self._scan_is_current(generation):
+                return
+            result = collect_liveness(
+                snapshot=self._camera.snapshot, detect=self._detect_faces,
+                predict=lambda crop: self.anti_spoof.predict(crop, self.model_path)[0][1],
+                is_current=self._scan_is_current, stop_event=self._stop_event,
+                generation=generation, threshold=CONFIG["LIVENESS_THRESHOLD"],
+                sample_count=CONFIG["LIVENESS_SAMPLE_COUNT"],
                 required_passes=CONFIG["LIVENESS_REQUIRED_PASSES"],
-                min_motion_score=CONFIG["LIVENESS_MIN_MOTION_SCORE"],
+                interval=CONFIG["LIVENESS_SAMPLE_INTERVAL_SEC"],
+                timeout=CONFIG["LIVENESS_CAPTURE_TIMEOUT_SEC"],
+                min_motion=CONFIG["LIVENESS_MIN_MOTION_SCORE"],
+                crop_scale=CONFIG["LIVENESS_CROP_SCALE"],
             )
+            if result is None:
+                return
+            decision = result.decision
+            identity_frame = result.identity_frame
             print(
                 "[Gatekeeper] liveness samples="
                 f"{decision.sample_count}/{CONFIG['LIVENESS_SAMPLE_COUNT']} "
@@ -608,7 +529,11 @@ class GatekeeperDemo(ctk.CTk):
             self._post_ui(self._show_identity_result, verified, decision.score, detail, generation=generation)
         except Exception as e:
             print(f"[Gatekeeper] liveness error: {e}")
-            self._post_ui(self._reset_state, generation=generation)
+            self._post_ui(
+                self._show_identity_result, False, 0.0,
+                "ประมวลผลภาพไม่ได้ กรุณาลองใหม่ หากยังพบปัญหาให้ติดต่อผู้ดูแล",
+                generation=generation,
+            )
 
     def _identify_face(self, frame, liveness_score, *, liveness_passed=True, liveness_reason=None):
         """Require an explicit, audited server authorization before granting."""
@@ -645,7 +570,7 @@ class GatekeeperDemo(ctk.CTk):
             self.after(CONFIG["RESET_DELAY_MS"], self._reset_state)
             return
 
-        self._set_status("ACCESS DENIED ✗", CLR["denied"], detail)
+        self._set_status(denial_title(detail), CLR["denied"], detail)
         self.score_badge.configure(
             text=f"  Score: {score:.2f}  ",
             fg_color="#dc2626",
@@ -749,8 +674,11 @@ if __name__ == "__main__":
 
         try:
             predictor, model_path = load_liveness(BASE_DIR, "onnx")
+            detector = FaceDetector(BASE_DIR)
+            detector.detect(np.zeros((480, 640, 3), dtype=np.uint8))
             probabilities = predictor.predict(np.zeros((80, 80, 3), dtype=np.uint8), model_path)
             report = {"ok": True, "backend": "onnx", "precision": "FP32",
+                      "face_detector": "bundled_caffe",
                       "probabilities": probabilities.tolist(), "torch_loaded": "torch" in sys.modules}
         except Exception as exc:
             report = {"ok": False, "error_type": type(exc).__name__}

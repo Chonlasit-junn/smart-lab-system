@@ -4,6 +4,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import itertools
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -75,6 +77,8 @@ class Block(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, Block())
 import numpy as np
 from liveness_runtime import load_liveness
+from face_capture import FaceDetector
+FaceDetector('.').detect(np.zeros((480, 640, 3), dtype=np.uint8))
 predictor, path = load_liveness('.', 'onnx')
 assert predictor.predict(np.zeros((80,80,3), dtype=np.uint8), path).shape == (1,3)
 """
@@ -129,16 +133,19 @@ class OnnxGatekeeperFlowTests(unittest.TestCase):
         for allowed, detail in ((True, "Test User"), (False, "booking_required"),
                                 (False, "guest_approval_required"), (False, "user_banned")):
             with self.subTest(detail=detail):
+                sequence = itertools.count()
                 instance = SimpleNamespace(
+                    _camera=SimpleNamespace(snapshot=lambda: SimpleNamespace(
+                        frame=frame, sequence=next(sequence), generation=0, captured_at=time.monotonic(),
+                    )),
                     model_path=path, anti_spoof=predictor, _scan_is_current=Mock(return_value=True),
                     _stop_event=SimpleNamespace(wait=Mock(return_value=False)),
-                    _get_latest_frame=Mock(return_value=frame),
                     _detect_faces=Mock(return_value=[(0, 0, 80, 80)]),
-                    _crop_face=Mock(return_value=frame), _frame_motion_score=Mock(return_value=3.0),
                     _identify_face=Mock(return_value=(allowed, detail)), _post_ui=Mock(),
                     _show_identity_result=Mock(), _set_status=Mock(), _reset_state=Mock(),
                 )
-                kiosk.GatekeeperDemo._run_liveness(instance, frame, frame, 0)
+                with patch("liveness_capture.face_motion_score", return_value=3.0):
+                    kiosk.GatekeeperDemo._run_liveness(instance, 0)
                 instance._identify_face.assert_called_once()
                 result = instance._post_ui.call_args.args
                 self.assertIs(result[1], allowed)
@@ -149,6 +156,14 @@ class OnnxGatekeeperFlowTests(unittest.TestCase):
 
         instance = SimpleNamespace(models_loaded=False, _post_ui=Mock(), _models_ready=Mock(), _set_status=Mock())
         with patch.object(kiosk, "load_liveness", side_effect=FileNotFoundError("synthetic missing model")):
+            kiosk.GatekeeperDemo._load_models(instance)
+        self.assertFalse(instance.models_loaded)
+        self.assertEqual(instance._post_ui.call_args.args[1], "MODEL ERROR")
+
+    def test_missing_detection_assets_never_enable_scanning(self):
+        import smart_gatekeeper as kiosk
+        instance = SimpleNamespace(models_loaded=False, _post_ui=Mock(), _models_ready=Mock(), _set_status=Mock())
+        with patch.object(kiosk, "FaceDetector", side_effect=FileNotFoundError("synthetic detection asset")):
             kiosk.GatekeeperDemo._load_models(instance)
         self.assertFalse(instance.models_loaded)
         self.assertEqual(instance._post_ui.call_args.args[1], "MODEL ERROR")

@@ -13,7 +13,10 @@ from pydantic import BaseModel, Field
 import models
 from database import get_db
 from device_registry import clean_device_id, require_registered_device
-from face_service import FACE_MODEL_NAME, FaceServiceBusy, gatekeeper_inference_slot, get_deepface
+from face_service import (
+    FACE_REPRESENT_OPTIONS, FaceImageError, FaceServiceBusy,
+    gatekeeper_inference_slot, get_deepface, single_face_embedding,
+)
 from routers.points import is_user_banned
 from routers.users import require_admin_user
 from time_utils import as_lab_naive, utc_now
@@ -252,7 +255,13 @@ def identify_face(
         "GATEKEEPER_LIVENESS_THRESHOLD", DEFAULT_LIVENESS_THRESHOLD,
     )
     if liveness_passed is not True or liveness_score < liveness_threshold:
-        reason = "liveness_no_motion" if liveness_reason == "no_motion" else "liveness_failed"
+        reason = {
+            "no_motion": "liveness_no_motion",
+            "insufficient_samples": "liveness_insufficient_samples",
+            "insufficient_liveness_passes": "liveness_failed",
+            "multiple_faces": "exactly_one_face_required",
+            "face_changed": "liveness_face_changed",
+        }.get(liveness_reason, "liveness_failed")
         _deny_scan(
             db, lab, device_id, code=reason, message="Liveness check failed.", **evidence,
         )
@@ -291,10 +300,7 @@ def identify_face(
         with gatekeeper_inference_slot():
             embedding_objects = get_deepface().represent(
                 img_path=image,
-                model_name=FACE_MODEL_NAME,
-                detector_backend="opencv",
-                enforce_detection=True,
-                align=True,
+                **FACE_REPRESENT_OPTIONS,
             )
     except FaceServiceBusy:
         failure = ("face_service_busy", "Face recognition is busy. Please try again.", 503)
@@ -334,13 +340,15 @@ def identify_face(
             db, lab, device_id, code=failure[0], message=failure[1], status_code=failure[2], **evidence,
         )
 
-    if len(embedding_objects) != 1:
+    try:
+        embedding = single_face_embedding(embedding_objects)
+    except FaceImageError as exc:
         _deny_scan(
-            db, lab, device_id, code="exactly_one_face_required", message="Exactly one face is required.",
+            db, lab, device_id, code=exc.code, message=str(exc),
             status_code=400, **evidence,
         )
 
-    probe_embedding = np.asarray(embedding_objects[0]["embedding"], dtype=np.float32)
+    probe_embedding = np.asarray(embedding, dtype=np.float32)
     users = db.query(
         models.User.id,
         models.User.first_name,

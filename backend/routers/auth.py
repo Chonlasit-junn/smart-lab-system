@@ -8,12 +8,12 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from PIL import Image
+from PIL import Image, ImageOps
 import models, schemas
 import otp_service
 from password_policy import validate_new_password, PASSWORD_POLICY_ERROR
 from database import get_db
-from face_service import get_deepface
+from face_service import get_deepface, FACE_REPRESENT_OPTIONS, FaceImageError, single_face_embedding
 from utils import (
     send_otp_mail,
     create_access_token,
@@ -105,7 +105,11 @@ async def register(
         image_data = await face_image.read(MAX_FACE_IMAGE_BYTES + 1)
         if len(image_data) > MAX_FACE_IMAGE_BYTES:
             raise HTTPException(status_code=413, detail="Face image is too large.")
-        image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(image_data))).convert("RGB")
+        image.thumbnail((1024, 1024))
+        inference_image = io.BytesIO()
+        image.save(inference_image, "JPEG", quality=95)
+        # Keep small avatars in storage; recognition sees the larger original.
         image.thumbnail((200, 200))
         normalized_image = io.BytesIO()
         image.save(normalized_image, "JPEG", quality=85)
@@ -117,14 +121,14 @@ async def register(
                 suffix=".jpg",
                 delete=False,
             ) as temporary_file:
-                temporary_file.write(normalized_image_data)
+                temporary_file.write(inference_image.getvalue())
                 temporary_file_path = temporary_file.name
             file_path = temporary_file_path
         else:
             file_name = f"{uuid4().hex}.jpg"
             local_file_path = os.path.join(UPLOAD_DIR, file_name)
             with open(local_file_path, "wb") as local_file:
-                local_file.write(normalized_image_data)
+                local_file.write(inference_image.getvalue())
             profile_url = f"{PROFILE_URL_PREFIX}/{file_name}"
             file_path = local_file_path
     except HTTPException:
@@ -136,16 +140,19 @@ async def register(
     try:
         embedding_objs = get_deepface().represent(
             img_path=file_path,
-            model_name="Facenet",
-            enforce_detection=True,
+            **FACE_REPRESENT_OPTIONS,
         )
-        face_embedding_vector = embedding_objs[0]["embedding"]
-    except Exception:
+        face_embedding_vector = single_face_embedding(embedding_objs)
+        if local_file_path:
+            with open(local_file_path, "wb") as local_file:
+                local_file.write(normalized_image_data)
+    except Exception as exc:
         if temporary_file_path and os.path.exists(temporary_file_path):
             os.remove(temporary_file_path)
         if local_file_path and os.path.exists(local_file_path):
             os.remove(local_file_path)
-        raise HTTPException(status_code=400, detail="No face detected in the image.")
+        detail = str(exc) if isinstance(exc, FaceImageError) else "No face detected in the image."
+        raise HTTPException(status_code=400, detail=detail) from None
 
     try:
         # bcrypt silently truncates at 72 bytes, so we do it explicitly

@@ -1,5 +1,7 @@
 # Gatekeeper: ทดลอง ONNX Runtime FP32
 
+Source ปัจจุบันมี [การแก้ความน่าเชื่อถือของการสแกน](GATEKEEPER_SCAN_FIXES.md) เพิ่มเติม ส่วน EXE และตัวเลข benchmark ด้านล่างเป็นผลของรุ่นก่อนแก้ ต้อง build ใหม่เพื่อรับการแก้ล่าสุด
+
 ฉบับแก้การรอภาพแรกหลังเปิดหน้าต่าง: [Camera startup](GATEKEEPER_CAMERA_START.md) ใช้ EXE ที่ `gatekeeper/dist/onnx-camera-fast/SmartGatekeeper.exe` โดยคง ONNX FP32 ชุดเดียวกัน
 
 ## โครงสร้างที่คงเดิม
@@ -18,7 +20,7 @@ ONNX SHA-256: `5237cabc7ad9be84c66eb3c608ef0303c91d828f42456530fc579b9388d3c0f0`
 
 การเตรียมภาพตรงกับ `src/data_io/functional.py` ของต้นฉบับ: BGR uint8 80×80 → NCHW FP32 ช่วง 0–255 **ไม่หาร 255 และไม่สลับเป็น RGB** กราฟรวม Softmax เดิมไว้แล้ว คะแนนคนจริงยังอยู่ index 1
 
-กล้องและ Haar Cascade, crop ขยาย 2.7 เท่า, เก็บ 5 ตัวอย่างต้องผ่าน 4, threshold 0.72, motion score 2.0, ช่วงเก็บตัวอย่าง 0.12 วินาที และ UI/cooldown คงเดิม รวมถึงการลงทะเบียนกล้อง Device Credential, Facenet บน Backend, Booking/Guest/Ban และการ commit ประวัติก่อนอนุญาต
+ในการทดลอง ONNX ครั้งแรกใช้ Haar Cascade และ motion จากพิกเซล ปัจจุบัน source เปลี่ยนเป็น detector ของต้นทาง เก็บภาพใหม่ครบ 5 ภายใน 3 วินาที และใช้ optical flow ตามรายละเอียดในเอกสารการแก้สแกน เกณฑ์ผ่าน 4 จาก 5 ภาพที่คะแนน 0.72, Device Credential, Facenet, Booking/Guest/Ban และการ commit ประวัติก่อนอนุญาตยังคงเดิม
 
 ค่าเริ่มต้นของ source และ EXE เป็น ONNX CPU Runtime โหลดโมเดลครั้งเดียว กำหนด 2 inference threads และ 1 inter-op thread ระบบตรวจ hash/manifest/ชนิดข้อมูล/shape และผล probability หากโมเดลหรือ runtime ไม่พร้อม จะขึ้น MODEL ERROR และไม่เปิดข้าม Liveness ไม่มี fallback ไป PyTorch อัตโนมัติ
 

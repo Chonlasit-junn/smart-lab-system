@@ -3,6 +3,22 @@ import test from 'node:test';
 import { registerLocales } from '../src/utils/locales.js';
 import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil, shouldShowRegistrationOtpControls } from '../src/utils/registrationOtp.js';
 
+test('face errors are localized without sending registration back to the OTP step', () => {
+  for (const t of Object.values(registerLocales)) {
+    for (const [detail, key] of [
+      ['No face detected in the image.', 'faceNotDetected'],
+      ['Exactly one face is required.', 'faceSinglePerson'],
+      ['Face is too small. Please move closer to the camera.', 'faceTooSmall'],
+    ]) {
+      const error = { response: { data: { detail } } };
+      assert.ok(t[key]);
+      assert.equal(otpErrorMessage(error, t, 'fallback'), t[key]);
+      assert.equal(isOtpError(error), false);
+      assert.equal(requiresNewOtp(error), false);
+    }
+  }
+});
+
 test('OTP deadlines use remaining server durations, not a client/server clock comparison', () => {
   assert.deepEqual(otpDeadlines({ expires_in_seconds: 590, retry_after_seconds: 50 }, 1000), {
     expiresAt: 591000, resendAt: 51000,

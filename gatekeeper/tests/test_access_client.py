@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 import requests
 
-from access_client import DENIAL_MESSAGES, ScanClient, verify_scan
+from access_client import DENIAL_MESSAGES, ScanClient, verify_scan, denial_title
 
 
 def response(status, payload):
@@ -17,6 +17,24 @@ def response(status, payload):
 
 
 class AccessClientTests(unittest.TestCase):
+    def test_diagnostics_distinguish_retry_service_failure_and_access_policy(self):
+        for code, title in (
+            ("liveness_insufficient_samples", "PLEASE TRY AGAIN"),
+            ("liveness_face_changed", "PLEASE TRY AGAIN"),
+            ("face_not_detected", "PLEASE TRY AGAIN"),
+            ("face_too_small", "PLEASE TRY AGAIN"),
+            ("scan_history_unavailable", "SYSTEM UNAVAILABLE"),
+            ("booking_required", "ACCESS DENIED ✗"),
+            ("guest_approval_required", "ACCESS DENIED ✗"),
+            ("user_banned", "ACCESS DENIED ✗"),
+            ("exactly_one_face_required", "ACCESS DENIED ✗"),
+        ):
+            with self.subTest(code=code):
+                accepted, detail, _ = self.verify(response(403, {"detail": {"code": code}}))
+                self.assertFalse(accepted)
+                self.assertEqual(detail, DENIAL_MESSAGES[code])
+                self.assertEqual(denial_title(detail), title)
+
     def setUp(self):
         self.registration = {
             "device_id": "gatekeeper-client-test", "device_token": "synthetic-token",

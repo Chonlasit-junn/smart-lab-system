@@ -12,9 +12,9 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 
 def samples():
     result = []
-    # Upstream demo attack images include a phone display that the kiosk's Haar
-    # gate may not admit. Use the original RetinaFace boxes for these fixtures
-    # to exercise the anti-spoof model itself, without changing kiosk detection.
+    # Fixed original detector/crop fixtures preserve the ONNX conversion
+    # baseline. These exercise model parity, not the current capture policy;
+    # current end-to-end detection has separate face_capture regressions.
     detector_dir = BASE_DIR / "Silent-Face-Anti-Spoofing/resources/detection_model"
     detector = cv2.dnn.readNetFromCaffe(
         str(detector_dir / "deploy.prototxt"), str(detector_dir / "Widerface-RetinaFace.caffemodel"),

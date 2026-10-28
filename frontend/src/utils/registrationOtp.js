@@ -11,6 +11,12 @@ const errorKeys = {
 
 export function otpErrorMessage(error, translations, fallback) {
   const detail = error?.response?.data?.detail;
+  const faceErrors = {
+    'No face detected in the image.': 'faceNotDetected',
+    'Exactly one face is required.': 'faceSinglePerson',
+    'Face is too small. Please move closer to the camera.': 'faceTooSmall',
+  };
+  if (Object.hasOwn(faceErrors, detail)) return translations[faceErrors[detail]] || fallback;
   if (detail === 'Password must be 8 or more characters and at most 72 UTF-8 bytes.') return translations.passwordInvalid;
   const key = Object.hasOwn(errorKeys, detail) ? errorKeys[detail] : null;
   return key ? translations[key] : typeof detail === 'string' ? detail : fallback;

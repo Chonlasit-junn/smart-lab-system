@@ -16,10 +16,13 @@ DENIAL_MESSAGES = {
     "booking_required": "ไม่มีรายการจอง Lab นี้ในช่วงเวลาปัจจุบัน",
     "lab_unavailable": "Lab นี้ยังไม่เปิดให้เข้าใช้งาน กรุณาติดต่อผู้ดูแล",
     "liveness_no_motion": "กรุณาขยับศีรษะเล็กน้อยแล้วลองใหม่",
+    "liveness_insufficient_samples": "เก็บภาพใบหน้าได้ไม่ครบ กรุณาอยู่ในกรอบและมองกล้องจนตรวจเสร็จ",
+    "liveness_face_changed": "ใบหน้าเคลื่อนออกจากกรอบระหว่างตรวจ กรุณาอยู่ในกรอบแล้วลองใหม่",
     "liveness_failed": "ไม่ผ่านการตรวจว่าเป็นบุคคลจริง",
     "invalid_liveness_score": "ผลตรวจคนจริงไม่ถูกต้อง กรุณาลองใหม่",
     "face_not_recognized": "ไม่พบใบหน้าที่ตรงกับผู้ใช้ที่ลงทะเบียน",
     "face_not_detected": "ตรวจไม่พบใบหน้า กรุณาหันหน้าเข้ากล้องแล้วลองใหม่",
+    "face_too_small": "ใบหน้าเล็กเกินไป กรุณาขยับเข้าใกล้กล้องแล้วลองใหม่",
     "exactly_one_face_required": "กรุณาสแกนใบหน้าทีละคน",
     "invalid_face_image": "ภาพใบหน้าไม่ถูกต้อง กรุณาลองใหม่",
     "face_image_too_large": "ภาพใบหน้ามีขนาดใหญ่เกินกำหนด",
@@ -27,6 +30,24 @@ DENIAL_MESSAGES = {
     "scan_history_unavailable": "บันทึกประวัติการสแกนไม่ได้ กรุณาติดต่อผู้ดูแล",
     "legacy_scan_disabled": "กรุณาอัปเดตโปรแกรม Gatekeeper",
 }
+
+
+class ScanDetail(str):
+    """Keep the existing text interface while carrying a safe UI category."""
+    def __new__(cls, text, code):
+        result = super().__new__(cls, text)
+        result.code = code
+        return result
+
+
+def denial_title(detail):
+    code = getattr(detail, "code", "")
+    if code in {"face_service_busy", "face_service_unavailable", "scan_history_unavailable", "connection_failed"}:
+        return "SYSTEM UNAVAILABLE"
+    if code in {"liveness_no_motion", "liveness_insufficient_samples", "liveness_face_changed",
+                "face_not_detected", "face_too_small", "face_not_recognized"}:
+        return "PLEASE TRY AGAIN"
+    return "ACCESS DENIED ✗"
 
 
 class ScanClient:
@@ -95,7 +116,7 @@ def verify_scan(
     try:
         response = client.post(f"{backend_url}/gatekeeper/identify", **request)
     except requests.RequestException:
-        return False, "เชื่อมต่อ Backend ไม่ได้ — ยืนยันการบันทึกประวัติไม่ได้"
+        return False, ScanDetail("เชื่อมต่อ Backend ไม่ได้ — ยืนยันการบันทึกประวัติไม่ได้", "connection_failed")
     try:
         payload = response.json()
     except ValueError:
@@ -119,7 +140,8 @@ def verify_scan(
 
     detail = payload.get("detail")
     if isinstance(detail, dict):
-        return False, DENIAL_MESSAGES.get(detail.get("code"), "ระบบไม่อนุญาตให้เข้าห้อง กรุณาติดต่อผู้ดูแล")
+        code = detail.get("code")
+        return False, ScanDetail(DENIAL_MESSAGES.get(code, "ระบบไม่อนุญาตให้เข้าห้อง กรุณาติดต่อผู้ดูแล"), code)
     if isinstance(detail, str) and detail.strip():
         return False, detail[:250]
     return False, "ระบบไม่อนุญาตให้เข้าห้อง กรุณาติดต่อผู้ดูแล"

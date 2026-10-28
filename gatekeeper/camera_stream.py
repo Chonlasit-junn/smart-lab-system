@@ -174,7 +174,8 @@ class CameraStream:
             self._discovering = False
 
     def _publish(self, frame, generation):
-        frame = cv2.flip(frame, 1)
+        # Recognition receives raw orientation; only the UI preview is mirrored.
+        frame = frame.copy()
         frame.flags.writeable = False
         with self._lock:
             if generation == self._generation and not self._stop.is_set():

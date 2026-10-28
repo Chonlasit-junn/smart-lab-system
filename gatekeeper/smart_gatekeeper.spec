@@ -13,6 +13,8 @@ ort_notices = collect_data_files("onnxruntime", includes=["LICENSE", "ThirdParty
 cv2_data = os.path.dirname(cv2.__file__)
 model_root = 'Silent-Face-Anti-Spoofing'
 runtime_data = [
+    (os.path.join(model_root, 'resources', 'detection_model', 'deploy.prototxt'), os.path.join(model_root, 'resources', 'detection_model')),
+    (os.path.join(model_root, 'resources', 'detection_model', 'Widerface-RetinaFace.caffemodel'), os.path.join(model_root, 'resources', 'detection_model')),
     (os.path.join(model_root, 'resources', 'anti_spoof_models', '2.7_80x80_MiniFASNetV2.fp32.onnx'), os.path.join(model_root, 'resources', 'anti_spoof_models')),
     (os.path.join(model_root, 'resources', 'anti_spoof_models', '2.7_80x80_MiniFASNetV2.fp32.json'), os.path.join(model_root, 'resources', 'anti_spoof_models')),
     (os.path.join(model_root, 'LICENSE'), model_root),
