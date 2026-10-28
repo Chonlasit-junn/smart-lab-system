@@ -1,0 +1,1352 @@
+{
+  "scope": "CPU FP32 parity/performance; public demo images and synthetic inputs only; no camera/API/DB",
+  "threads": 2,
+  "runs_per_backend": 3,
+  "iterations_per_run": 200,
+  "samples": 50,
+  "max_absolute_error": 3.516674041748047e-06,
+  "sequences": 100,
+  "accepted_sequences": 31,
+  "all_decisions_match": true,
+  "summary": {
+    "pytorch": {
+      "cold_import_and_model_ms": 13507.049499999994,
+      "median_predict_ms": 49.22404999979335,
+      "p95_predict_ms": 68.57209999907354,
+      "cpu_ms_per_predict": 51.484375,
+      "installed_package_bytes": 1059265676,
+      "memory": {
+        "working_set_bytes": 222900224,
+        "peak_working_set_bytes": 222932992,
+        "private_bytes": 289775616
+      }
+    },
+    "onnx": {
+      "cold_import_and_model_ms": 1720.875299999534,
+      "median_predict_ms": 6.020099998750084,
+      "p95_predict_ms": 8.95940000009432,
+      "cpu_ms_per_predict": 11.328125,
+      "installed_package_bytes": 43377490,
+      "memory": {
+        "working_set_bytes": 76070912,
+        "peak_working_set_bytes": 76070912,
+        "private_bytes": 87166976
+      }
+    }
+  },
+  "raw_measurements": [
+    {
+      "backend": "pytorch",
+      "version": "2.1.2+cpu",
+      "iterations": 200,
+      "cold_import_and_model_ms": 15056.356900000537,
+      "median_predict_ms": 49.22404999979335,
+      "p95_predict_ms": 81.66069999970205,
+      "cpu_ms_per_predict": 51.484375,
+      "memory": {
+        "working_set_bytes": 222482432,
+        "peak_working_set_bytes": 222932992,
+        "private_bytes": 289689600
+      },
+      "installed_package_bytes": 1059265676,
+      "torch_loaded": true
+    },
+    {
+      "backend": "onnx",
+      "version": "1.23.2",
+      "iterations": 200,
+      "cold_import_and_model_ms": 1720.875299999534,
+      "median_predict_ms": 6.020099998750084,
+      "p95_predict_ms": 8.95940000009432,
+      "cpu_ms_per_predict": 11.328125,
+      "memory": {
+        "working_set_bytes": 75911168,
+        "peak_working_set_bytes": 75911168,
+        "private_bytes": 87166976
+      },
+      "installed_package_bytes": 43377490,
+      "torch_loaded": false
+    },
+    {
+      "backend": "onnx",
+      "version": "1.23.2",
+      "iterations": 200,
+      "cold_import_and_model_ms": 1844.5019999999204,
+      "median_predict_ms": 6.831800000327348,
+      "p95_predict_ms": 11.42700000127661,
+      "cpu_ms_per_predict": 13.125,
+      "memory": {
+        "working_set_bytes": 76070912,
+        "peak_working_set_bytes": 76070912,
+        "private_bytes": 86659072
+      },
+      "installed_package_bytes": 43377490,
+      "torch_loaded": false
+    },
+    {
+      "backend": "pytorch",
+      "version": "2.1.2+cpu",
+      "iterations": 200,
+      "cold_import_and_model_ms": 13507.049499999994,
+      "median_predict_ms": 50.42879999928118,
+      "p95_predict_ms": 68.57209999907354,
+      "cpu_ms_per_predict": 54.21875,
+      "memory": {
+        "working_set_bytes": 222900224,
+        "peak_working_set_bytes": 222908416,
+        "private_bytes": 289775616
+      },
+      "installed_package_bytes": 1059265676,
+      "torch_loaded": true
+    },
+    {
+      "backend": "pytorch",
+      "version": "2.1.2+cpu",
+      "iterations": 200,
+      "cold_import_and_model_ms": 8248.242100000425,
+      "median_predict_ms": 31.63605000008829,
+      "p95_predict_ms": 36.43059999922116,
+      "cpu_ms_per_predict": 34.53125,
+      "memory": {
+        "working_set_bytes": 223571968,
+        "peak_working_set_bytes": 223580160,
+        "private_bytes": 290033664
+      },
+      "installed_package_bytes": 1059265676,
+      "torch_loaded": true
+    },
+    {
+      "backend": "onnx",
+      "version": "1.23.2",
+      "iterations": 200,
+      "cold_import_and_model_ms": 693.2164000008925,
+      "median_predict_ms": 2.9908500000601634,
+      "p95_predict_ms": 3.742299999430543,
+      "cpu_ms_per_predict": 6.25,
+      "memory": {
+        "working_set_bytes": 76607488,
+        "peak_working_set_bytes": 76607488,
+        "private_bytes": 87379968
+      },
+      "installed_package_bytes": 43377490,
+      "torch_loaded": false
+    }
+  ],
+  "frame_comparison": [
+    {
+      "sample": "image_T1.jpg:original",
+      "pytorch_real_score": 0.9909670948982239,
+      "onnx_real_score": 0.9909670948982239,
+      "max_absolute_error": 1.30385160446167e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_T1.jpg:flip",
+      "pytorch_real_score": 0.9930435419082642,
+      "onnx_real_score": 0.9930435419082642,
+      "max_absolute_error": 2.3748725652694702e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_T1.jpg:dark",
+      "pytorch_real_score": 0.9968530535697937,
+      "onnx_real_score": 0.9968530535697937,
+      "max_absolute_error": 2.3515895009040833e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_T1.jpg:bright",
+      "pytorch_real_score": 0.8107894659042358,
+      "onnx_real_score": 0.8107902407646179,
+      "max_absolute_error": 8.344650268554688e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_T1.jpg:blur",
+      "pytorch_real_score": 0.0312536284327507,
+      "onnx_real_score": 0.03125371038913727,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_T1.jpg:shift",
+      "pytorch_real_score": 0.962204098701477,
+      "onnx_real_score": 0.962204098701477,
+      "max_absolute_error": 4.842877388000488e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_T1.jpg:jpeg",
+      "pytorch_real_score": 0.9987314343452454,
+      "onnx_real_score": 0.9987315535545349,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F1.jpg:original",
+      "pytorch_real_score": 0.007168639916926622,
+      "onnx_real_score": 0.007168647367507219,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F1.jpg:flip",
+      "pytorch_real_score": 0.014700633473694324,
+      "onnx_real_score": 0.014700700528919697,
+      "max_absolute_error": 6.258487701416016e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F1.jpg:dark",
+      "pytorch_real_score": 0.016911225393414497,
+      "onnx_real_score": 0.01691116765141487,
+      "max_absolute_error": 6.556510925292969e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F1.jpg:bright",
+      "pytorch_real_score": 0.01142087485641241,
+      "onnx_real_score": 0.01142087485641241,
+      "max_absolute_error": 4.76837158203125e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F1.jpg:blur",
+      "pytorch_real_score": 0.00806934479624033,
+      "onnx_real_score": 0.008069328963756561,
+      "max_absolute_error": 3.5762786865234375e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F1.jpg:shift",
+      "pytorch_real_score": 0.02067001350224018,
+      "onnx_real_score": 0.020670000463724136,
+      "max_absolute_error": 8.940696716308594e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F1.jpg:jpeg",
+      "pytorch_real_score": 0.05171922594308853,
+      "onnx_real_score": 0.05171922594308853,
+      "max_absolute_error": 2.2351741790771484e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F2.jpg:original",
+      "pytorch_real_score": 0.0017390380380675197,
+      "onnx_real_score": 0.0017390430439263582,
+      "max_absolute_error": 5.005858838558197e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F2.jpg:flip",
+      "pytorch_real_score": 0.0419413223862648,
+      "onnx_real_score": 0.041941460222005844,
+      "max_absolute_error": 1.3783574104309082e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F2.jpg:dark",
+      "pytorch_real_score": 0.0007423482020385563,
+      "onnx_real_score": 0.0007423492497764528,
+      "max_absolute_error": 1.0477378964424133e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F2.jpg:bright",
+      "pytorch_real_score": 0.007370953913778067,
+      "onnx_real_score": 0.007370939943939447,
+      "max_absolute_error": 1.3969838619232178e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F2.jpg:blur",
+      "pytorch_real_score": 0.0007120451773516834,
+      "onnx_real_score": 0.0007120444788597524,
+      "max_absolute_error": 6.984919309616089e-10,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F2.jpg:shift",
+      "pytorch_real_score": 0.00029901275411248207,
+      "onnx_real_score": 0.0002990130160469562,
+      "max_absolute_error": 2.6193447411060333e-10,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "image_F2.jpg:jpeg",
+      "pytorch_real_score": 0.008698671124875546,
+      "onnx_real_score": 0.008698641322553158,
+      "max_absolute_error": 2.9802322387695312e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "solid:0",
+      "pytorch_real_score": 0.007766960188746452,
+      "onnx_real_score": 0.007766967639327049,
+      "max_absolute_error": 7.450580596923828e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "solid:64",
+      "pytorch_real_score": 0.7612316012382507,
+      "onnx_real_score": 0.7612307667732239,
+      "max_absolute_error": 8.344650268554688e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "solid:128",
+      "pytorch_real_score": 0.24753692746162415,
+      "onnx_real_score": 0.24753381311893463,
+      "max_absolute_error": 3.516674041748047e-06,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "solid:255",
+      "pytorch_real_score": 0.30437904596328735,
+      "onnx_real_score": 0.304379940032959,
+      "max_absolute_error": 9.5367431640625e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "gradient",
+      "pytorch_real_score": 0.013419886119663715,
+      "onnx_real_score": 0.013419981114566326,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:0",
+      "pytorch_real_score": 0.993817150592804,
+      "onnx_real_score": 0.993817150592804,
+      "max_absolute_error": 3.725290298461914e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:1",
+      "pytorch_real_score": 0.9957118034362793,
+      "onnx_real_score": 0.9957118034362793,
+      "max_absolute_error": 5.587935447692871e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:2",
+      "pytorch_real_score": 0.9929149150848389,
+      "onnx_real_score": 0.9929150342941284,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:3",
+      "pytorch_real_score": 0.9957267045974731,
+      "onnx_real_score": 0.9957267045974731,
+      "max_absolute_error": 7.916241884231567e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:4",
+      "pytorch_real_score": 0.9933621883392334,
+      "onnx_real_score": 0.9933621883392334,
+      "max_absolute_error": 7.916241884231567e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:5",
+      "pytorch_real_score": 0.9928406476974487,
+      "onnx_real_score": 0.9928406476974487,
+      "max_absolute_error": 5.122274160385132e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:6",
+      "pytorch_real_score": 0.9929251670837402,
+      "onnx_real_score": 0.9929251670837402,
+      "max_absolute_error": 1.4435499906539917e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:7",
+      "pytorch_real_score": 0.9948378205299377,
+      "onnx_real_score": 0.9948378205299377,
+      "max_absolute_error": 6.05359673500061e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:8",
+      "pytorch_real_score": 0.9941746592521667,
+      "onnx_real_score": 0.9941746592521667,
+      "max_absolute_error": 1.1641532182693481e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:9",
+      "pytorch_real_score": 0.9951016306877136,
+      "onnx_real_score": 0.9951016306877136,
+      "max_absolute_error": 1.234002411365509e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:10",
+      "pytorch_real_score": 0.9944161176681519,
+      "onnx_real_score": 0.9944161176681519,
+      "max_absolute_error": 4.6566128730773926e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:11",
+      "pytorch_real_score": 0.9948016405105591,
+      "onnx_real_score": 0.9948016405105591,
+      "max_absolute_error": 2.3283064365386963e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:12",
+      "pytorch_real_score": 0.9905127882957458,
+      "onnx_real_score": 0.9905127882957458,
+      "max_absolute_error": 1.210719347000122e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:13",
+      "pytorch_real_score": 0.9895668625831604,
+      "onnx_real_score": 0.9895668625831604,
+      "max_absolute_error": 2.7008354663848877e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:14",
+      "pytorch_real_score": 0.9934386610984802,
+      "onnx_real_score": 0.9934386610984802,
+      "max_absolute_error": 1.30385160446167e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:15",
+      "pytorch_real_score": 0.992345929145813,
+      "onnx_real_score": 0.992345929145813,
+      "max_absolute_error": 1.30385160446167e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:16",
+      "pytorch_real_score": 0.9935321807861328,
+      "onnx_real_score": 0.9935321807861328,
+      "max_absolute_error": 9.778887033462524e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:17",
+      "pytorch_real_score": 0.9938216209411621,
+      "onnx_real_score": 0.9938216209411621,
+      "max_absolute_error": 1.1059455573558807e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:18",
+      "pytorch_real_score": 0.9948192238807678,
+      "onnx_real_score": 0.9948192238807678,
+      "max_absolute_error": 7.683411240577698e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:19",
+      "pytorch_real_score": 0.9972118735313416,
+      "onnx_real_score": 0.9972118735313416,
+      "max_absolute_error": 3.259629011154175e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:20",
+      "pytorch_real_score": 0.9928712248802185,
+      "onnx_real_score": 0.9928712248802185,
+      "max_absolute_error": 8.149072527885437e-10,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:21",
+      "pytorch_real_score": 0.9974798560142517,
+      "onnx_real_score": 0.9974798560142517,
+      "max_absolute_error": 7.2177499532699585e-09,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:22",
+      "pytorch_real_score": 0.9963964819908142,
+      "onnx_real_score": 0.9963964819908142,
+      "max_absolute_error": 1.0943040251731873e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    },
+    {
+      "sample": "noise:23",
+      "pytorch_real_score": 0.9925129413604736,
+      "onnx_real_score": 0.9925129413604736,
+      "max_absolute_error": 1.909211277961731e-08,
+      "same_class": true,
+      "same_threshold_decision": true
+    }
+  ],
+  "sequence_comparison": [
+    {
+      "sample": "image_T1.jpg:original",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:original",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:flip",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:flip",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:dark",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:dark",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:bright",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:bright",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:blur",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:blur",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:shift",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:shift",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:jpeg",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_T1.jpg:jpeg",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:original",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:original",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:flip",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:flip",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:dark",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:dark",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:bright",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:bright",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:blur",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:blur",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:shift",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:shift",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:jpeg",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F1.jpg:jpeg",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:original",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:original",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:flip",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:flip",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:dark",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:dark",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:bright",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:bright",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:blur",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:blur",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:shift",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:shift",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:jpeg",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "image_F2.jpg:jpeg",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "solid:0",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "solid:0",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "solid:64",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "solid:64",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "solid:128",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "solid:128",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "solid:255",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "solid:255",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "gradient",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "gradient",
+      "motion_score": 3.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:0",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:0",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:1",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:1",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:2",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:2",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:3",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:3",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:4",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:4",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:5",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:5",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:6",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:6",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:7",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:7",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:8",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:8",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:9",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:9",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:10",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:10",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:11",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:11",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:12",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:12",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:13",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:13",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:14",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:14",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:15",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:15",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:16",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:16",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:17",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:17",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:18",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:18",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:19",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:19",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:20",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:20",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:21",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:21",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:22",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:22",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:23",
+      "motion_score": 0.0,
+      "pytorch_accepted": false,
+      "onnx_accepted": false,
+      "same_decision": true,
+      "same_reason": true
+    },
+    {
+      "sample": "noise:23",
+      "motion_score": 3.0,
+      "pytorch_accepted": true,
+      "onnx_accepted": true,
+      "same_decision": true,
+      "same_reason": true
+    }
+  ],
+  "manifest": {
+    "model": "2.7_80x80_MiniFASNetV2",
+    "precision": "FP32",
+    "opset": 17,
+    "preprocessing": "BGR_NCHW_FLOAT32_0_255",
+    "real_class_index": 1,
+    "output": "softmax_probabilities",
+    "source": "2.7_80x80_MiniFASNetV2.pth",
+    "source_sha256": "a5eb02e1843f19b5386b953cc4c9f011c3f985d0ee2bb9819eea9a142099bec0",
+    "onnx_sha256": "5237cabc7ad9be84c66eb3c608ef0303c91d828f42456530fc579b9388d3c0f0",
+    "torch_version": "2.1.2+cpu",
+    "onnx_version": "1.17.0"
+  }
+}

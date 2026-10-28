@@ -16,11 +16,12 @@
 ### ขอบเขตปัจจุบันที่ควรรู้
 
 - Gatekeeper ใช้ MiniFASNetV2 ตรวจว่าใบหน้าเป็นคนจริงหรือภาพปลอม แล้วส่งภาพไปที่ `/gatekeeper/identify` เพื่อให้ Backend ระบุ User จาก Face Embedding
-- `/gatekeeper/identify` เป็นขั้นตอนยืนยันตัวตนและยังไม่สร้าง `LabAccessLog`; Agent ยังคงเป็นเจ้าของ Machine Session, device identity และ heartbeat
-- `/gatekeeper/scan` เดิมยังคงไว้เพื่อความเข้ากันได้กับการทดสอบเก่า และไม่ควรใช้เป็น flow หลักในระบบจริง
+- `/gatekeeper/identify` ตรวจการอนุมัติ Guest, Ban และ Booking ก่อนอนุญาต พร้อมบันทึก `gatekeeper_scan_logs`; Agent ยังคงเป็นเจ้าของ Machine Session และ heartbeat
+- ต้องรัน Migration 017 ด้วยตนเองก่อน deploy Backend ชุดนี้ ดู [Gatekeeper access](docs/GATEKEEPER_ACCESS.md)
+- `/gatekeeper/scan` เดิมตอบ HTTP 410 เพื่อป้องกันการข้ามการตรวจใบหน้าและสิทธิ์
 - Agent ไม่ใช่ Machine Learning แต่ใช้ process name, active-window title และรายการ blacklist จาก Backend
 - การสมัครสมาชิกและการจับคู่ใบหน้าใช้ DeepFace/Facenet บน Backend ส่วนเครื่องสแกนใช้ CPU สำหรับ Liveness เท่านั้น
-- ปุ่ม `Force: Real Face` และ `Force: Spoof / Fake` ใช้ทดสอบ UI ของ Gatekeeper เท่านั้น และไม่เขียนข้อมูลลง Database
+- ปุ่ม DEV MOCK ปิดโดยปริยาย เปิดด้วย `SMART_GATEKEEPER_DEV_MOCK=1` เฉพาะเครื่องทดสอบ และไม่แสดงผลจำลองเป็นการอนุญาตเข้าห้องจริง
 
 ## การเตรียมระบบ
 
@@ -126,62 +127,44 @@ pip install -r requirements.txt
 python smart_gatekeeper.py
 ```
 
-Gatekeeper ใช้ CPU inference และ requirements นี้เลือก PyTorch แบบ CPU-only เพื่อไม่ติดตั้ง CUDA runtime ที่ไม่จำเป็นกับเครื่องสแกนหน้า หากต้อง build executable ให้ติดตั้ง requirements-build.txt แล้วรัน pyinstaller --clean --noconfirm smart_gatekeeper.spec
+Gatekeeper ใช้ ONNX Runtime บน CPU กับโมเดล Silent-Face MiniFASNetV2 แบบ FP32 เดิม ไฟล์ `.onnx` และ `.json` ต้องอยู่คู่กันในโฟลเดอร์โมเดล ไม่ต้องติดตั้ง PyTorch สำหรับการใช้งานปกติ หากต้อง build executable ให้ติดตั้ง requirements-build.txt แล้วรัน pyinstaller --noconfirm smart_gatekeeper.spec ดูการแปลงโมเดล การเทียบผลกับ PyTorch และผลวัดใน [ONNX FP32](docs/GATEKEEPER_ONNX.md)
 
-ถ้า Backend ไม่ได้รันที่ค่าเริ่มต้น ให้ตั้งค่า URL และรหัสห้องก่อนเปิด Gatekeeper:
+เปิด Gatekeeper แล้วลงทะเบียนกล้องด้วยบัญชี Admin และเลือก Lab หากต้องกำหนด Backend เริ่มต้นสำหรับหน้าลงทะเบียน:
 
 ```powershell
 $env:SMART_LAB_API_URL = "http://127.0.0.1:8000"
-$env:SMART_LAB_CODE = "LAB01"
-# ตั้งค่าเฉพาะเมื่อ Backend กำหนด GATEKEEPER_API_KEY ไว้
-$env:SMART_LAB_GATEKEEPER_KEY = "<ค่าเดียวกับ Backend>"
 ```
 
 ผลที่คาดหวัง:
 
 1. เปิดโปรแกรมแล้วสถานะเปลี่ยนเป็น `READY TO SCAN`
-2. ใบหน้าจริงที่ผ่าน Liveness จะเข้าสู่ขั้นตอน `IDENTIFYING...` และเรียก Backend เพื่อยืนยัน User
+2. ใบหน้าจริงที่ผ่าน Liveness จะเข้าสู่ขั้นตอน `VERIFYING ACCESS...` และเรียก Backend เพื่อยืนยัน User และตรวจสิทธิ์
 3. รูปถ่าย/หน้าจอควรได้ผล `ACCESS DENIED` แต่ผลขึ้นกับแสง กล้อง และคุณภาพภาพ
 4. เปิดรูปแบบทดสอบหลายคนพร้อมกัน ควรแจ้งให้เข้าทีละคน
-5. ถ้าไม่พบ User หรือไม่ผ่านการเทียบ Face Embedding ควรได้ผล `ACCESS DENIED`
-6. ถ้า model โหลดไม่ได้ ให้ตรวจ path ของ model, เวอร์ชัน Torch และกล้องก่อน
+5. ถ้าไม่พบ User, Guest ยังไม่อนุมัติ, มี Ban หรือไม่มี Booking ที่ใช้งานได้ใน Lab นั้น ต้องได้ผล `ACCESS DENIED`
+6. ถ้า model โหลดไม่ได้ ให้ตรวจไฟล์ ONNX/manifest, ONNX Runtime และกล้องก่อน ระบบจะไม่อนุญาตโดยข้าม Liveness หรือสลับ runtime อัตโนมัติ
 
-การทดสอบปุ่ม Force เป็นเพียงการตรวจสถานะหน้าจอ ไม่ใช่การทดสอบการเขียน Database
+การทดสอบปุ่ม Force ต้องเปิด DEV MOCK ก่อน และเป็นเพียงการตรวจสถานะหน้าจอ ไม่ใช่การทดสอบการเขียน Database
 
 ### ทดสอบ API ยืนยันตัวตนของ Gatekeeper
 
-Endpoint ใหม่รับภาพจาก Scanner แล้วใช้ DeepFace/Facenet เปรียบเทียบกับ Embedding ใน `users` โดยไม่สร้าง Lab Session:
+Endpoint รับภาพจากกล้องที่ลงทะเบียน ใช้ DeepFace/Facenet เปรียบเทียบกับ Embedding ใน `users` ตรวจสิทธิ์ และบันทึกประวัติ โดยไม่สร้าง Lab Session:
 
 ```powershell
 $api = "http://127.0.0.1:8000"
 curl.exe -X POST "$api/gatekeeper/identify" `
-  -F "lab_code=LAB01" `
+  -F "device_id=<registered-camera-id>" `
+  -F "device_token=<registered-camera-token>" `
   -F "liveness_score=0.95" `
+  -F "liveness_passed=true" `
   -F "face_image=@C:\path\to\camera-frame.jpg"
 ```
 
-ผลสำเร็จควรคืน `user_id`, `user_name`, `liveness_score`, `face_distance` และ `face_distance_threshold` การสร้าง `lab_access_logs` จริงยังเกิดจาก Agent ตอนเริ่มใช้งานเครื่อง
+ผลสำเร็จคืน `access_granted: true`, `scan_id`, `booking_id`, `user_id`, `user_name` และคะแนนตรวจใบหน้า การสร้าง `lab_access_logs` ของเครื่องยังเกิดจาก Agent ตอนเริ่ม Session ประวัติกล้องอ่านผ่าน `GET /admin/gatekeeper/scans`
 
 ### API เดิมสำหรับทดสอบย้อนหลัง
 
-API นี้ต้องใช้ `email` ที่มีอยู่ใน `users` และ `lab_id` ที่มีอยู่ใน `labs`:
-
-```powershell
-$api = "http://127.0.0.1:8000"
-$body = @{
-  email = "<test-user-email>"
-  lab_id = 1 # เปลี่ยนเป็น lab id จริง
-  score = 0.95
-  is_real = $true
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post `
-  -Uri "$api/gatekeeper/scan" `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-ผลสำเร็จควรได้ `Access Granted` และมีแถวใหม่ใน `lab_access_logs` หาก `is_real = false` ควรได้ HTTP 403 และไม่เพิ่ม access log
+`POST /gatekeeper/scan` ตอบ HTTP 410 และไม่เขียนข้อมูล การส่งเพียง email กับ `is_real` ไม่สามารถอนุญาตเข้าห้องได้ ให้ใช้ `/gatekeeper/identify` ตาม flow ด้านบน
 
 ## ทดสอบ Smart Lab Agent
 

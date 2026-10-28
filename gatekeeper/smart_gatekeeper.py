@@ -6,9 +6,12 @@ import queue
 import winsound
 import cv2
 import customtkinter as ctk
-import requests
 from PIL import Image
+from access_client import ScanClient
+from camera_stream import CameraStream
+from camera_preferences import load_camera_index, save_camera_index
 from liveness_policy import evaluate_liveness
+from liveness_runtime import load_liveness
 from device_registration import DEFAULT_API_URL, load_device_registration
 from registration_dialog import GatekeeperRegistrationDialog
 
@@ -47,7 +50,7 @@ API_URL = os.getenv(
     DEFAULT_API_URL,
 ).rstrip("/")
 LAB_CODE = os.getenv("SMART_LAB_CODE", "LAB01")
-GATEKEEPER_API_KEY = os.getenv("SMART_LAB_GATEKEEPER_KEY", "")
+DEV_MOCK_ENABLED = os.getenv("SMART_GATEKEEPER_DEV_MOCK", "0") == "1"
 
 CLR = {
     "ready":    "#38bdf8",
@@ -81,14 +84,21 @@ class GatekeeperDemo(ctk.CTk):
         self._cooldown_left = 0
         self._frame_count   = 0
 
-        self._frame_queue   = queue.Queue(maxsize=1)
+        self._stop_event = threading.Event()
+        self._ui_events = queue.Queue()
+        self._workers = []
+        self._scan_client = ScanClient()
+        self._camera = None
+        self._camera_generation = 0
+        self._camera_searching = False
+        self._preview_sequence = None
+        self._preview_image = None
+        self._faces_at = 0.0
+        self.after(40, self._drain_ui_events)
         self._detect_queue  = queue.Queue(maxsize=1)
-        self._latest_frame_lock = threading.Lock()
-        self._latest_frame = None
         self._detector_lock = threading.Lock()
 
         self._last_faces    = []
-        self._last_frame_hw = (480, 640)
         self.registration = load_device_registration()
         self._scanner_started = False
         self.registration_dialog_open = False
@@ -131,8 +141,9 @@ class GatekeeperDemo(ctk.CTk):
         if required_frame is not None:
             required_frame.destroy()
         self.geometry("1024x620")
-        self._available_cameras = self._scan_cameras()
-        self._current_cam_index = CONFIG["CAMERA_INDEX"]
+        self._current_cam_index = load_camera_index(CONFIG["CAMERA_INDEX"])
+        self._remembered_camera_index = self._current_cam_index
+        self._available_cameras = {self._current_cam_index: f"Camera {self._current_cam_index}"}
         self._setup_ui()
         self._init_hardware()
 
@@ -170,16 +181,27 @@ class GatekeeperDemo(ctk.CTk):
     # UI
     # ──────────────────────────────────────────────────────────────────────
 
-    def _scan_cameras(self) -> dict:
-        """สแกนหา camera ที่ใช้งานได้ — คืน dict {index: label}"""
-        found = {}
-        for i in range(6):  # เช็ค index 0-5
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                found[i] = f"Camera {i}"
-                cap.release()
-        print(f"[Gatekeeper] found cameras: {found}")
-        return found if found else {0: "Camera 0"}
+    def _start_worker(self, target, *args):
+        self._workers = [worker for worker in self._workers if worker.is_alive()]
+        worker = threading.Thread(target=target, args=args, daemon=True)
+        self._workers.append(worker)
+        worker.start()
+
+    def _post_ui(self, callback, *args, generation=None):
+        if not self._stop_event.is_set():
+            self._ui_events.put((generation, callback, args))
+
+    def _drain_ui_events(self):
+        if self._stop_event.is_set():
+            return
+        for _ in range(32):
+            try:
+                generation, callback, args = self._ui_events.get_nowait()
+            except queue.Empty:
+                break
+            if generation is None or generation == self._camera.generation:
+                callback(*args)
+        self.after(40, self._drain_ui_events)
 
     def _setup_ui(self):
         self._build_camera_panel()
@@ -221,11 +243,10 @@ class GatekeeperDemo(ctk.CTk):
             font=ctk.CTkFont(size=12),
         ).pack(side="bottom", padx=20, pady=(0, 8), fill="x")
 
-        # camera selector — แสดงเฉพาะเมื่อมีกล้องมากกว่า 1 ตัว
-        if len(self._available_cameras) > 1:
-            self._build_camera_selector()
+        self._build_camera_selector()
 
-        self._build_dev_buttons()
+        if DEV_MOCK_ENABLED:
+            self._build_dev_buttons()
 
     def _build_camera_selector(self):
         """Dropdown สำหรับเลือกกล้อง"""
@@ -238,7 +259,7 @@ class GatekeeperDemo(ctk.CTk):
         ).pack(anchor="w", pady=(0, 4))
 
         cam_labels = list(self._available_cameras.values())
-        self._cam_var = ctk.StringVar(value=cam_labels[self._current_cam_index] if self._current_cam_index < len(cam_labels) else cam_labels[0])
+        self._cam_var = ctk.StringVar(value=self._available_cameras.get(self._current_cam_index, cam_labels[0]))
 
         self._cam_dropdown = ctk.CTkOptionMenu(
             cam_frame,
@@ -251,6 +272,11 @@ class GatekeeperDemo(ctk.CTk):
             font=ctk.CTkFont(size=12),
         )
         self._cam_dropdown.pack(fill="x")
+        self._camera_search_button = ctk.CTkButton(
+            cam_frame, text="ค้นหากล้องอื่น", height=26,
+            command=self._refresh_cameras, fg_color="#334155", hover_color="#475569",
+        )
+        self._camera_search_button.pack(fill="x", pady=(6, 0))
 
     def _build_score_bar(self):
         bar_frame = ctk.CTkFrame(self.panel, fg_color="transparent")
@@ -279,72 +305,77 @@ class GatekeeperDemo(ctk.CTk):
     # ──────────────────────────────────────────────────────────────────────
 
     def _on_camera_change(self, selected_label: str):
-        """เปลี่ยนกล้องแบบ hot-swap — release เก่า เปิดใหม่"""
-        # หา index จาก label ที่เลือก
-        new_index = next(
-            (idx for idx, label in self._available_cameras.items() if label == selected_label),
-            0
-        )
-        if new_index == self._current_cam_index:
+        if self.is_scanning:
+            self._cam_var.set(self._available_cameras[self._current_cam_index])
+            self.sub_label.configure(text="รอให้การตรวจสอบปัจจุบันเสร็จก่อนเปลี่ยนกล้อง")
             return
+        new_index = next(
+            (index for index, label in self._available_cameras.items() if label == selected_label),
+            self._current_cam_index,
+        )
+        if new_index != self._current_cam_index:
+            self._camera.select(new_index)
+            self._sync_camera()
 
-        print(f"[Gatekeeper] switching camera {self._current_cam_index} → {new_index}")
-        self._current_cam_index = new_index
+    def _sync_camera(self):
+        searching = self._camera.discovering
+        if searching != self._camera_searching:
+            self._camera_searching = searching
+            self._camera_search_button.configure(state="disabled" if searching else "normal")
+            self._cam_dropdown.configure(state="disabled" if searching else "normal")
+            if not searching and self.models_loaded and not self.in_cooldown:
+                self._reset_state()
+        available = self._camera.available
+        if available != self._available_cameras:
+            self._available_cameras = available
+            if not hasattr(self, "_cam_dropdown") and len(available) > 1:
+                self._build_camera_selector()
+            elif hasattr(self, "_cam_dropdown"):
+                self._cam_dropdown.configure(values=list(available.values()))
+        self._current_cam_index = self._camera.index
+        if hasattr(self, "_cam_var"):
+            self._cam_var.set(available.get(self._current_cam_index, "Camera 0"))
+        generation = self._camera.generation
+        if generation != self._camera_generation:
+            self._camera_generation = generation
+            self._last_faces = []
+            self._preview_sequence = None
+            if self.models_loaded and not self.in_cooldown and not searching:
+                self._reset_state()
 
-        # release กล้องเก่าแล้วเปิดใหม่ใน thread แยก
-        def _switch():
-            old_cap = self.cap
-            new_cap = cv2.VideoCapture(new_index)
-            new_cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-            new_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            new_cap.set(cv2.CAP_PROP_FPS, 30)
-            self.cap = new_cap
-            old_cap.release()
-            print(f"[Gatekeeper] camera {new_index} ready.")
+    def _refresh_cameras(self):
+        if self.is_scanning or self.in_cooldown:
+            self.sub_label.configure(text="รอให้การตรวจสอบปัจจุบันเสร็จก่อนค้นหากล้อง")
+            return
+        self._camera.request_discovery()
+        self._last_faces = []
+        self._set_status("SEARCHING CAMERAS...", CLR["warning"], "กำลังค้นหากล้องอื่น กรุณารอสักครู่")
 
-        threading.Thread(target=_switch, daemon=True).start()
+    def _remember_camera(self, generation):
+        index = self._camera.index
+        if generation != self._camera.generation:
+            return
+        if index != self._remembered_camera_index:
+            self._remembered_camera_index = index
+            try:
+                save_camera_index(index)
+            except OSError:
+                print("[Gatekeeper] could not save camera preference")
 
     def _init_hardware(self):
-        self.cap = cv2.VideoCapture(self._current_cam_index)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.cap.set(cv2.CAP_PROP_FPS, 30)
-
-        # Haar cascade path fix for PyInstaller
         haar_path = os.path.join(BASE_DIR, "cv2", "data", "haarcascade_frontalface_default.xml")
         if not os.path.exists(haar_path):
             haar_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        print(f"[DEBUG] haar_path   = {haar_path}")
-        print(f"[DEBUG] haar exists = {os.path.exists(haar_path)}")
         self.detector = cv2.CascadeClassifier(haar_path)
-
-        threading.Thread(target=self._capture_loop, daemon=True).start()
-        threading.Thread(target=self._detect_loop,  daemon=True).start()
-        threading.Thread(target=self._load_models,  daemon=True).start()
-
+        self._camera = CameraStream(self._current_cam_index, stop_event=self._stop_event)
+        self._camera.start()
+        self._start_worker(self._detect_loop)
+        self._start_worker(self._load_models)
         self._display_loop()
 
-    def _capture_loop(self):
-        while True:
-            ret, frame = self.cap.read()
-            if not ret:
-                time.sleep(0.05)
-                continue
-            frame = cv2.flip(frame, 1)
-            with self._latest_frame_lock:
-                self._latest_frame = frame.copy()
-            try:
-                self._frame_queue.put_nowait(frame)
-            except queue.Full:
-                try:
-                    self._frame_queue.get_nowait()
-                except queue.Empty:
-                    pass
-                self._frame_queue.put_nowait(frame)
-
     def _get_latest_frame(self):
-        with self._latest_frame_lock:
-            return self._latest_frame.copy() if self._latest_frame is not None else None
+        packet = self._camera.snapshot()
+        return packet.frame if packet is not None else None
 
     def _detect_faces(self, frame):
         height, width = frame.shape[:2]
@@ -394,74 +425,52 @@ class GatekeeperDemo(ctk.CTk):
         return float(cv2.absdiff(previous_gray, current_gray).mean())
 
     def _detect_loop(self):
-        while True:
-            frame = self._detect_queue.get()
-            h, w  = frame.shape[:2]
+        while not self._stop_event.is_set():
+            try:
+                packet = self._detect_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            if packet.generation != self._camera.generation or time.monotonic() - packet.captured_at > 1.0:
+                continue
+            faces = self._detect_faces(packet.frame)
+            self._post_ui(self._accept_faces, packet, faces, generation=packet.generation)
 
-            self._last_faces    = self._detect_faces(frame)
-            self._last_frame_hw = (h, w)
+    def _accept_faces(self, packet, faces):
+        if not self.is_scanning and time.monotonic() - packet.captured_at <= 1.0:
+            self._last_faces = faces
+            self._faces_at = packet.captured_at
 
     def _load_models(self):
         try:
-            repo_path  = os.path.join(BASE_DIR, "Silent-Face-Anti-Spoofing")
-            model_file = os.path.join(repo_path, "resources", "anti_spoof_models", "2.7_80x80_MiniFASNetV2.pth")
-
-            print(f"[DEBUG] BASE_DIR     = {BASE_DIR}")
-            print(f"[DEBUG] repo_path    = {repo_path}")
-            print(f"[DEBUG] repo exists  = {os.path.exists(repo_path)}")
-            print(f"[DEBUG] model file   = {model_file}")
-            print(f"[DEBUG] model exists = {os.path.exists(model_file)}")
-
-            if not os.path.exists(repo_path):
-                raise FileNotFoundError(f"Folder not found: {repo_path}")
-            if not os.path.exists(model_file):
-                raise FileNotFoundError(f"Model not found: {model_file}")
-
-            sys.path.insert(0, repo_path)
-            self.model_path = model_file
-
-            try:
-                import torch
-                try:
-                    torch_threads = max(1, int(os.getenv("SMART_GATEKEEPER_TORCH_THREADS", "2")))
-                except ValueError:
-                    torch_threads = 2
-                torch.set_num_threads(torch_threads)
-                try:
-                    torch.set_num_interop_threads(1)
-                except RuntimeError:
-                    pass
-                print(f"[DEBUG] torch OK, CUDA={torch.cuda.is_available()}")
-            except Exception as te:
-                print(f"[DEBUG] torch warning: {te}")
-
-            from src.anti_spoof_predict import AntiSpoofPredict
-            orig = os.getcwd()
-            os.chdir(repo_path)
-            self.anti_spoof = AntiSpoofPredict(device_id=None)
-            os.chdir(orig)
-            self.anti_spoof.load_model(self.model_path)
-
-            print("[Gatekeeper] model loaded OK.")
-            self.models_loaded = True
-            self.after(0, self._reset_state)
+            self.anti_spoof, self.model_path = load_liveness(BASE_DIR)
+            print("[Gatekeeper] liveness runtime loaded OK.")
+            self._post_ui(self._models_ready)
 
         except Exception as e:
             print(f"[Gatekeeper] model load FAILED: {e}")
             err_msg = str(e)[:60]
-            self.after(0, lambda msg=err_msg: self._set_status("MODEL ERROR", CLR["denied"], msg))
+            self._post_ui(self._set_status, "MODEL ERROR", CLR["denied"], err_msg)
 
     # ──────────────────────────────────────────────────────────────────────
     # DISPLAY LOOP (main thread)
     # ──────────────────────────────────────────────────────────────────────
 
+    def _models_ready(self):
+        self.models_loaded = True
+        self._reset_state()
+
     def _display_loop(self):
-        try:
-            frame = self._frame_queue.get_nowait()
-        except queue.Empty:
+        if self._stop_event.is_set():
+            return
+        self._sync_camera()
+        packet = self._camera.snapshot()
+        if packet is None or packet.sequence == self._preview_sequence:
             self.after(CONFIG["DISPLAY_INTERVAL_MS"], self._display_loop)
             return
-
+        self._preview_sequence = packet.sequence
+        self._remember_camera(packet.generation)
+        # Only the preview is mutable; AI and uploads share raw pixels.
+        frame = packet.frame.copy()
         h, w   = frame.shape[:2]
         cx, cy = w // 2, h // 2
         oval_a, oval_b = 110, 145
@@ -473,23 +482,24 @@ class GatekeeperDemo(ctk.CTk):
             and not self.is_scanning
             and not self.in_cooldown
             and not self.registration_dialog_open
+            and not self._camera_searching
         ):
             self._frame_count += 1
 
             if self._frame_count % CONFIG["DETECT_EVERY_N"] == 0:
                 try:
-                    self._detect_queue.put_nowait(frame.copy())
+                    self._detect_queue.put_nowait(packet)
                 except queue.Full:
                     pass
 
-            faces = self._last_faces
+            faces = self._last_faces if time.monotonic() - self._faces_at <= 1.0 else []
             if len(faces) > 1:
                 cv2.putText(frame, "กรุณาเข้าทีละคน", (w//2 - 120, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 80, 255), 2)
                 self.after(0, lambda: self.sub_label.configure(text="⚠  กรุณาเข้าทีละคน"))
 
             elif len(faces) == 1:
                 x, y, fw, fh = faces[0]
-                scan_frame = frame.copy()
+                scan_frame = packet.frame
 
                 cv2.rectangle(frame, (x, y), (x+fw, y+fh), (255, 200, 0), 2)
                 for px, py, dx, dy in [(x,y,1,1),(x+fw,y,-1,1),(x,y+fh,1,-1),(x+fw,y+fh,-1,-1)]:
@@ -504,16 +514,14 @@ class GatekeeperDemo(ctk.CTk):
                     self._last_faces  = []
                     self.after(0, lambda: self.status_label.configure(text="ANALYZING...", text_color=CLR["warning"]))
                     self.after(0, lambda: self.sub_label.configure(text="กำลังตรวจสอบ — กรุณาขยับศีรษะเล็กน้อย"))
-                    threading.Thread(
-                        target=self._run_liveness,
-                        args=(crop.copy(), scan_frame),
-                        daemon=True,
-                    ).start()
+                    self._start_worker(self._run_liveness, crop, scan_frame, packet.generation)
 
-        rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-        imgtk = ctk.CTkImage(light_image=Image.fromarray(rgb), dark_image=Image.fromarray(rgb), size=CONFIG["DISPLAY_SIZE"])
-        self.video_label.configure(image=imgtk, text="")
-        self.video_label.image = imgtk
+        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA))
+        if self._preview_image is None:
+            self._preview_image = ctk.CTkImage(light_image=image, size=CONFIG["DISPLAY_SIZE"])
+            self.video_label.configure(image=self._preview_image, text="")
+        else:
+            self._preview_image.configure(light_image=image)
 
         self.after(CONFIG["DISPLAY_INTERVAL_MS"], self._display_loop)
 
@@ -521,7 +529,10 @@ class GatekeeperDemo(ctk.CTk):
     # LIVENESS
     # ──────────────────────────────────────────────────────────────────────
 
-    def _run_liveness(self, crop_img, full_frame):
+    def _scan_is_current(self, generation):
+        return not self._stop_event.is_set() and generation == self._camera.generation
+
+    def _run_liveness(self, crop_img, full_frame, generation):
         try:
             scores = []
             motion_scores = []
@@ -529,9 +540,12 @@ class GatekeeperDemo(ctk.CTk):
             identity_frame = full_frame
 
             for sample_index in range(CONFIG["LIVENESS_SAMPLE_COUNT"]):
+                if not self._scan_is_current(generation):
+                    return
                 current_crop = crop_img if sample_index == 0 else None
                 if sample_index > 0:
-                    time.sleep(CONFIG["LIVENESS_SAMPLE_INTERVAL_SEC"])
+                    if self._stop_event.wait(CONFIG["LIVENESS_SAMPLE_INTERVAL_SEC"]):
+                        return
                     current_frame = self._get_latest_frame()
                     if current_frame is None:
                         continue
@@ -572,83 +586,41 @@ class GatekeeperDemo(ctk.CTk):
                 f"passes={decision.passed_samples} "
                 f"motion={decision.motion_detected} reason={decision.reason}"
             )
+            if not self._scan_is_current(generation):
+                return
             if not decision.accepted:
-                detail = (
-                    "กรุณาขยับศีรษะเล็กน้อยแล้วลองใหม่"
-                    if decision.reason == "no_motion"
-                    else "ไม่ผ่านการตรวจว่าเป็นบุคคลจริง"
+                _, detail = self._identify_face(
+                    None, decision.score,
+                    liveness_passed=False,
+                    liveness_reason=decision.reason,
                 )
-                self.after(0, self._show_result, False, decision.score, detail)
+                self._post_ui(self._show_identity_result, False, decision.score, detail, generation=generation)
                 return
 
-            self.after(
-                0,
+            self._post_ui(
                 self._set_status,
-                "IDENTIFYING...",
+                "VERIFYING ACCESS...",
                 CLR["warning"],
-                "กำลังยืนยันตัวตนกับระบบ",
+                "กำลังยืนยันตัวตนและตรวจสิทธิ์เข้าห้อง",
+                generation=generation,
             )
             verified, detail = self._identify_face(identity_frame, decision.score)
-            self.after(0, self._show_identity_result, verified, decision.score, detail)
+            self._post_ui(self._show_identity_result, verified, decision.score, detail, generation=generation)
         except Exception as e:
             print(f"[Gatekeeper] liveness error: {e}")
-            self.after(0, self._reset_state)
+            self._post_ui(self._reset_state, generation=generation)
 
-    def _identify_face(self, frame, liveness_score):
-        """Send a full camera frame for server-side identity verification."""
-        encoded_ok, encoded = cv2.imencode(
-            ".jpg",
-            frame,
-            [cv2.IMWRITE_JPEG_QUALITY, 85],
-        )
-        if not encoded_ok:
-            return False, "ไม่สามารถเตรียมภาพสำหรับตรวจสอบได้"
-
+    def _identify_face(self, frame, liveness_score, *, liveness_passed=True, liveness_reason=None):
+        """Require an explicit, audited server authorization before granting."""
         registration = self.registration or {}
         api_url = str(registration.get("api_url") or API_URL).rstrip("/")
-        headers = {}
-        if GATEKEEPER_API_KEY:
-            headers["X-Gatekeeper-Key"] = GATEKEEPER_API_KEY
-
-        form_data = {
-            # Keep this field during rollout for older Backend deployments;
-            # registered Backends resolve the Lab from the device credential.
-            "lab_code": registration.get("lab_code") or LAB_CODE,
-            "liveness_score": f"{liveness_score:.6f}",
-        }
-        if registration:
-            form_data.update({
-                "device_id": registration["device_id"],
-                "device_token": registration["device_token"],
-            })
-
-        try:
-            response = requests.post(
-                f"{api_url}/gatekeeper/identify",
-                data=form_data,
-                files={
-                    "face_image": (
-                        "gatekeeper.jpg",
-                        encoded.tobytes(),
-                        "image/jpeg",
-                    ),
-                },
-                headers=headers,
-                timeout=15,
-            )
-        except requests.exceptions.RequestException:
-            return False, "เชื่อมต่อ Backend ไม่ได้"
-
-        try:
-            payload = response.json()
-        except ValueError:
-            return False, f"Backend ตอบกลับผิดรูปแบบ ({response.status_code})"
-
-        if response.ok:
-            return True, payload.get("user_name", "ยืนยันตัวตนสำเร็จ")
-
-        detail = payload.get("detail", "ไม่สามารถยืนยันตัวตนได้")
-        return False, str(detail)
+        return self._scan_client.verify(
+            api_url, registration, frame, liveness_score,
+            stop_event=self._stop_event,
+            liveness_passed=liveness_passed,
+            liveness_reason=liveness_reason,
+            lab_code=LAB_CODE,
+        )
 
     def _show_identity_result(self, verified: bool, score: float, detail: str):
         self.score_bar.set(score)
@@ -658,7 +630,7 @@ class GatekeeperDemo(ctk.CTk):
             self._set_status(
                 "ACCESS GRANTED ✓",
                 CLR["granted"],
-                f"ยืนยันตัวตน: {detail}",
+                f"อนุญาตเข้า Lab: {detail}",
             )
             self.score_badge.configure(
                 text=f"  Score: {score:.2f}  ",
@@ -692,7 +664,7 @@ class GatekeeperDemo(ctk.CTk):
         self.score_pct_label.configure(text=f"{score*100:.0f}%")
 
         if is_real:
-            self._set_status("ACCESS GRANTED ✓", CLR["granted"], "ตรวจพบใบหน้าจริง — เปิดประตู")
+            self._set_status("DEMO: REAL FACE", CLR["granted"], "ทดสอบหน้าจอเท่านั้น — ไม่อนุญาตเข้าห้อง")
             self.score_badge.configure(text=f"  Score: {score:.2f}  ", fg_color="#0ea5e9", text_color="white")
             self.score_bar.configure(progress_color=CLR["granted"])
             threading.Thread(target=lambda: [winsound.Beep(1000,120), winsound.Beep(1200,120)], daemon=True).start()
@@ -743,20 +715,47 @@ class GatekeeperDemo(ctk.CTk):
         self._last_faces  = []
 
     def _force_result(self, is_real: bool):
-        if self.is_scanning or not self.models_loaded or self.in_cooldown:
+        if not DEV_MOCK_ENABLED or self.is_scanning or not self.models_loaded or self.in_cooldown:
             return
         self.is_scanning = True
         self._set_status("VERIFYING...", CLR["warning"], "")
         self.after(800, self._show_result, is_real, 0.95 if is_real else 0.18)
 
     def on_closing(self):
-        camera = getattr(self, "cap", None)
-        if camera is not None:
-            camera.release()
-        self.destroy()
+        if self._stop_event.is_set():
+            return
+        self._stop_event.set()
+        if self._camera is not None:
+            self._camera.stop()
+        # Native reads finish in their owner threads; late grants are discarded.
+        self._start_worker(self._scan_client.close)
+        self._close_deadline = time.monotonic() + 1.0
+        self._finish_closing()
+
+    def _finish_closing(self):
+        alive = any(worker.is_alive() for worker in self._workers)
+        alive = alive or (self._camera is not None and self._camera.is_alive())
+        if alive and time.monotonic() < self._close_deadline:
+            self.after(40, self._finish_closing)
+        else:
+            self.destroy()
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--liveness-self-test":
+        import json
+        from pathlib import Path
+        import numpy as np
+
+        try:
+            predictor, model_path = load_liveness(BASE_DIR, "onnx")
+            probabilities = predictor.predict(np.zeros((80, 80, 3), dtype=np.uint8), model_path)
+            report = {"ok": True, "backend": "onnx", "precision": "FP32",
+                      "probabilities": probabilities.tolist(), "torch_loaded": "torch" in sys.modules}
+        except Exception as exc:
+            report = {"ok": False, "error_type": type(exc).__name__}
+        Path(sys.argv[2]).write_text(json.dumps(report, indent=2), encoding="utf-8")
+        raise SystemExit(0 if report["ok"] else 1)
     app = GatekeeperDemo()
     app.protocol("WM_DELETE_WINDOW", app.on_closing)
     app.mainloop()

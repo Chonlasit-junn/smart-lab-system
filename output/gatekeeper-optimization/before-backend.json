@@ -1,0 +1,11 @@
+{
+  "scope": "synthetic; no real camera, database, face data or production traffic",
+  "part": "backend",
+  "metrics": {
+    "scans": 8,
+    "mock_inference_ms": 50,
+    "inferences_holding_db": 8,
+    "db_hold_during_inference_ms": 405.6946999971842,
+    "audit_rows": 8
+  }
+}

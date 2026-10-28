@@ -1,0 +1,15 @@
+{
+  "scope": "synthetic; no real camera, database, face data or production traffic",
+  "part": "kiosk",
+  "metrics": {
+    "preview": {
+      "frames": 250,
+      "ctk_image_objects": 250,
+      "pil_images": 500,
+      "median_preparation_ms": 1.0436999991725315
+    },
+    "ui_camera_start_ms": 124.34079999911773,
+    "http_requests": 8,
+    "http_tcp_connections": 8
+  }
+}

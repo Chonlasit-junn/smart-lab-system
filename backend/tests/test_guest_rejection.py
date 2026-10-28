@@ -83,6 +83,26 @@ class GuestRejectionTests(unittest.TestCase):
         self.verify()
         self.assertIsNone(self.db.get(models.User, self.guest_id))
 
+    def test_reject_preserves_scan_audit_without_retaining_the_deleted_guest_id(self):
+        lab = models.Lab(name='Audit Lab', code='AUDIT', capacity=1, status='active')
+        self.db.add(lab)
+        self.db.flush()
+        scan = models.GatekeeperScanLog(
+            lab_id=lab.id, lab_code=lab.code, device_id='gatekeeper-audit-test',
+            user_id=self.guest_id, decision='denied', reason_code='guest_approval_required',
+            liveness_score=0.9,
+        )
+        self.db.add(scan)
+        self.db.commit()
+        scan_id = scan.id
+        self.verify()
+        self.db.expire_all()
+        preserved = self.db.get(models.GatekeeperScanLog, scan_id)
+        self.assertIsNotNone(preserved)
+        self.assertIsNone(preserved.user_id)
+        self.assertEqual(preserved.reason_code, 'guest_approval_required')
+        self.assertEqual(preserved.device_id, 'gatekeeper-audit-test')
+
     def test_approval_preserves_account_points_roles_and_image(self):
         self.verify('approve')
         self.assertTrue(self.db.query(models.UserPassport).filter_by(user_id=self.guest_id).one().is_active)

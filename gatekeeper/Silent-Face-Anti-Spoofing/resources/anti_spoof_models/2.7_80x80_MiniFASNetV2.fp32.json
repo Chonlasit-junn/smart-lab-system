@@ -1,0 +1,13 @@
+{
+  "model": "2.7_80x80_MiniFASNetV2",
+  "precision": "FP32",
+  "opset": 17,
+  "preprocessing": "BGR_NCHW_FLOAT32_0_255",
+  "real_class_index": 1,
+  "output": "softmax_probabilities",
+  "source": "2.7_80x80_MiniFASNetV2.pth",
+  "source_sha256": "a5eb02e1843f19b5386b953cc4c9f011c3f985d0ee2bb9819eea9a142099bec0",
+  "onnx_sha256": "5237cabc7ad9be84c66eb3c608ef0303c91d828f42456530fc579b9388d3c0f0",
+  "torch_version": "2.1.2+cpu",
+  "onnx_version": "1.17.0"
+}

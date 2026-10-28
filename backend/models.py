@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, String, DateTime, Boolean, ForeignKey, Date, Time, Text
+from sqlalchemy import BigInteger, CheckConstraint, Column, Float, Integer, String, DateTime, Boolean, ForeignKey, Date, Time, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -231,6 +231,33 @@ class LabAccessLog(Base):
 
     booking = relationship("Booking", back_populates="access_logs")
     lab_device = relationship("LabDevice")
+
+
+class GatekeeperScanLog(Base):
+    """Door-scan decisions, including attempts without a recognized user."""
+
+    __tablename__ = "gatekeeper_scan_logs"
+    __table_args__ = (
+        CheckConstraint("decision IN ('granted', 'denied')", name="gatekeeper_scan_logs_decision_check"),
+        CheckConstraint(
+            "liveness_score IS NULL OR (liveness_score >= 0 AND liveness_score <= 1)",
+            name="gatekeeper_scan_logs_liveness_check",
+        ),
+        {"info": {"manual_migration": True}},
+    )
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    lab_id = Column(Integer, ForeignKey("labs.id", ondelete="SET NULL"), nullable=True)
+    lab_code = Column(String, nullable=False)
+    # Preserve the authenticated camera's public ID even if it is later removed.
+    device_id = Column(String(128), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    booking_id = Column(BigInteger, ForeignKey("bookings.id", ondelete="SET NULL"), nullable=True)
+    decision = Column(String(16), nullable=False)
+    reason_code = Column(String(64), nullable=False)
+    liveness_score = Column(Float, nullable=True)
+    face_distance = Column(Float, nullable=True)
+    scanned_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class ProgramUsageLog(Base):

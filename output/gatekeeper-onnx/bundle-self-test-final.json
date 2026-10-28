@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "backend": "onnx",
+  "precision": "FP32",
+  "probabilities": [
+    [
+      0.000497623288538307,
+      0.007766967639327049,
+      0.9917353987693787
+    ]
+  ],
+  "torch_loaded": false,
+  "exe_bytes": 86139619,
+  "exe_sha256": "3049d79de9837b9e89c5f42c95e263928d336f256ea1a9a2a256f419d8cf3565",
+  "torch_archive_entries": 0,
+  "onnx_runtime_bundled": true
+}

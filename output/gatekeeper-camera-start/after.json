@@ -1,0 +1,33 @@
+{
+  "scope": "synthetic first-frame latency; active open 20 ms, unused open 100 ms, read 5 ms",
+  "measurements": [
+    {
+      "preferred_index": 0,
+      "active_index": 0,
+      "first_frame_ms": 29.192300000431715,
+      "camera_opens_before_first_frame": [
+        0
+      ]
+    },
+    {
+      "preferred_index": 3,
+      "active_index": 3,
+      "first_frame_ms": 27.431000000433414,
+      "camera_opens_before_first_frame": [
+        3
+      ]
+    },
+    {
+      "preferred_index": 0,
+      "active_index": 3,
+      "first_frame_ms": 429.65619999995397,
+      "camera_opens_before_first_frame": [
+        0,
+        0,
+        1,
+        2,
+        3
+      ]
+    }
+  ]
+}
