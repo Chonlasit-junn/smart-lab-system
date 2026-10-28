@@ -11,11 +11,11 @@ FACE_REPRESENT_OPTIONS = {
     "enforce_detection": True,
     "align": True,
 }
-_gatekeeper_inference = threading.BoundedSemaphore(1)
+_face_inference = threading.BoundedSemaphore(1)
 
 
 class FaceServiceBusy(Exception):
-    """The bounded Gatekeeper inference slot is occupied."""
+    """The shared registration/Gatekeeper inference slot is occupied."""
 
 
 class FaceImageError(ValueError):
@@ -40,15 +40,19 @@ def single_face_embedding(objects):
 
 
 @contextmanager
-def gatekeeper_inference_slot():
+def face_inference_slot():
     # The deployment has one API worker. Do not accumulate unbounded AI jobs
     # or hold a database connection while waiting for this CPU slot.
-    if not _gatekeeper_inference.acquire(timeout=0.25):
+    if not _face_inference.acquire(timeout=0.25):
         raise FaceServiceBusy()
     try:
         yield
     finally:
-        _gatekeeper_inference.release()
+        _face_inference.release()
+
+
+# Preserve callers while both entry points share the same CPU budget.
+gatekeeper_inference_slot = face_inference_slot
 
 
 @lru_cache(maxsize=1)

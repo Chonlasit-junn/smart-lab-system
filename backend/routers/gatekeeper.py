@@ -17,7 +17,7 @@ from face_service import (
     FACE_REPRESENT_OPTIONS, FaceImageError, FaceServiceBusy,
     gatekeeper_inference_slot, get_deepface, single_face_embedding,
 )
-from routers.points import is_user_banned
+from access_policy import lab_access_denial, current_lab_booking
 from routers.users import require_admin_user
 from time_utils import as_lab_naive, utc_now
 
@@ -200,24 +200,7 @@ def _deny_scan(db, lab, device_id, *, code, message, status_code=403, **evidence
 
 
 def _account_entry_denial(db, user_id):
-    role_names = {name for (name,) in db.query(models.Role.name).join(
-        models.UserRole, models.UserRole.role_id == models.Role.id,
-    ).filter(models.UserRole.user_id == user_id).all()}
-    passport = db.query(models.UserPassport).filter(
-        models.UserPassport.user_id == user_id,
-    ).first()
-    if (
-        (("guest" in role_names or not role_names) and (passport is None or not passport.is_active))
-        or (passport is not None and not passport.is_active)
-    ):
-        return "guest_approval_required", "Guest approval is required before entry."
-    student = db.query(models.Student).filter(models.Student.user_id == user_id).first()
-    if student is not None and not student.is_active:
-        return "account_inactive", "This account is not active."
-    # Reuse the existing Ban rule without creating point rows or daily bonuses.
-    if is_user_banned(user_id, db) is not None:
-        return "user_banned", "This account has an active ban."
-    return None
+    return lab_access_denial(db, user_id, now=utc_now())
 
 
 @router.post("/gatekeeper/identify", response_model=IdentifyResponse, status_code=status.HTTP_200_OK)
@@ -377,14 +360,7 @@ def identify_face(
     # slot end. Scanning does not check in or consume the Agent's reservation.
     decision_time = utc_now()
     lab_time = as_lab_naive(decision_time)
-    booking = db.query(models.Booking).filter(
-        models.Booking.user_id == best_user.id,
-        models.Booking.lab_id == lab.id,
-        models.Booking.booking_date == lab_time.date(),
-        models.Booking.start_time <= lab_time.time(),
-        models.Booking.end_time > lab_time.time(),
-        models.Booking.status.in_(("reserved", "attended")),
-    ).order_by(models.Booking.start_time.asc(), models.Booking.id.asc()).first()
+    booking = current_lab_booking(db, best_user.id, lab.id, lab_time)
     if booking is None:
         _deny_scan(
             db, lab, device_id, code="booking_required", message="No current booking for this Lab.",

@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 from jose import jwt
 from passlib.context import CryptContext
 from dotenv import load_dotenv
+from security_config import SECRET_KEY, ALGORITHM
 
 load_dotenv()
 
@@ -34,8 +35,6 @@ pwd_context = CryptContext(
 )
 
 # in production these should all come from .env
-SECRET_KEY = os.getenv("SECRET_KEY", "SmartLab_Super_Secret_Key_2026")
-ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 # --- ดึงค่า Brevo จาก Environment ---

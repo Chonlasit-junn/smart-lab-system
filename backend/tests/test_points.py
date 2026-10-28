@@ -34,6 +34,8 @@ TEST_TABLES = [
         "users",
         "roles",
         "user_roles",
+        "students",
+        "user_passport",
         "user_points",
         "user_daily_scores",
         "point_policies",

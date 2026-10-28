@@ -11,9 +11,14 @@ from sqlalchemy.exc import IntegrityError
 from PIL import Image, ImageOps
 import models, schemas
 import otp_service
+from access_policy import account_denial, primary_role
+from login_security import enforce_login_limits, password_matches, INVALID_LOGIN
 from password_policy import validate_new_password, PASSWORD_POLICY_ERROR
 from database import get_db
-from face_service import get_deepface, FACE_REPRESENT_OPTIONS, FaceImageError, single_face_embedding
+from face_service import (
+    get_deepface, FACE_REPRESENT_OPTIONS, FaceImageError, single_face_embedding,
+    face_inference_slot, FaceServiceBusy,
+)
 from utils import (
     send_otp_mail,
     create_access_token,
@@ -33,6 +38,42 @@ from phone_utils import normalize_phone_number
 
 router = APIRouter(tags=["Authentication"])
 MAX_FACE_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def _prepare_registration_face(image_data, password):
+    """Connection-free, bounded worker; never leave a biometric temp file behind."""
+    with face_inference_slot():
+        try:
+            with Image.open(io.BytesIO(image_data)) as source:
+                image = ImageOps.exif_transpose(source).convert("RGB")
+            image.thumbnail((1024, 1024))
+            inference = io.BytesIO()
+            image.save(inference, "JPEG", quality=95)
+            image.thumbnail((200, 200))
+            avatar = io.BytesIO()
+            image.save(avatar, "JPEG", quality=85)
+        except Exception:
+            raise HTTPException(400, "Failed to process image file.") from None
+
+        temporary_path = None
+        try:
+            with NamedTemporaryFile(prefix="smart-lab-face-", suffix=".jpg", delete=False) as temporary:
+                temporary_path = temporary.name
+                temporary.write(inference.getvalue())
+            try:
+                objects = get_deepface().represent(img_path=temporary_path, **FACE_REPRESENT_OPTIONS)
+                embedding = single_face_embedding(objects)
+            except FaceImageError as exc:
+                raise HTTPException(400, str(exc)) from None
+            except ValueError:
+                raise HTTPException(400, "No face detected in the image.") from None
+            except Exception:
+                raise HTTPException(503, "Face recognition is unavailable. Please try again later.") from None
+            # bcrypt is CPU work too; keep it off the async event loop.
+            return embedding, avatar.getvalue(), pwd_context.hash(password)
+        finally:
+            if temporary_path and os.path.exists(temporary_path):
+                os.remove(temporary_path)
 
 
 @router.post("/request-otp", dependencies=[Depends(otp_service.enforce_ip_rate_limit)])
@@ -93,70 +134,32 @@ async def register(
     # re-verify OTP at registration time so you can't skip step 2
     challenge_id = await run_in_threadpool(otp_service.verify_otp, db, normalized_email, otp)
 
+    # verify_otp commits its preflight and releases the connection/row lock.
+    # Do not query the database again until the worker has completed. The same
+    # issuance is rechecked and consumed atomically at the final commit below.
+    image_data = await face_image.read(MAX_FACE_IMAGE_BYTES + 1)
+    if len(image_data) > MAX_FACE_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Face image is too large.")
+    try:
+        face_embedding_vector, normalized_image_data, hashed_password = await run_in_threadpool(
+            _prepare_registration_face, image_data, password,
+        )
+    except FaceServiceBusy:
+        raise HTTPException(
+            503, "Face recognition is busy. Please try again.", headers={"Retry-After": "1"},
+        ) from None
+
     local_file_path = None
-    temporary_file_path = None
-    profile_url = None
     uploaded_object_path = None
     keep_local_file = False
-
-    # Normalize the image once. DeepFace needs a local path, while production
-    # storage receives the normalized JPEG bytes below.
     try:
-        image_data = await face_image.read(MAX_FACE_IMAGE_BYTES + 1)
-        if len(image_data) > MAX_FACE_IMAGE_BYTES:
-            raise HTTPException(status_code=413, detail="Face image is too large.")
-        image = ImageOps.exif_transpose(Image.open(io.BytesIO(image_data))).convert("RGB")
-        image.thumbnail((1024, 1024))
-        inference_image = io.BytesIO()
-        image.save(inference_image, "JPEG", quality=95)
-        # Keep small avatars in storage; recognition sees the larger original.
-        image.thumbnail((200, 200))
-        normalized_image = io.BytesIO()
-        image.save(normalized_image, "JPEG", quality=85)
-        normalized_image_data = normalized_image.getvalue()
-
-        if uses_supabase_storage():
-            with NamedTemporaryFile(
-                prefix="smart-lab-face-",
-                suffix=".jpg",
-                delete=False,
-            ) as temporary_file:
-                temporary_file.write(inference_image.getvalue())
-                temporary_file_path = temporary_file.name
-            file_path = temporary_file_path
-        else:
+        profile_url = None
+        if not uses_supabase_storage():
             file_name = f"{uuid4().hex}.jpg"
             local_file_path = os.path.join(UPLOAD_DIR, file_name)
             with open(local_file_path, "wb") as local_file:
-                local_file.write(inference_image.getvalue())
-            profile_url = f"{PROFILE_URL_PREFIX}/{file_name}"
-            file_path = local_file_path
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=400, detail="Failed to process image file.")
-
-    # enforce_detection=True raises an exception if no face is found
-    try:
-        embedding_objs = get_deepface().represent(
-            img_path=file_path,
-            **FACE_REPRESENT_OPTIONS,
-        )
-        face_embedding_vector = single_face_embedding(embedding_objs)
-        if local_file_path:
-            with open(local_file_path, "wb") as local_file:
                 local_file.write(normalized_image_data)
-    except Exception as exc:
-        if temporary_file_path and os.path.exists(temporary_file_path):
-            os.remove(temporary_file_path)
-        if local_file_path and os.path.exists(local_file_path):
-            os.remove(local_file_path)
-        detail = str(exc) if isinstance(exc, FaceImageError) else "No face detected in the image."
-        raise HTTPException(status_code=400, detail=detail) from None
-
-    try:
-        # bcrypt silently truncates at 72 bytes, so we do it explicitly
-        hashed_password = pwd_context.hash(password)
+            profile_url = f"{PROFILE_URL_PREFIX}/{file_name}"
         new_user = models.User(
             email=normalized_email,
             password=hashed_password,
@@ -231,34 +234,24 @@ async def register(
             await delete_profile_image(uploaded_object_path)
         raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
     finally:
-        if temporary_file_path and os.path.exists(temporary_file_path):
-            os.remove(temporary_file_path)
         if local_file_path and not keep_local_file and os.path.exists(local_file_path):
             os.remove(local_file_path)
 
 
-@router.post("/login", response_model=schemas.Token)
+@router.post("/login", response_model=schemas.Token, dependencies=[Depends(enforce_login_limits)])
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     normalized_email = normalize_email(form_data.username)
     user = db.query(models.User).filter(
         func.lower(models.User.email) == normalized_email,
     ).first()
 
-    # bcrypt 72-byte limit — keep consistent with register
-    safe_pwd = form_data.password.encode("utf-8")[:72].decode("utf-8", "ignore")
-    if not user or not pwd_context.verify(form_data.password, user.password):
-        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    if not password_matches(form_data.password, user.password if user else None):
+        raise HTTPException(status_code=401, detail=INVALID_LOGIN)
 
-    user_role = db.query(models.Role.name).join(models.UserRole).filter(
-        models.UserRole.user_id == user.id
-    ).first()
-    role_name = user_role[0] if user_role else "guest"
-
-    # guests can't log in until admin approves them
-    if role_name == "guest":
-        passport = db.query(models.UserPassport).filter(models.UserPassport.user_id == user.id).first()
-        if passport and not passport.is_active:
-            raise HTTPException(status_code=403, detail="Your account is pending admin approval.")
+    denial = account_denial(db, user.id)
+    if denial is not None:
+        raise HTTPException(status_code=403, detail=denial[1])
+    role_name = primary_role(db, user.id)
 
     access_token = create_access_token(
         data={"sub": normalize_email(user.email), "role": role_name, "auth_version": user.auth_version},

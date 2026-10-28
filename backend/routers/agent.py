@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
+from access_policy import current_lab_booking, lab_access_denial
 from database import get_db
 from device_registry import require_registered_device
 from policy import (
@@ -16,7 +17,7 @@ from policy import (
 )
 from routers.points import apply_point_event, mark_due_no_shows
 from routers.users import get_current_user
-from time_utils import as_utc, lab_now_naive, utc_now
+from time_utils import as_utc, as_lab_naive, lab_now_naive, utc_now
 from utils import normalize_email
 from url_policy import normalize_domain
 
@@ -210,6 +211,10 @@ def start_session(
         raise HTTPException(status_code=403, detail="Authenticated user does not match session user.")
     user = current_user
 
+    denial = lab_access_denial(db, user.id, now=utc_now())
+    if denial is not None:
+        raise HTTPException(status_code=403, detail=denial[1])
+
     registered_device = require_registered_device(db, device_id, device_token)
     lab = db.query(models.Lab).filter(
         models.Lab.id == registered_device.lab_id,
@@ -226,6 +231,19 @@ def start_session(
         db.commit()
 
     mark_due_no_shows(db)
+
+    # Reconciliation can itself impose a ban. Check again before recovery too.
+    denial = lab_access_denial(db, user.id, now=utc_now())
+    if denial is not None:
+        raise HTTPException(status_code=403, detail=denial[1])
+
+    lab_now = lab_now_naive()
+    current_booking = current_lab_booking(db, user.id, lab.id, lab_now)
+    if current_booking is None:
+        raise HTTPException(
+            status_code=403,
+            detail="An active Lab booking is required to start an Agent session.",
+        )
 
     resolved_device_name = (device or "").strip() or None
     resolved_device_mac = _clean_device_mac(device_mac)
@@ -253,7 +271,7 @@ def start_session(
                     lab.id,
                     resolved_device_mac,
                     resolved_lab_device_id,
-                ):
+                ) and existing_request.booking_id == current_booking.id:
                     _bind_recovered_session_device(db, existing_request, registered_device)
                     return {"session_id": existing_request.id, "recovered": True}
                 raise HTTPException(
@@ -279,7 +297,7 @@ def start_session(
             lab.id,
             resolved_device_mac,
             resolved_lab_device_id,
-        ):
+        ) and active_user_session.booking_id == current_booking.id:
             _bind_recovered_session_device(db, active_user_session, registered_device)
             return {"session_id": active_user_session.id, "recovered": True}
         raise HTTPException(
@@ -314,25 +332,20 @@ def start_session(
     registered_device.agent_version = (agent_version or "").strip()[:64] or registered_device.agent_version
     registered_device.last_seen_at = utc_now()
 
-    lab_now = lab_now_naive()
     now_utc = utc_now()
-    matching_booking = db.query(models.Booking).filter(
-        models.Booking.user_id == user.id,
-        models.Booking.lab_id == lab.id,
-        models.Booking.booking_date == lab_now.date(),
-        models.Booking.start_time <= lab_now.time(),
-        models.Booking.end_time >= lab_now.time(),
-        models.Booking.status == "reserved",
-    ).order_by(models.Booking.start_time.asc()).first()
-    if matching_booking:
-        matching_booking.status = "attended"
-        matching_booking.checked_in_at = now_utc
+    if current_booking.status != "reserved":
+        raise HTTPException(
+            status_code=403,
+            detail="A reserved Lab booking is required to start a new Agent session.",
+        )
+    current_booking.status = "attended"
+    current_booking.checked_in_at = now_utc
 
     new_log = models.LabAccessLog(
         lab_id=lab.id,
         user_id=user.id,
         lab_device_id=resolved_lab_device_id,
-        booking_id=matching_booking.id if matching_booking else None,
+        booking_id=current_booking.id,
         entry_time=now_utc,
         access_type="manual",
         status="success",
@@ -348,17 +361,26 @@ def start_session(
     except IntegrityError as exc:
         db.rollback()
         if resolved_client_session_id:
+            registered_device = require_registered_device(db, device_id, device_token)
+            fresh_lab = db.get(models.Lab, registered_device.lab_id)
+            fresh_booking = current_lab_booking(db, user.id, registered_device.lab_id, lab_now_naive())
             recovered_session = db.query(models.LabAccessLog).filter(
                 models.LabAccessLog.client_session_id == resolved_client_session_id,
                 models.LabAccessLog.session_status == "active",
                 models.LabAccessLog.exit_time.is_(None),
             ).first()
-            if recovered_session and _same_session_identity(
-                recovered_session,
-                user.id,
-                lab.id,
-                resolved_device_mac,
-                resolved_lab_device_id,
+            if (
+                recovered_session and fresh_lab and fresh_lab.status == "active"
+                and fresh_booking and recovered_session.booking_id == fresh_booking.id
+                and lab_access_denial(db, user.id, now=utc_now()) is None
+                and registered_device.lab_id == lab.id
+                and _same_session_identity(
+                    recovered_session,
+                    user.id,
+                    lab.id,
+                    resolved_device_mac,
+                    resolved_lab_device_id,
+                )
             ):
                 _bind_recovered_session_device(db, recovered_session, registered_device)
                 return {"session_id": recovered_session.id, "recovered": True}
@@ -670,7 +692,7 @@ def heartbeat(
 ):
     access_log = db.query(models.LabAccessLog).filter(
         models.LabAccessLog.id == session_id
-    ).first()
+    ).populate_existing().with_for_update().first()
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
 
@@ -686,6 +708,32 @@ def heartbeat(
         raise HTTPException(status_code=409, detail="Device does not match session.")
 
     heartbeat_at = utc_now()
+    denial = lab_access_denial(db, access_log.user_id, now=heartbeat_at)
+    lab = db.get(models.Lab, access_log.lab_id)
+    booking = current_lab_booking(db, access_log.user_id, access_log.lab_id, as_lab_naive(heartbeat_at))
+    lab_allowed = lab is not None and lab.status == "active" and registered_device.lab_id == access_log.lab_id
+    if denial or not lab_allowed or booking is None or booking.id != access_log.booking_id:
+        session_booking = access_log.booking
+        if (
+            not denial and lab_allowed and session_booking is not None
+            and session_booking.status == "attended"
+            and datetime.combine(session_booking.booking_date, session_booking.end_time) <= as_lab_naive(heartbeat_at)
+        ):
+            # A normal booking expiry keeps the existing completion reward and
+            # its idempotent event ID. Revocation below never grants a reward.
+            end_session(session_id, "logout", device_id, device_token, current_user, db)
+            raise HTTPException(status_code=409, detail="Session booking has ended.")
+        # Older Agents already return to Login on 409. Keep durable telemetry
+        # upload/end-session available, but never award completion points for a
+        # session whose access has been withdrawn.
+        access_log.session_status = "completed"
+        access_log.end_reason = "access_revoked"
+        access_log.exit_time = heartbeat_at
+        if access_log.booking and access_log.booking.status in {"reserved", "attended"}:
+            access_log.booking.status = "completed"
+            access_log.booking.checked_out_at = heartbeat_at
+        db.commit()
+        raise HTTPException(status_code=409, detail="Session access is no longer available.")
     access_log.last_heartbeat_at = heartbeat_at
     db.commit()
     return {

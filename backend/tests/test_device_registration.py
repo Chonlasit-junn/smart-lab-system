@@ -225,21 +225,42 @@ class DeviceRegistrationTests(unittest.TestCase):
             email="student@example.com",
             password="hashed",
         )
+        student.roles = [models.Role(name="student")]
         self.session.add(student)
         self.session.commit()
 
-        result = agent.start_session(
-            email=student.email,
-            lab_code="A-DIFFERENT-LAB",
-            device="LAB-PC-04",
-            device_mac="11:22:33:44:55:66",
-            device_id=registration["device_id"],
-            device_token=registration["device_token"],
-            agent_version="source",
-            client_session_id="client-session-004",
-            current_user=student,
-            db=self.session,
+        booking = models.Booking(
+            lab_id=self.lab.id,
+            user_id=student.id,
+            booking_date=date(2026, 9, 22),
+            start_time=time(8, 0),
+            end_time=time(10, 0),
+            purpose="session test",
+            total_participants=1,
+            status="reserved",
         )
+        self.session.add(booking)
+        self.session.commit()
+
+        with patch.object(
+            agent,
+            "lab_now_naive",
+            return_value=datetime(2026, 9, 22, 9, 0),
+        ), patch.object(agent, "mark_due_no_shows", return_value=0), patch.object(
+            agent, "_cleanup_stale_sessions", return_value=0,
+        ):
+            result = agent.start_session(
+                email=student.email,
+                lab_code="A-DIFFERENT-LAB",
+                device="LAB-PC-04",
+                device_mac="11:22:33:44:55:66",
+                device_id=registration["device_id"],
+                device_token=registration["device_token"],
+                agent_version="source",
+                client_session_id="client-session-004",
+                current_user=student,
+                db=self.session,
+            )
 
         access_log = self.session.query(models.LabAccessLog).filter(
             models.LabAccessLog.id == result["session_id"],
@@ -249,6 +270,76 @@ class DeviceRegistrationTests(unittest.TestCase):
         ).one()
         self.assertEqual(access_log.lab_id, self.lab.id)
         self.assertEqual(access_log.lab_device_id, device.id)
+        self.assertEqual(access_log.booking_id, booking.id)
+
+    def test_start_session_rejects_users_without_a_current_lab_booking(self):
+        enrollment = devices.create_enrollment_code(
+            devices.EnrollmentCodeCreate(lab_id=self.lab.id),
+            self.admin,
+            self.session,
+        )
+        registration = devices.register_device(
+            enrollment_code=enrollment["enrollment_code"],
+            device_id="device-no-booking",
+            device_name="LAB-PC-NO-BOOKING",
+            device_mac="12:22:33:44:55:66",
+            agent_version="source",
+            db=self.session,
+        )
+        student = models.User(
+            first_name="Unbooked", last_name="Student",
+            email="unbooked@example.com", password="hashed",
+        )
+        student.roles = [models.Role(name="student")]
+        self.session.add(student)
+        self.session.commit()
+
+        with patch.object(agent, "mark_due_no_shows", return_value=0), patch.object(
+            agent, "_cleanup_stale_sessions", return_value=0,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                agent.start_session(
+                    email=student.email,
+                    lab_code=self.lab.code,
+                    device="LAB-PC-NO-BOOKING",
+                    device_mac="12:22:33:44:55:66",
+                    device_id=registration["device_id"],
+                    device_token=registration["device_token"],
+                    current_user=student,
+                    db=self.session,
+                )
+
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertIn("booking", raised.exception.detail.lower())
+        self.assertEqual(self.session.query(models.LabAccessLog).count(), 0)
+
+        orphaned_session = models.LabAccessLog(
+            user_id=student.id,
+            lab_id=self.lab.id,
+            device_mac="12:22:33:44:55:66",
+            session_status="active",
+            status="success",
+            access_type="manual",
+        )
+        self.session.add(orphaned_session)
+        self.session.commit()
+        with patch.object(agent, "mark_due_no_shows", return_value=0), patch.object(
+            agent, "_cleanup_stale_sessions", return_value=0,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                agent.start_session(
+                    email=student.email,
+                    lab_code=self.lab.code,
+                    device="LAB-PC-NO-BOOKING",
+                    device_mac="12:22:33:44:55:66",
+                    device_id=registration["device_id"],
+                    device_token=registration["device_token"],
+                    current_user=student,
+                    db=self.session,
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertIn("booking", raised.exception.detail.lower())
+        self.assertEqual(self.session.query(models.LabAccessLog).count(), 1)
 
     def test_start_session_matches_booking_using_the_lab_calendar(self):
         code_result = devices.create_enrollment_code(
@@ -270,6 +361,7 @@ class DeviceRegistrationTests(unittest.TestCase):
             email="timezone@example.com",
             password="hashed",
         )
+        student.roles = [models.Role(name="student")]
         self.session.add(student)
         self.session.flush()
         booking = models.Booking(
@@ -365,6 +457,7 @@ class DeviceRegistrationTests(unittest.TestCase):
             first_name="Test", last_name="Student",
             email="legacy@example.com", password="hashed",
         )
+        student.roles = [models.Role(name="student")]
         self.session.add(student)
         self.session.commit()
 
@@ -400,11 +493,25 @@ class DeviceRegistrationTests(unittest.TestCase):
             first_name="Legacy", last_name="Student",
             email="legacy-session@example.com", password="hashed",
         )
+        student.roles = [models.Role(name="student")]
         self.session.add(student)
+        self.session.flush()
+        booking = models.Booking(
+            lab_id=self.lab.id,
+            user_id=student.id,
+            booking_date=date(2026, 9, 22),
+            start_time=time(8, 0),
+            end_time=time(10, 0),
+            purpose="legacy recovery",
+            total_participants=1,
+            status="attended",
+        )
+        self.session.add(booking)
         self.session.flush()
         legacy_session = models.LabAccessLog(
             user_id=student.id,
             lab_id=self.lab.id,
+            booking_id=booking.id,
             device_mac="44:55:66:77:88:99",
             session_status="active",
             status="success",
@@ -413,15 +520,22 @@ class DeviceRegistrationTests(unittest.TestCase):
         self.session.add(legacy_session)
         self.session.commit()
 
-        result = agent.start_session(
-            email=student.email,
-            device="LAB-PC-LEGACY",
-            device_mac="44:55:66:77:88:99",
-            device_id=registration["device_id"],
-            device_token=registration["device_token"],
-            current_user=student,
-            db=self.session,
-        )
+        with patch.object(
+            agent,
+            "lab_now_naive",
+            return_value=datetime(2026, 9, 22, 9, 0),
+        ), patch.object(agent, "mark_due_no_shows", return_value=0), patch.object(
+            agent, "_cleanup_stale_sessions", return_value=0,
+        ):
+            result = agent.start_session(
+                email=student.email,
+                device="LAB-PC-LEGACY",
+                device_mac="44:55:66:77:88:99",
+                device_id=registration["device_id"],
+                device_token=registration["device_token"],
+                current_user=student,
+                db=self.session,
+            )
 
         self.session.refresh(legacy_session)
         self.assertTrue(result["recovered"])
@@ -446,7 +560,19 @@ class DeviceRegistrationTests(unittest.TestCase):
             first_name="Legacy", last_name="Mismatch",
             email="legacy-mismatch@example.com", password="hashed",
         )
+        student.roles = [models.Role(name="student")]
         self.session.add(student)
+        self.session.flush()
+        self.session.add(models.Booking(
+            lab_id=self.lab.id,
+            user_id=student.id,
+            booking_date=date(2026, 9, 22),
+            start_time=time(8, 0),
+            end_time=time(10, 0),
+            purpose="legacy device mismatch",
+            total_participants=1,
+            status="reserved",
+        ))
         self.session.flush()
         legacy_session = models.LabAccessLog(
             user_id=student.id,
@@ -459,16 +585,23 @@ class DeviceRegistrationTests(unittest.TestCase):
         self.session.add(legacy_session)
         self.session.commit()
 
-        with self.assertRaises(HTTPException) as raised:
-            agent.start_session(
-                email=student.email,
-                device="LAB-PC-MISMATCH",
-                device_mac="44:55:66:77:88:99",
-                device_id=registration["device_id"],
-                device_token=registration["device_token"],
-                current_user=student,
-                db=self.session,
-            )
+        with patch.object(
+            agent,
+            "lab_now_naive",
+            return_value=datetime(2026, 9, 22, 9, 0),
+        ), patch.object(agent, "mark_due_no_shows", return_value=0), patch.object(
+            agent, "_cleanup_stale_sessions", return_value=0,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                agent.start_session(
+                    email=student.email,
+                    device="LAB-PC-MISMATCH",
+                    device_mac="44:55:66:77:88:99",
+                    device_id=registration["device_id"],
+                    device_token=registration["device_token"],
+                    current_user=student,
+                    db=self.session,
+                )
 
         self.assertEqual(raised.exception.status_code, 409)
         self.session.refresh(legacy_session)

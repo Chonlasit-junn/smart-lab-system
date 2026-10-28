@@ -15,6 +15,8 @@ export function otpErrorMessage(error, translations, fallback) {
     'No face detected in the image.': 'faceNotDetected',
     'Exactly one face is required.': 'faceSinglePerson',
     'Face is too small. Please move closer to the camera.': 'faceTooSmall',
+    'Face recognition is busy. Please try again.': 'faceServiceBusy',
+    'Face recognition is unavailable. Please try again later.': 'faceServiceUnavailable',
   };
   if (Object.hasOwn(faceErrors, detail)) return translations[faceErrors[detail]] || fallback;
   if (detail === 'Password must be 8 or more characters and at most 72 UTF-8 bytes.') return translations.passwordInvalid;

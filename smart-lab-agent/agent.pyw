@@ -558,8 +558,14 @@ class LoginOverlay(QWidget):
         )
         if response is None:
             return {"kind": "connection_error"}
+        if response.status_code == 429:
+            return {"kind": "login_limited"}
         if response.status_code == 403:
+            if response_detail(response) == "This account is not active.":
+                return {"kind": "account_inactive"}
             return {"kind": "approval_required"}
+        if response.status_code >= 500:
+            return {"kind": "connection_error"}
         if response.status_code != 200:
             return {"kind": "invalid_credentials"}
         try:
@@ -603,6 +609,22 @@ class LoginOverlay(QWidget):
                     headers=session_headers,
                 )
 
+        if (
+            session_response is not None
+            and session_response.status_code == 403
+            and "booking" in response_detail(session_response).lower()
+        ):
+            return {"kind": "booking_required"}
+
+        if session_response is not None and session_response.status_code == 403:
+            kind = {
+                "Your account is pending admin approval.": "approval_required",
+                "This account is not active.": "account_inactive",
+                "This account has an active ban.": "user_banned",
+            }.get(response_detail(session_response))
+            if kind:
+                return {"kind": kind}
+
         if session_response is not None and session_response.status_code == 200:
             session_id = session_response.json().get("session_id")
             if session_id is not None:
@@ -641,10 +663,18 @@ class LoginOverlay(QWidget):
                 self._show_error("ไม่สามารถเชื่อมต่อ Server ได้ กรุณาตรวจสอบอินเทอร์เน็ต")
             elif kind == "approval_required":
                 self._show_error("บัญชีนี้รอการอนุมัติจาก Admin")
+            elif kind == "account_inactive":
+                self._show_error("บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแล")
+            elif kind == "user_banned":
+                self._show_error("บัญชีนี้ถูกระงับการใช้ Lab ชั่วคราว กรุณาดูสถานะในหน้าโปรไฟล์")
+            elif kind == "login_limited":
+                self._show_error("เข้าสู่ระบบถี่เกินไป กรุณารอสักครู่แล้วลองใหม่")
             elif kind == "invalid_credentials":
                 self._show_error("อีเมลหรือรหัสผ่านไม่ถูกต้อง")
             elif kind == "active_session":
                 self._show_error("ผู้ใช้หรือเครื่องนี้มี Session ที่ยังไม่จบอยู่")
+            elif kind == "booking_required":
+                self._show_error("ไม่มีรายการจอง Lab ที่ใช้งานได้ในขณะนี้ กรุณาจองก่อนเข้าใช้งาน")
             else:
                 self._show_error("ไม่สามารถสร้าง Session ใหม่ได้")
         finally:
@@ -975,7 +1005,7 @@ class SmartLabAgent:
             return
 
         status = result.get("status") if isinstance(result, dict) else None
-        if status == 409:
+        if status in {403, 409}:
             print("Session ไม่ active แล้ว กำลังกลับไปหน้า Login")
             self.heartbeat_timer.stop()
             if self.info_bar:

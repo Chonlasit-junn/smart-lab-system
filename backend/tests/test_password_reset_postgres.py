@@ -46,6 +46,8 @@ class PasswordResetPostgresTests(unittest.TestCase):
         # this test's locally generated schema in the guarded test database.
         cls.addClassCleanup(cls.cleanup)
         models.User.__table__.create(cls.engine)
+        for model in (models.Role, models.UserRole, models.Student, models.UserPassport):
+            model.__table__.create(cls.engine)
         migration = (Path(__file__).resolve().parents[1] / "migrations/015_password_reset_otp.sql").read_text(encoding="utf-8")
         ip_migration = (Path(__file__).resolve().parents[1] / "migrations/016_otp_ip_rate_limit.sql").read_text(encoding="utf-8")
         with cls.raw.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
@@ -63,7 +65,10 @@ class PasswordResetPostgresTests(unittest.TestCase):
         self.email = uuid4().hex + "@example.test"
         self.db = self.sessions()
         self.addCleanup(self.db.close)
-        self.db.add(models.User(email=self.email, first_name="Test", last_name="Recovery", password="old-synthetic-hash"))
+        user = models.User(email=self.email, first_name="Test", last_name="Recovery", password="old-synthetic-hash")
+        self.db.add(user)
+        self.db.flush()
+        self.db.add(models.UserPassport(user_id=user.id, is_active=True))
         self.db.commit()
         for patcher in [patch.dict(os.environ, {"OTP_SECRET_KEY": "local-postgres-test-secret-01234567890123"}),
                         patch.object(otp, "utc_now", return_value=datetime(2026, 10, 22, tzinfo=timezone.utc))]:

@@ -257,6 +257,16 @@ class AgentTelemetryTests(unittest.TestCase):
             current_user=self.user,
             db=self.db,
         )
+        # A legacy device binding still needs an approved account/current booking.
+        now = agent.lab_now_naive()
+        self.user.roles = [models.Role(name="student")]
+        booking = models.Booking(user_id=self.user.id, lab_id=self.lab.id,
+            booking_date=now.date(), start_time=now.replace(hour=0, minute=0, second=0).time(),
+            end_time=now.replace(hour=23, minute=59, second=59).time(), status="attended")
+        self.db.add(booking)
+        self.db.flush()
+        self.session.booking_id = booking.id
+        self.db.commit()
         heartbeat = agent.heartbeat(
             session_id=self.session.id,
             device_mac="aa:bb:cc:dd:ee:ff",

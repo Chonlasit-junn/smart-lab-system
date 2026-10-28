@@ -39,6 +39,7 @@ class LabBookingLogicTests(unittest.TestCase):
             email="student@example.com",
             password="hashed",
         )
+        self.user.roles = [models.Role(name="student")]
         self.session.add(self.user)
         self.session.flush()
         self.session.add(models.UserPoints(user_id=self.user.id, points=100))

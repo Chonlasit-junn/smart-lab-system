@@ -9,6 +9,8 @@ test('face errors are localized without sending registration back to the OTP ste
       ['No face detected in the image.', 'faceNotDetected'],
       ['Exactly one face is required.', 'faceSinglePerson'],
       ['Face is too small. Please move closer to the camera.', 'faceTooSmall'],
+      ['Face recognition is busy. Please try again.', 'faceServiceBusy'],
+      ['Face recognition is unavailable. Please try again later.', 'faceServiceUnavailable'],
     ]) {
       const error = { response: { data: { detail } } };
       assert.ok(t[key]);

@@ -42,6 +42,70 @@ def make_response(status_code, payload):
 
 
 class AgentHttpTests(unittest.TestCase):
+    def test_login_throttle_and_inactive_account_do_not_attempt_session_start(self):
+        for status, detail, kind in (
+            (429, "Too many login attempts. Please try again later.", "login_limited"),
+            (403, "This account is not active.", "account_inactive"),
+            (403, "Your account is pending admin approval.", "approval_required"),
+            (503, "Service unavailable", "connection_error"),
+        ):
+            overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
+            overlay.agent = SimpleNamespace(flush_outbox=Mock())
+            with patch.object(agent, "post_with_retry", return_value=make_response(status, {"detail": detail})) as post:
+                result = agent.LoginOverlay._authenticate_and_start_session(overlay, "test@example.com", "password")
+            self.assertEqual(result["kind"], kind)
+            self.assertEqual(post.call_count, 1)
+            overlay.agent.flush_outbox.assert_not_called()
+
+    def test_ban_after_login_is_explained_and_session_not_confirmed(self):
+        overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
+        overlay.agent = SimpleNamespace(flush_outbox=Mock(), get_or_create_session_attempt=Mock(return_value="key"), confirm_session_attempt=Mock())
+        with patch.object(agent, "post_with_retry", side_effect=[
+            make_response(200, {"access_token": "test-token"}),
+            make_response(403, {"detail": "This account has an active ban."}),
+        ]):
+            result = agent.LoginOverlay._authenticate_and_start_session(overlay, "test@example.com", "password")
+        self.assertEqual(result, {"kind": "user_banned"})
+        overlay.agent.confirm_session_attempt.assert_not_called()
+        overlay.login_btn = SimpleNamespace(setText=Mock(), setEnabled=Mock())
+        overlay._show_error = Mock()
+        agent.LoginOverlay._handle_login_result(overlay, result, None)
+        self.assertIn("ระงับ", overlay._show_error.call_args.args[0])
+
+    def test_revoked_device_heartbeat_returns_to_login(self):
+        instance = SimpleNamespace(current_session_id=7, heartbeat_timer=SimpleNamespace(stop=Mock()), info_bar=SimpleNamespace(trigger_logout=Mock()))
+        agent.SmartLabAgent._handle_heartbeat_result(instance, 7, {"status": 403}, None)
+        instance.heartbeat_timer.stop.assert_called_once()
+        instance.info_bar.trigger_logout.assert_called_once()
+
+    def test_booking_required_response_is_explained_to_agent_user(self):
+        overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
+        overlay.agent = SimpleNamespace(
+            flush_outbox=Mock(),
+            get_or_create_session_attempt=Mock(return_value="client-key"),
+            discard_session_attempt=Mock(),
+            confirm_session_attempt=Mock(),
+        )
+        with patch.object(agent, "post_with_retry", side_effect=[
+            make_response(200, {"access_token": "test-token"}),
+            make_response(403, {
+                "detail": "An active Lab booking is required to start an Agent session.",
+            }),
+        ]):
+            result = agent.LoginOverlay._authenticate_and_start_session(
+                overlay,
+                "student@example.invalid",
+                "test-password",
+            )
+
+        self.assertEqual(result, {"kind": "booking_required"})
+
+        overlay.login_btn = SimpleNamespace(setText=Mock(), setEnabled=Mock())
+        overlay._show_error = Mock()
+        agent.LoginOverlay._handle_login_result(overlay, result, None)
+        overlay._show_error.assert_called_once()
+        self.assertIn("จอง Lab", overlay._show_error.call_args.args[0])
+
     def test_heartbeat_preserves_http_conflict_status(self):
         instance = SimpleNamespace(
             flush_outbox=Mock(),

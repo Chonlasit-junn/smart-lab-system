@@ -3,16 +3,15 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from jose import jwt, JWTError
-import os
 import models
 from database import get_db
 from profile_storage import get_profile_image_url, get_profile_image_urls
 from utils import normalize_email
+from security_config import SECRET_KEY, ALGORITHM
+from access_policy import primary_role
 
 router = APIRouter(tags=["Users"])
 
-SECRET_KEY = os.getenv("SECRET_KEY", "SmartLab_Super_Secret_Key_2026")
-ALGORITHM  = "HS256"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -90,10 +89,7 @@ def get_all_users(
 
 @router.get("/users/me")
 def get_my_profile(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    role_row = db.query(models.Role.name).join(models.UserRole).filter(
-        models.UserRole.user_id == current_user.id
-    ).first()
-    role = role_row[0] if role_row else "guest"
+    role = primary_role(db, current_user.id)
 
     extra = {}
     if role == "student":

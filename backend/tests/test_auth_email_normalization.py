@@ -38,6 +38,7 @@ class AuthEmailNormalizationTests(unittest.TestCase):
             email="User@Example.com",
             password=auth.pwd_context.hash(self.password),
         )
+        self.user.roles = [models.Role(name="student")]
         self.session.add(self.user)
         self.session.commit()
 

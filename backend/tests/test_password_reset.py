@@ -51,6 +51,7 @@ class PasswordResetTests(unittest.TestCase):
         self.addCleanup(self.key.stop)
         self.email = "reset@example.com"
         self.user = models.User(email=self.email, password=self.old_hash, first_name="Test", last_name="Recovery")
+        self.user.roles = [models.Role(name="student")]
         self.db.add(self.user)
         self.db.commit()
 
@@ -210,7 +211,8 @@ class PasswordResetTests(unittest.TestCase):
         self.db.add(role)
         self.db.flush()
         passport = models.UserPassport(user_id=self.user.id, phone="0000000000", is_active=False)
-        self.db.add_all([models.UserRole(user_id=self.user.id, role_id=role.id), passport])
+        self.user.roles = [role]
+        self.db.add(passport)
         self.db.commit()
 
         _, code, eligible = reset._reserve(self.db, self.email)
@@ -236,8 +238,8 @@ class PasswordResetTests(unittest.TestCase):
         role = models.Role(name="guest")
         self.db.add(role)
         self.db.flush()
-        self.db.add_all([models.UserRole(user_id=self.user.id, role_id=role.id),
-                         models.UserPassport(user_id=self.user.id, phone="0000000000", is_active=False)])
+        self.user.roles = [role]
+        self.db.add(models.UserPassport(user_id=self.user.id, phone="0000000000", is_active=False))
         self.db.commit()
         mail = AsyncMock()
 
@@ -285,12 +287,6 @@ class PasswordResetTests(unittest.TestCase):
         app.include_router(auth.router)
         app.dependency_overrides[reset.get_db] = lambda: self.db
         mail = AsyncMock()
-        # Student role avoids changing the existing pending-guest approval rule.
-        role = models.Role(name="student")
-        self.db.add(role)
-        self.db.flush()
-        self.db.add(models.UserRole(user_id=self.user.id, role_id=role.id))
-        self.db.commit()
 
         async def flow():
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://unit.test") as client:

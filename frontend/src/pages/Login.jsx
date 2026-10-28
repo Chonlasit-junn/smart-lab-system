@@ -10,6 +10,7 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import { useAuth } from '../context/auth-context';
 import { loginLocales } from '../utils/locales';
 import { useLanguage } from '../context/language-context.js';
+import { loginFeedback } from '../utils/loginFeedback';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -25,7 +26,7 @@ export default function Login() {
   const [emailError, setEmailError]   = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [apiError, setApiError]       = useState('');
-  const [isPending, setIsPending]     = useState(false);
+  const feedback = apiError ? loginFeedback(apiError, t) : null;
   const [loading, setLoading]         = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -36,7 +37,6 @@ export default function Login() {
   const handleLogin = async () => {
     let isValid = true;
     setApiError('');
-    setIsPending(false);
 
     if (!email) {
       setEmailError(t.errEmail);
@@ -80,12 +80,7 @@ export default function Login() {
         navigate('/booking');
       }
     } catch (err) {
-      if (err.response?.status === 403) {
-        setIsPending(true);
-        setApiError(err.response?.data?.detail || t.pendingMsg);
-      } else {
-        setApiError(err.response?.data?.detail || t.invalidMsg);
-      }
+      setApiError(err);
     } finally {
       setLoading(false);
     }
@@ -115,11 +110,11 @@ export default function Login() {
 
             {apiError && (
               <Alert
-                severity={isPending ? 'warning' : 'error'}
-                icon={isPending ? <HourglassEmptyIcon fontSize="inherit" /> : undefined}
+                severity={feedback.pending ? 'warning' : 'error'}
+                icon={feedback.pending ? <HourglassEmptyIcon fontSize="inherit" /> : undefined}
                 sx={{ mb: 3, borderRadius: '8px', fontWeight: '500' }}
               >
-                {apiError}
+                {feedback.message}
               </Alert>
             )}
 

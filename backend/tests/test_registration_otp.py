@@ -3,6 +3,7 @@ import io
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -103,6 +104,85 @@ class RegistrationOTPTests(unittest.TestCase):
         model.represent.return_value = [{"embedding": [.1, .2]}]
         self.register(code)
         self.assertEqual(self.db.query(models.User).count(), 1)
+
+    def test_busy_shared_gatekeeper_slot_preserves_otp_and_creates_no_files(self):
+        from face_service import gatekeeper_inference_slot
+        _, code = self.issue()
+        with gatekeeper_inference_slot(), self.assertRaises(HTTPException) as caught:
+            self.register(code)
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertEqual(caught.exception.headers["Retry-After"], "1")
+        self.assertIsNone(self.row().consumed_at)
+        self.assertEqual(list(Path(self.temp.name).iterdir()), [])
+        auth.get_deepface.assert_not_called()
+        self.register(code)
+        self.assertIsNotNone(self.row().consumed_at)
+
+    def test_face_worker_releases_db_and_does_not_block_another_http_request(self):
+        _, code = self.issue()
+        started = threading.Event()
+        release = threading.Event()
+        main_thread = threading.get_ident()
+        observed = {}
+
+        def represent(**_kwargs):
+            observed["thread"] = threading.get_ident()
+            observed["transaction"] = self.db.in_transaction()
+            started.set()
+            observed["released"] = release.wait(3)
+            return [{"embedding": [.1, .2]}]
+
+        auth.get_deepface.return_value.represent.side_effect = represent
+        app = FastAPI()
+        app.include_router(auth.router)
+        app.dependency_overrides[auth.get_db] = lambda: self.db
+
+        @app.get("/probe")
+        async def probe():
+            return {"ok": True}
+
+        async def flow():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://unit.test") as client:
+                image = io.BytesIO()
+                Image.new("RGB", (100, 100)).save(image, "JPEG")
+                task = asyncio.create_task(client.post("/register", data={
+                    "email": self.email, "otp": code, "password": "test-password", "first_name": "Test",
+                    "last_name": "Worker", "phone": "0812345678",
+                }, files={"face_image": ("face.jpg", image.getvalue(), "image/jpeg")}))
+                try:
+                    self.assertTrue(await asyncio.to_thread(started.wait, 2))
+                    self.assertFalse(task.done())
+                    result = await asyncio.wait_for(client.get("/probe"), timeout=.5)
+                    self.assertEqual(result.json(), {"ok": True})
+                finally:
+                    release.set()
+                result = await task
+                self.assertEqual(result.status_code, 200, result.text)
+
+        asyncio.run(flow())
+        self.assertNotEqual(observed["thread"], main_thread)
+        self.assertFalse(observed["transaction"])
+        self.assertTrue(observed["released"])
+
+    def test_ai_exception_cleans_temp_file_and_can_retry_same_otp(self):
+        _, code = self.issue()
+        paths = []
+
+        def unavailable(img_path, **_kwargs):
+            paths.append(Path(img_path))
+            self.assertTrue(paths[-1].exists())
+            raise RuntimeError("private model details")
+
+        auth.get_deepface.return_value.represent.side_effect = unavailable
+        with self.assertRaises(HTTPException) as caught:
+            self.register(code)
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertNotIn("private model", caught.exception.detail)
+        self.assertFalse(paths[0].exists())
+        self.assertIsNone(self.row().consumed_at)
+        self.assertEqual(self.db.query(models.User).count(), 0)
+        auth.get_deepface.return_value.represent.side_effect = None
+        self.register(code)
 
     def test_no_face_and_tiny_face_are_rejected_without_consuming_otp(self):
         _, code = self.issue()

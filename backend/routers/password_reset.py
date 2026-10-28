@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 import models
+from access_policy import account_denial
 import otp_service as otp
 import schemas
 from database import get_db
@@ -35,15 +36,7 @@ def _password_reset_eligible(db, user):
     """Pending guests must not receive a password-reset OTP before approval."""
     if user is None:
         return False
-    is_guest = any(role.name == "guest" for role in user.roles)
-    passport = db.query(models.UserPassport).filter(
-        models.UserPassport.user_id == user.id,
-    ).first()
-    if is_guest:
-        return bool(passport and passport.is_active)
-    if passport is not None and not passport.is_active:
-        return False
-    return True
+    return account_denial(db, user.id) is None
 
 
 @router.post("/request-otp", dependencies=[Depends(otp.enforce_ip_rate_limit)])

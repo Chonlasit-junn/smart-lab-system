@@ -6,6 +6,7 @@ from urllib.parse import unquote
 
 import models, schemas
 from database import get_db
+from access_policy import account_denial
 from routers.points import (
     apply_point_event,
     get_booking_restriction,
@@ -458,6 +459,10 @@ def create_booking(
     # create duplicate bookings in different labs for the same slot.
     user = db.query(models.User).filter(models.User.id == current_user.id).with_for_update().first()
     if not user: raise HTTPException(status_code=404, detail="User not found.")
+
+    denial = account_denial(db, user.id)
+    if denial is not None:
+        raise HTTPException(status_code=403, detail=denial[1])
 
     restriction = get_booking_restriction(user.id, db)
     if not restriction["booking_allowed"]:

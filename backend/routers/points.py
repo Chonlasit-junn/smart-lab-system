@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
+from access_policy import account_denial, active_ban
 from database import get_db
 from routers.users import get_current_user
 from profile_storage import get_profile_image_url
@@ -332,10 +333,7 @@ def get_or_create_daily_score(
 
 
 def _get_active_ban(user_id: int, db: Session) -> Optional[models.BanRecord]:
-    return db.query(models.BanRecord).filter(
-        models.BanRecord.user_id == user_id,
-        models.BanRecord.ban_until > _now_utc(),
-    ).order_by(models.BanRecord.ban_until.desc()).first()
+    return active_ban(db, user_id, now=_now_utc())
 
 
 def _highest_ban_days(
@@ -714,12 +712,16 @@ def get_booking_restriction(user_id: int, db: Session) -> dict:
         record.points = points
     ban_until = is_user_banned(user_id, db)
     reasons = []
+    denial = account_denial(db, user_id)
+    if denial:
+        reasons.append(denial[1])
     if ban_until:
         reasons.append("บัญชีถูกระงับการจองชั่วคราว")
 
     return {
         "points": points,
-        "booking_allowed": ban_until is None,
+        "booking_allowed": ban_until is None and denial is None,
+        "booking_block_code": denial[0] if denial else "user_banned" if ban_until else None,
         "booking_block_reason": " และ ".join(reasons) if reasons else None,
         "is_banned": ban_until is not None,
         "ban_until": ban_until,
