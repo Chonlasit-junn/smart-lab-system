@@ -4,13 +4,13 @@ import unittest
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["SQLALCHEMY_DATABASE_URL"] = "sqlite:///:memory:"
 
 import security_config as config
+from cors_middleware import OriginCheckedCORSMiddleware
 import utils
 from routers import users
 
@@ -44,9 +44,9 @@ class SecurityConfigTests(unittest.TestCase):
 
     def test_cors_allows_authorized_browser_and_rejects_other_preflight(self):
         app = FastAPI()
-        app.add_middleware(CORSMiddleware, allow_origins=config.cors_origins({"CORS_ALLOWED_ORIGINS": "https://web.example.com"}), allow_credentials=True, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
+        app.add_middleware(OriginCheckedCORSMiddleware, allow_origins=config.cors_origins({"CORS_ALLOWED_ORIGINS": "https://web.example.com"}), allow_credentials=True, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
         with TestClient(app) as client:
-            for origin, status in (("https://web.example.com", 200), ("https://attacker.example.com", 400)):
+            for origin, status in (("https://web.example.com", 200), ("https://attacker.example.com", 403)):
                 response = client.options("/login", headers={"Origin": origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "Authorization, Content-Type"})
                 self.assertEqual(response.status_code, status)
                 if status == 200:

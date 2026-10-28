@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from cors_middleware import OriginCheckedCORSMiddleware
 from security_config import cors_origins
 
 # Fail closed on invalid production configuration before any database startup.
@@ -19,7 +19,7 @@ Base.metadata.create_all(
 app = FastAPI(title="Smart Lab API")
 
 app.add_middleware(
-    CORSMiddleware,
+    OriginCheckedCORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

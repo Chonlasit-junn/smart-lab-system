@@ -72,6 +72,45 @@ Local development with no JWT key uses a random key for that process (restart
 requires login again); default CORS allows localhost/127.0.0.1 on 5173 and 5174.
 An explicitly configured short key is rejected in development too.
 
+### Origin enforcement behind the Hugging Face proxy
+
+Live read-only checks on 2026-10-28 found that `hf.space` returned an echoed
+`Access-Control-Allow-Origin` for an unlisted origin on both OPTIONS and GET.
+Therefore browser CORS response headers alone do not establish enforcement.
+
+`backend/cors_middleware.py` now checks the incoming HTTP `Origin` against the
+same `CORS_ALLOWED_ORIGINS` before routing, authentication, request-body parsing
+or database work. An unlisted, empty, opaque (`null`) or repeated Origin receives
+403 with a generic JSON error and `Cache-Control: no-store`. Allowed origins
+keep the existing CORS preflight, response headers and request behavior.
+
+Requests without Origin remain supported for native Agent/Gatekeeper clients,
+health checks and server calls. They still require the existing credentials on
+protected routes. Origin is a browser safeguard, not proof of client identity:
+custom clients can omit or forge it, so JWT/device/session checks remain required.
+Browser tools on another origin, including Swagger's Try it out on the backend
+domain, require that exact origin in the configured list if they send Origin.
+
+The upstream may continue to return 200 for OPTIONS or permissive CORS headers.
+After deployment, verify actual GET requests: `/` with an allowed origin must
+return 200; an unlisted origin must return 403 and no application data. Requests
+to `/users/me` without credentials must still return 401 when the Origin is
+allowed or absent. These probes need no login, data changes or migration.
+
+Regression tests simulate an edge that answers every preflight and overwrites
+CORS response headers, then confirm that untrusted GET/POST requests still return
+403 without invoking authentication or endpoint handlers. They also cover
+allowed browser requests, native form/file uploads, missing credentials,
+ambiguous origins, unchanged lifespan events and rejection without reading bodies.
+
+From `backend`, using the isolated environment described below:
+
+```powershell
+.\venv\Scripts\python.exe -B -m unittest discover -s tests -p test_cors_middleware.py
+.\venv\Scripts\python.exe -B -m unittest discover -s tests -p test_security_config.py
+.\venv\Scripts\python.exe -B -m unittest discover -s tests -p test_access_policy.py
+```
+
 ## Registration AI
 
 Image decoding/resizing, DeepFace and password hashing run in a worker via
