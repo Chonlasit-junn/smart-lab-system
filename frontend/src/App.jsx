@@ -1,7 +1,7 @@
 import { lazy, Suspense, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import AppErrorBoundary from './components/AppErrorBoundary';
-import LoadingState from './components/LoadingState';
+import PageLoadingState from './components/PageLoadingState';
 import { CssBaseline, ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/auth-context';
@@ -34,13 +34,13 @@ const MyTickets = lazy(() => import('./pages/MyTickets'));
 
 function ProtectedRoute({ children }) {
   const { currentUser, loading } = useAuth();
-  if (loading) return <LoadingState />;
+  if (loading) return <PageLoadingState />;
   return currentUser ? children : <Navigate to="/" replace />;
 }
 
 function AdminRoute({ children }) {
   const { currentUser, loading } = useAuth();
-  if (loading) return <LoadingState />;
+  if (loading) return <PageLoadingState />;
   if (!currentUser) return <Navigate to="/" replace />;
   return currentUser.roleName === "admin" ? children : <Navigate to="/booking" replace />;
 }
@@ -194,10 +194,10 @@ function AppContent() {
   return (
     <MuiThemeProvider theme={muiTheme}>
       <CssBaseline enableColorScheme />
-      <AuthProvider>
-        <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
           <RouteErrorBoundary>
-          <Suspense fallback={<LoadingState />}>
+          <Suspense fallback={<PageLoadingState />}>
             <Routes>
               <Route path="/" element={<Login />} />
               <Route path="/booking" element={<ProtectedRoute><Booking /></ProtectedRoute>} />
@@ -224,8 +224,8 @@ function AppContent() {
           </RouteErrorBoundary>
           <LanguageToggle className="global-language-toggle" />
           <ThemeToggle className="global-theme-toggle" />
-        </BrowserRouter>
-      </AuthProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </MuiThemeProvider>
   );
 }

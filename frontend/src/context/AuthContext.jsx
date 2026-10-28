@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { AuthContext } from './auth-context';
 import { notificationStore } from '../utils/notificationClient.js';
+import PageLoadingState from '../components/PageLoadingState';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -160,7 +161,7 @@ export const AuthProvider = ({ children }) => {
       loading,
       refreshCurrentUser,
     }}>
-      {!loading && children}
+      {loading ? <PageLoadingState /> : children}
     </AuthContext.Provider>
   );
 };

@@ -2,18 +2,83 @@
 <html lang="th">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Paint the saved appearance before the application bundle is available.
+      (() => {
+        let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        let language = 'th';
+        try {
+          const saved = localStorage.getItem('smart-lab-theme');
+          if (saved === 'light' || saved === 'dark') theme = saved;
+          if (localStorage.getItem('smart-lab-language') === 'en') language = 'en';
+        } catch { /* The loading frame also works without browser storage. */ }
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        document.documentElement.lang = language;
+        const path = location.pathname.replace(/\/$/, '');
+        document.documentElement.dataset.startupLayout = ['', '/register', '/forgot-password'].includes(path) ? 'auth' : 'app';
+      })();
+    </script>
+    <style>body { margin: 0; }</style>
+    <link rel="stylesheet" href="/src/components/page-loading.css" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Smart Lab</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Replaced by React on its first render; no account data is read here. -->
+      <div class="page-loading startup-screen" role="status" aria-live="polite">
+        <span class="loading-sr-only"><span class="startup-th">กำลังโหลด...</span><span class="startup-en">Loading...</span></span>
+        <div class="loading-auth" aria-hidden="true">
+          <div class="loading-auth-banner">
+            <div class="loading-brand"><span class="loading-brand-mark"></span>Smart Lab</div>
+            <h1><span class="startup-th">ระบบจองห้อง Lab</span><span class="startup-en">Lab reservation system</span></h1>
+          </div>
+          <div class="loading-auth-panel"><div class="loading-auth-form">
+            <span class="loading-placeholder loading-line-title"></span>
+            <p class="loading-caption"><span class="startup-th">กำลังโหลด...</span><span class="startup-en">Loading...</span></p>
+            <span class="loading-placeholder loading-input"></span><span class="loading-placeholder loading-input"></span>
+            <span class="loading-placeholder loading-submit"></span><span class="loading-placeholder loading-line-short"></span>
+          </div></div>
+        </div>
+        <div class="loading-app" aria-hidden="true">
+          <aside class="loading-sidebar">
+            <div class="loading-brand"><span class="loading-brand-mark"></span>Smart Lab</div>
+            <div class="loading-nav">
+              <span class="loading-placeholder loading-nav-item"></span><span class="loading-placeholder loading-nav-item"></span>
+              <span class="loading-placeholder loading-nav-item"></span><span class="loading-placeholder loading-nav-item"></span>
+              <span class="loading-placeholder loading-nav-item"></span><span class="loading-placeholder loading-nav-item"></span>
+            </div>
+            <span class="loading-placeholder loading-nav-bottom"></span>
+          </aside>
+          <div class="loading-main">
+            <header class="loading-header">
+              <div class="loading-mobile-brand"><div class="loading-brand"><span class="loading-brand-mark"></span>Smart Lab</div></div>
+              <span class="loading-placeholder loading-line-title loading-page-title"></span>
+              <span class="loading-placeholder loading-search"></span><span class="loading-placeholder loading-avatar"></span>
+            </header>
+            <div class="loading-content">
+              <div class="loading-heading"><span class="loading-placeholder loading-line-title"></span><span class="loading-caption"><span class="startup-th">กำลังโหลด...</span><span class="startup-en">Loading...</span></span></div>
+              <div class="loading-card-grid">
+                <div class="loading-card"><span class="loading-placeholder loading-card-image"></span><div class="loading-card-body"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder"></span><span class="loading-placeholder loading-line-short"></span></div></div>
+                <div class="loading-card"><span class="loading-placeholder loading-card-image"></span><div class="loading-card-body"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder"></span><span class="loading-placeholder loading-line-short"></span></div></div>
+                <div class="loading-card"><span class="loading-placeholder loading-card-image"></span><div class="loading-card-body"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder"></span><span class="loading-placeholder loading-line-short"></span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <noscript>กรุณาเปิด JavaScript เพื่อใช้งาน Smart Lab / Please enable JavaScript to use Smart Lab.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
