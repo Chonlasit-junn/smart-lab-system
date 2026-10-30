@@ -289,7 +289,7 @@ export default function BlacklistManager() {
             variant="h5"
             fontWeight="700"
             sx={{ color: "#1e293b", letterSpacing: "-1px", fontSize: { xs: 18, md: 24 },
-              width: { xs: "100%", md: "auto" }, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              width: { xs: "100%", md: "auto" }, minWidth: 0, overflowWrap: "anywhere" }}
           >
             {t("admin.blacklistTitle")}
           </Typography>
@@ -567,8 +567,15 @@ export default function BlacklistManager() {
                   </Typography>
                 </Box>
 
-                <TableContainer>
-                  <Table>
+                <TableContainer sx={{ overflowX: "auto", maxWidth: "100%" }}>
+                  <Table sx={{ minWidth: 860, tableLayout: "fixed" }}>
+                    <colgroup>
+                      <col style={{ width: 56 }} />
+                      <col style={{ width: "26%" }} />
+                      <col />
+                      <col style={{ width: 128 }} />
+                      <col style={{ width: 128 }} />
+                    </colgroup>
                     <TableHead>
                       <TableRow sx={{ bgcolor: "#f8fafc" }}>
                         {[
@@ -646,6 +653,7 @@ export default function BlacklistManager() {
                                   display: "flex",
                                   alignItems: "center",
                                   gap: 2,
+                                  minWidth: 0,
                                 }}
                               >
                                 <Avatar
@@ -660,7 +668,7 @@ export default function BlacklistManager() {
                                     sx={{ color: "#ef4444", fontSize: 18 }}
                                   />
                                 </Avatar>
-                                <Box>
+                                <Box sx={{ minWidth: 0, flex: 1 }}>
                                   <Typography
                                     variant="subtitle2"
                                     fontWeight="700"
@@ -693,6 +701,9 @@ export default function BlacklistManager() {
                                 color: "#64748b",
                                 fontWeight: "400",
                                 maxWidth: 400,
+                                minWidth: 0,
+                                overflowWrap: "anywhere",
+                                whiteSpace: "normal",
                               }}
                             >
                               {item.description || (

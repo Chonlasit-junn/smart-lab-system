@@ -132,12 +132,36 @@ body {
   font-weight: 300;
   font-family: var(--font-family-ui);
   line-height: 1.4;
+  overflow-wrap: anywhere;
   background-color: var(--bg-color);
   color: var(--text-dark);
   -webkit-font-smoothing: antialiased;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Keep long user-provided values inside their layout across every route.
+ * In particular, unbroken names, URLs, and descriptions must not widen tables. */
+.MuiTableContainer-root {
+  width: 100%;
+  max-width: 100%;
+}
+
+.MuiTableCell-root {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* MUI's noWrap utility clips long values. Let them wrap so the complete value
+ * stays available in cards, dialogs, tables, and responsive layouts. */
+.MuiTypography-root.MuiTypography-noWrap {
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible !important;
+  overflow-wrap: anywhere;
+  text-overflow: clip !important;
+  white-space: normal !important;
 }
 
 button,
@@ -549,10 +573,11 @@ option,
   line-height: 1.35 !important;
 }
 
-/* Keep the page title stable when the search area has less room than the
- * desktop header. The search field may shrink; the title should not wrap. */
+/* Keep long page titles within the header while leaving room for search. */
 .top-header > :first-child .MuiTypography-root {
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .top-header > :nth-child(2),
@@ -998,15 +1023,13 @@ textarea:focus-visible,
 }
 
 .lab-card-name {
-  display: -webkit-box;
+  display: block;
   min-width: 0;
-  height: 42px;
-  overflow: hidden;
+  min-height: 42px;
+  height: auto;
+  overflow: visible;
   overflow-wrap: anywhere;
   line-height: 21px;
-  text-overflow: ellipsis;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .room-card:hover {

@@ -803,10 +803,10 @@ export default function ManageLabs() {
                               fontWeight="700"
                               color="#1e293b"
                               sx={{
+                                flex: 1,
                                 minWidth: 0,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
+                                overflowWrap: "anywhere",
+                                whiteSpace: "normal",
                               }}
                             >
                               {lab.code}
