@@ -55,12 +55,24 @@ def get_tickets(
     _require_admin(current_user, db)
     page_number = page if isinstance(page, int) else 1
     page_limit = page_size if isinstance(page_size, int) else 20
-    query = db.query(models.Ticket)
-    total = query.order_by(None).count()
-    tickets = query.order_by(
+    total = db.query(models.Ticket).order_by(None).count()
+    ticket_rows = db.query(
+        models.Ticket,
+        models.User.first_name,
+        models.User.last_name,
+    ).outerjoin(
+        models.User,
+        models.User.id == models.Ticket.user_id,
+    ).order_by(
         models.Ticket.created_at.desc(),
         models.Ticket.id.desc(),
     ).offset((page_number - 1) * page_limit).limit(page_limit).all()
+    tickets = []
+    for ticket, first_name, last_name in ticket_rows:
+        ticket.user_name = " ".join(
+            part for part in (first_name, last_name) if part
+        ) or None
+        tickets.append(ticket)
     return {
         "data": tickets,
         "page": page_number,

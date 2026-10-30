@@ -110,7 +110,7 @@ export default function TicketManager() {
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f8fafc' }}>
                   <TableCell sx={{ fontWeight: '600', color: '#64748b' }}>{t('admin.ticketId')}</TableCell>
-                  <TableCell sx={{ fontWeight: '600', color: '#64748b' }}>{t('admin.ticketUserId')}</TableCell>
+                  <TableCell sx={{ fontWeight: '600', color: '#64748b' }}>{t('admin.ticketReporter')}</TableCell>
                   <TableCell sx={{ fontWeight: '600', color: '#64748b' }}>{t('admin.ticketSubject')}</TableCell>
                   <TableCell sx={{ fontWeight: '600', color: '#64748b' }}>{t('admin.ticketSubmitted')}</TableCell>
                   <TableCell sx={{ fontWeight: '600', color: '#64748b' }}>{t('admin.ticketStatus')}</TableCell>
@@ -122,7 +122,9 @@ export default function TicketManager() {
                   tickets.map((ticket) => (
                     <TableRow key={ticket.id} sx={{ '& td': { borderBottom: '1px solid #f1f5f9' } }}>
                       <TableCell>{ticket.id}</TableCell>
-                      <TableCell>{ticket.user_id}</TableCell>
+                      <TableCell sx={{ overflowWrap: 'anywhere' }}>
+                        {ticket.user_name || t('common.unknownName')}
+                      </TableCell>
                       <TableCell sx={{ minWidth: 0 }}>
                         <Box
                           title={ticket.subject || '—'}
@@ -206,8 +208,10 @@ export default function TicketManager() {
                   <Typography sx={{ overflowWrap: 'anywhere' }}>{selectedTicket.id}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">{t('admin.ticketUserId')}</Typography>
-                  <Typography sx={{ overflowWrap: 'anywhere' }}>{selectedTicket.user_id}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t('admin.ticketReporter')}</Typography>
+                  <Typography sx={{ overflowWrap: 'anywhere' }}>
+                    {selectedTicket.user_name || t('common.unknownName')}
+                  </Typography>
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">{t('admin.ticketSubmitted')}</Typography>
