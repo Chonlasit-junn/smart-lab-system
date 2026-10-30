@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, CircularProgress, Button, Chip, Pagination
+  TableHead, TableRow, CircularProgress, Button, Chip, Pagination, Tooltip,
 } from '@mui/material';
 import { CheckCircle } from '@mui/icons-material';
 import axios from 'axios';
@@ -92,8 +92,17 @@ export default function TicketManager() {
         ) : (
           <>
           {loadError && <LoadError onRetry={fetchTickets} />}
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ width: '100%', maxWidth: '100%', overflowX: 'auto' }}>
+            <Table sx={{ width: '100%', minWidth: 1080, tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: 72 }} />
+                <col style={{ width: 100 }} />
+                <col style={{ width: 180 }} />
+                <col />
+                <col style={{ width: 180 }} />
+                <col style={{ width: 140 }} />
+                <col style={{ width: 170 }} />
+              </colgroup>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f8fafc' }}>
                   <TableCell sx={{ fontWeight: '600', color: '#64748b' }}>{t('admin.ticketId')}</TableCell>
@@ -112,8 +121,42 @@ export default function TicketManager() {
                       <TableCell>{ticket.id}</TableCell>
                       <TableCell>{ticket.user_id}</TableCell>
                       <TableCell sx={{ fontWeight: '600', color: '#334155' }}>{ticket.subject}</TableCell>
-                      <TableCell sx={{ color: '#475569' }}>{ticket.message}</TableCell>
-                      <TableCell sx={{ color: '#475569' }}>
+                      <TableCell sx={{ color: '#475569', verticalAlign: 'top' }}>
+                        <Tooltip
+                          title={ticket.message || '—'}
+                          placement="top-start"
+                          slotProps={{
+                            tooltip: {
+                              sx: {
+                                maxWidth: 520,
+                                maxHeight: 320,
+                                overflowY: 'auto',
+                                overflowWrap: 'anywhere',
+                                whiteSpace: 'pre-wrap',
+                              },
+                            },
+                          }}
+                        >
+                          <Box
+                            component="span"
+                            tabIndex={0}
+                            aria-label={ticket.message || '—'}
+                            sx={{
+                              display: '-webkit-box',
+                              overflow: 'hidden',
+                              overflowWrap: 'anywhere',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.45,
+                              WebkitBoxOrient: 'vertical',
+                              WebkitLineClamp: 4,
+                              cursor: 'help',
+                            }}
+                          >
+                            {ticket.message || '—'}
+                          </Box>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell sx={{ color: '#475569', whiteSpace: 'nowrap' }}>
                         {formatDateTime(ticket.created_at, t('common.locale'), { fallback: '-', includeSeconds: true })}
                       </TableCell>
                       <TableCell>
