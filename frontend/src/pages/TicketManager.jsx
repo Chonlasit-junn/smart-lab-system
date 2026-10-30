@@ -136,7 +136,7 @@ export default function TicketManager() {
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                             fontWeight: '600',
-                            color: '#334155',
+                            color: 'var(--text-dark)',
                           }}
                         >
                           {ticket.subject || '—'}
