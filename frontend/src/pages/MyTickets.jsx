@@ -430,7 +430,7 @@ export default function MyTickets() {
               {tickets.length > 0 ? (
                 <>
                   <TableContainer>
-                    <Table sx={{ minWidth: 760 }}>
+                    <Table sx={{ minWidth: 1040 }}>
                       <TableHead>
                         <TableRow>
                           <TableCell
@@ -469,6 +469,15 @@ export default function MyTickets() {
                           >
                             {t("common.status")}
                           </TableCell>
+                          <TableCell
+                            sx={{
+                              fontWeight: "600",
+                              borderBottom: "1px solid #e2e8f0",
+                              color: "#64748b",
+                            }}
+                          >
+                            {t("user.adminResponse")}
+                          </TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -483,7 +492,6 @@ export default function MyTickets() {
                               key={ticket.id}
                               sx={{
                                 "&:last-child td, &:last-child th": { border: 0 },
-                                opacity: 0.8,
                               }}
                             >
                               <TableCell
@@ -524,6 +532,40 @@ export default function MyTickets() {
                                   size="small"
                                   sx={{ fontWeight: "700" }}
                                 />
+                              </TableCell>
+                              <TableCell sx={{ minWidth: 280, maxWidth: 420 }}>
+                                {ticket.replies?.length ? (
+                                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1, maxHeight: 260, overflowY: "auto", pr: 0.5 }}>
+                                    {ticket.replies.map((reply) => (
+                                      <Paper
+                                        key={reply.id}
+                                        variant="outlined"
+                                        sx={{ p: 1.25, bgcolor: "var(--surface-subtle)" }}
+                                      >
+                                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 0.5 }}>
+                                          <Typography variant="caption" fontWeight="700">
+                                            {t("user.adminReplyBy")}: {reply.responder_name || t("common.unknownName")}
+                                          </Typography>
+                                          <Chip
+                                            label={t(reply.is_resolved ? "user.closedTicket" : "user.inProgressTicket")}
+                                            color={reply.is_resolved ? "success" : "info"}
+                                            size="small"
+                                          />
+                                        </Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          {formatDateTime(reply.created_at, t("common.locale"), { fallback: "-", includeSeconds: true })}
+                                        </Typography>
+                                        <Typography sx={{ mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                                          {reply.message}
+                                        </Typography>
+                                      </Paper>
+                                    ))}
+                                  </Box>
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary">
+                                    {t("user.awaitingAdminResponse")}
+                                  </Typography>
+                                )}
                               </TableCell>
                             </TableRow>
                           );

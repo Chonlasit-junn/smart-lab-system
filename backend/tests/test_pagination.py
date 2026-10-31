@@ -117,7 +117,7 @@ class PaginationTests(unittest.TestCase):
         self.assertEqual(result["page"], 2)
         self.assertEqual(result["page_size"], 2)
         self.assertTrue(result["has_more"])
-        self.assertEqual([ticket.subject for ticket in result["data"]], [
+        self.assertEqual([ticket["subject"] for ticket in result["data"]], [
             "Ticket 2",
             "Ticket 1",
         ])

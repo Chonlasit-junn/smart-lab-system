@@ -51,14 +51,22 @@ async function fixture(language, role = 'student') {
     if (url.pathname.endsWith('/verify-otp')) return reply({ message: 'OTP Verified Successfully!' });
     if (url.pathname.endsWith('/register') && request.method() === 'POST') throw Error('UI policy test must never submit a registration');
     if (url.pathname.startsWith('/bookings/') && request.method() === 'DELETE') return reply({ message: 'Synthetic cancellation' });
-    if (url.pathname.startsWith('/admin/tickets/') && request.method() === 'PATCH') return reply({ message: 'Synthetic close' });
+    if (/^\/admin\/tickets\/\d+\/replies$/.test(url.pathname) && request.method() === 'POST') {
+      const body = request.postDataJSON();
+      state.ticketReply = body;
+      return reply({ data: { id: 1, ticket_id: 1, admin_id: 9, responder_name: 'System Admin',
+        message: body.message, is_resolved: body.is_resolved, created_at: '2026-10-20T01:00:00Z' } });
+    }
     if (url.pathname.includes('/bookings/user/') || ['/tickets/me', '/tickets'].includes(url.pathname)) {
       state.calls++;
       if (state.mode === 'error') return reply({ detail: 'Synthetic outage' }, 500);
       const pageNumber = Number(url.searchParams.get('page') || 1);
       const data = state.mode === 'empty' ? [] : [{ id: pageNumber, lab_code: `QA-ROW-${pageNumber}`,
         lab_name: 'Synthetic Lab', booking_date: '2026-10-20', start_time: '08:40', end_time: '11:00',
-        status: url.pathname.includes('tickets') ? 'open' : 'reserved', subject: `QA-ROW-${pageNumber}`, message: 'Synthetic ticket', user_id: 1, created_at: '2026-10-20T00:00:00Z' }];
+        status: url.pathname.includes('tickets') ? 'open' : 'reserved', subject: `QA-ROW-${pageNumber}`, message: 'Synthetic ticket', user_id: 1, created_at: '2026-10-20T00:00:00Z',
+        replies: url.pathname === '/tickets/me' ? [{ id: 1, responder_name: 'System Admin',
+          message: 'QA response is visible to the ticket owner.', is_resolved: true,
+          created_at: '2026-10-20T01:00:00Z' }] : [] }];
       return reply({ data, total: data.length ? 40 : 0, page: pageNumber, page_size: 20 });
     }
     if (url.origin === base.origin) return route.continue();
@@ -89,9 +97,13 @@ try {
       state.mode = 'empty'; await retry().click();
       await page.getByRole('alert').waitFor({ state: 'detached' });
       if (pathname !== '/ticket') await page.locator('.history-empty-state, .reservation-empty-state').waitFor();
-      else await page.locator('tbody td[colspan="7"]').waitFor();
+      else await page.locator('tbody td[colspan="6"]').waitFor();
       state.mode = 'data'; await page.reload();
       await page.getByText('QA-ROW-1', { exact: true }).waitFor();
+      if (pathname === '/my-tickets') {
+        await page.getByText('QA response is visible to the ticket owner.', { exact: true }).waitFor();
+        await page.getByText('System Admin', { exact: true }).waitFor();
+      }
       state.mode = 'error';
       await page.getByRole('button', { name: /page 2/i }).click();
       await page.getByRole('alert').waitFor();
@@ -112,8 +124,14 @@ try {
         await page.locator('.reservation-empty-state').waitFor();
       }
       if (pathname === '/ticket') {
-        await page.getByRole('button', { name: language === 'en' ? 'Close ticket' : 'ปิด Ticket', exact: true }).click();
-        await page.getByText(language === 'en' ? 'Resolved' : 'ดำเนินการแล้ว', { exact: true }).waitFor();
+        await page.getByRole('button', { name: language === 'en' ? 'View details' : 'ดูข้อมูล', exact: true }).click();
+        const dialog = page.getByRole('dialog');
+        await dialog.getByRole('textbox', { name: language === 'en' ? 'Reply message' : 'ข้อความตอบกลับ' }).fill('QA resolved the issue.');
+        await dialog.getByRole('checkbox', { name: language === 'en' ? 'Mark this ticket as resolved' : 'ทำเครื่องหมายว่าแก้ไขแล้ว' }).check();
+        await dialog.getByRole('button', { name: language === 'en' ? 'Send reply to user' : 'ส่งคำตอบให้ผู้ใช้', exact: true }).click();
+        await dialog.getByText('QA resolved the issue.', { exact: true }).waitFor();
+        await dialog.getByText('System Admin', { exact: true }).waitFor();
+        assert.equal(state.ticketReply?.is_resolved, true);
       }
       if (pathname === '/history') {
         if (language === 'th') {

@@ -20,6 +20,44 @@ def _require_admin(current_user: models.User, db: Session) -> None:
         raise HTTPException(status_code=403, detail="Admin access required.")
 
 
+def _serialize_replies(db: Session, ticket_ids: list[int]) -> dict[int, list[dict]]:
+    if not ticket_ids:
+        return {}
+    replies = db.query(models.TicketReply).filter(
+        models.TicketReply.ticket_id.in_(ticket_ids),
+    ).order_by(
+        models.TicketReply.created_at.asc(),
+        models.TicketReply.id.asc(),
+    ).all()
+    by_ticket: dict[int, list[dict]] = {ticket_id: [] for ticket_id in ticket_ids}
+    for reply in replies:
+        by_ticket[reply.ticket_id].append({
+            "id": reply.id,
+            "ticket_id": reply.ticket_id,
+            "admin_id": reply.admin_id,
+            "responder_name": reply.responder_name,
+            "message": reply.message,
+            "is_resolved": reply.is_resolved,
+            "created_at": reply.created_at,
+        })
+    return by_ticket
+
+
+def _serialize_ticket(ticket: models.Ticket, replies: list[dict], user_name: str | None = None) -> dict:
+    data = {
+        "id": ticket.id,
+        "user_id": ticket.user_id,
+        "subject": ticket.subject,
+        "message": ticket.message,
+        "status": ticket.status,
+        "created_at": ticket.created_at,
+        "replies": replies,
+    }
+    if user_name is not None:
+        data["user_name"] = user_name
+    return data
+
+
 # User ส่ง Ticket โดยผูกเจ้าของจาก access token เท่านั้น
 @router.post("/tickets", response_model=schemas.TicketResponse)
 def create_ticket(
@@ -69,12 +107,16 @@ def get_tickets(
     ).offset((page_number - 1) * page_limit).limit(page_limit).all()
     tickets = []
     for ticket, first_name, last_name in ticket_rows:
-        ticket.user_name = " ".join(
+        user_name = " ".join(
             part for part in (first_name, last_name) if part
         ) or None
-        tickets.append(ticket)
+        tickets.append((ticket, user_name))
+    replies_by_ticket = _serialize_replies(db, [ticket.id for ticket, _ in tickets])
     return {
-        "data": tickets,
+        "data": [
+            _serialize_ticket(ticket, replies_by_ticket.get(ticket.id, []), user_name)
+            for ticket, user_name in tickets
+        ],
         "page": page_number,
         "page_size": page_limit,
         "total": total,
@@ -100,8 +142,12 @@ def get_my_tickets(
         models.Ticket.created_at.desc(),
         models.Ticket.id.desc(),
     ).offset((page_number - 1) * page_limit).limit(page_limit).all()
+    replies_by_ticket = _serialize_replies(db, [ticket.id for ticket in tickets])
     return {
-        "data": tickets,
+        "data": [
+            _serialize_ticket(ticket, replies_by_ticket.get(ticket.id, []))
+            for ticket in tickets
+        ],
         "page": page_number,
         "page_size": page_limit,
         "total": total,
@@ -130,3 +176,48 @@ def update_ticket_status(
     db.refresh(ticket)
 
     return {"message": "Ticket status updated successfully", "data": ticket}
+
+
+@router.post("/admin/tickets/{ticket_id}/replies")
+def create_ticket_reply(
+    ticket_id: int,
+    reply_data: schemas.TicketReplyCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_admin(current_user, db)
+    message = reply_data.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="Reply message is required.")
+
+    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    responder_name = " ".join(
+        part for part in (current_user.first_name, current_user.last_name) if part
+    ).strip() or current_user.email
+    reply = models.TicketReply(
+        ticket_id=ticket.id,
+        admin_id=current_user.id,
+        responder_name=responder_name,
+        message=message,
+        is_resolved=reply_data.is_resolved,
+    )
+    ticket.status = "closed" if reply_data.is_resolved else "in_progress"
+    db.add(reply)
+    db.commit()
+    db.refresh(reply)
+
+    return {
+        "message": "Ticket reply sent successfully",
+        "data": {
+            "id": reply.id,
+            "ticket_id": reply.ticket_id,
+            "admin_id": reply.admin_id,
+            "responder_name": reply.responder_name,
+            "message": reply.message,
+            "is_resolved": reply.is_resolved,
+            "created_at": reply.created_at,
+        },
+    }

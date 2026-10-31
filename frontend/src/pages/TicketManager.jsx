@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, CircularProgress, Button, Chip, Pagination,
-  Dialog, DialogTitle, DialogContent, DialogActions,
+  Dialog, DialogTitle, DialogContent, DialogActions, Checkbox,
+  FormControlLabel, TextField,
 } from '@mui/material';
-import { CheckCircle, Visibility } from '@mui/icons-material';
+import { Send, Visibility } from '@mui/icons-material';
 import axios from 'axios';
 import AdminShell from '../components/AdminShell';
 import LoadError from '../components/LoadError';
@@ -22,6 +23,9 @@ export default function TicketManager() {
   const tickets = ticketData.page === page ? ticketData.items : [];
   const [total, setTotal] = useState(0);
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [replyResolved, setReplyResolved] = useState(false);
+  const [replySaving, setReplySaving] = useState(false);
   const ticketsControllerRef = useRef(null);
   const { t } = useLanguage();
 
@@ -64,26 +68,46 @@ export default function TicketManager() {
 
   useEffect(() => () => ticketsControllerRef.current?.abort(), []);
 
-  // ฟังก์ชันอัปเดตสถานะ Ticket เป็น Closed
-  const handleCloseTicket = async (ticketId) => {
+  const handleSendReply = async () => {
+    if (!selectedTicket || !replyMessage.trim()) return;
     try {
       const token = localStorage.getItem('access_token');
-      await axios.patch(
-        `${API_URL}/admin/tickets/${ticketId}`,
-        { status: 'closed' },
+      setReplySaving(true);
+      const response = await axios.post(
+        `${API_URL}/admin/tickets/${selectedTicket.id}/replies`,
+        { message: replyMessage.trim(), is_resolved: replyResolved },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      // อัปเดต State ในหน้าจอให้เปลี่ยนเป็น closed ทันทีโดยไม่ต้องรีเฟรชหน้า
-      setTicketData(previous => ({ ...previous,
-        items: previous.items.map(ticket => ticket.id === ticketId ? { ...ticket, status: 'closed' } : ticket),
+      const newReply = response.data?.data;
+      const updatedTicket = {
+        ...selectedTicket,
+        status: replyResolved ? 'closed' : 'in_progress',
+        replies: [...(selectedTicket.replies || []), newReply],
+      };
+      setTicketData(previous => ({
+        ...previous,
+        items: previous.items.map(ticket => ticket.id === selectedTicket.id ? updatedTicket : ticket),
       }));
-      setSelectedTicket(previous => previous?.id === ticketId
-        ? { ...previous, status: 'closed' }
-        : previous);
+      setSelectedTicket(updatedTicket);
+      setReplyMessage('');
     } catch (error) {
-      console.error('Failed to close ticket:', error);
-      alert(t("admin.ticketStatusUpdateFailed"));
+      console.error('Failed to send ticket reply:', error);
+      alert(t('admin.ticketReplyFailed'));
+    } finally {
+      setReplySaving(false);
     }
+  };
+
+  const openTicketDetails = (ticket) => {
+    setSelectedTicket(ticket);
+    setReplyMessage('');
+    setReplyResolved(ticket.status === 'closed');
+  };
+
+  const getStatusPresentation = (status) => {
+    if (status === 'closed') return { label: t('user.closedTicket'), color: 'success' };
+    if (status === 'in_progress') return { label: t('user.inProgressTicket'), color: 'info' };
+    return { label: t('admin.pendingTicketStatus'), color: 'warning' };
   };
 
   return (
@@ -119,8 +143,10 @@ export default function TicketManager() {
               </TableHead>
               <TableBody>
                 {tickets.length > 0 ? (
-                  tickets.map((ticket) => (
-                    <TableRow key={ticket.id} sx={{ '& td': { borderBottom: '1px solid #f1f5f9' } }}>
+                  tickets.map((ticket) => {
+                    const status = getStatusPresentation(ticket.status);
+                    return (
+                      <TableRow key={ticket.id} sx={{ '& td': { borderBottom: '1px solid #f1f5f9' } }}>
                       <TableCell>{ticket.id}</TableCell>
                       <TableCell sx={{ overflowWrap: 'anywhere' }}>
                         {ticket.user_name || t('common.unknownName')}
@@ -147,8 +173,8 @@ export default function TicketManager() {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={ticket.status === 'open' ? t('admin.pendingTicketStatus') : t('admin.closedTicketStatus')}
-                          color={ticket.status === 'open' ? 'warning' : 'success'}
+                          label={status.label}
+                          color={status.color}
                           size="small"
                           sx={{ fontWeight: '600' }}
                         />
@@ -158,14 +184,15 @@ export default function TicketManager() {
                           variant="outlined"
                           size="small"
                           startIcon={<Visibility />}
-                          onClick={() => setSelectedTicket(ticket)}
+                          onClick={() => openTicketDetails(ticket)}
                           sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
                         >
                           {t('admin.viewDetails')}
                         </Button>
                       </TableCell>
-                    </TableRow>
-                  ))
+                      </TableRow>
+                    );
+                  })
                 ) : loadError ? null : (
                   <TableRow>
                     <TableCell colSpan={6} align="center" sx={{ py: 4, color: '#94a3b8' }}>
@@ -220,11 +247,10 @@ export default function TicketManager() {
                 <Box>
                   <Typography variant="caption" color="text.secondary">{t('admin.ticketStatus')}</Typography>
                   <Box>
-                    <Chip
-                      label={selectedTicket.status === 'open' ? t('admin.pendingTicketStatus') : t('admin.closedTicketStatus')}
-                      color={selectedTicket.status === 'open' ? 'warning' : 'success'}
-                      size="small"
-                    />
+                    {(() => {
+                      const status = getStatusPresentation(selectedTicket.status);
+                      return <Chip label={status.label} color={status.color} size="small" />;
+                    })()}
                   </Box>
                 </Box>
               </Box>
@@ -255,26 +281,75 @@ export default function TicketManager() {
                   {selectedTicket.message || '—'}
                 </Paper>
               </Box>
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: '700' }}>
+                  {t('admin.ticketReplies')}
+                </Typography>
+                {selectedTicket.replies?.length ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {selectedTicket.replies.map((reply) => (
+                      <Paper key={reply.id} variant="outlined" sx={{ p: 1.5, bgcolor: 'var(--surface-subtle)' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.75 }}>
+                          <Typography variant="body2" fontWeight="700" sx={{ overflowWrap: 'anywhere' }}>
+                            {reply.responder_name}
+                          </Typography>
+                          <Chip
+                            label={reply.is_resolved ? t('admin.ticketResolved') : t('admin.ticketUnresolved')}
+                            color={reply.is_resolved ? 'success' : 'info'}
+                            size="small"
+                          />
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDateTime(reply.created_at, t('common.locale'), { fallback: '-', includeSeconds: true })}
+                        </Typography>
+                        <Typography sx={{ mt: 0.75, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                          {reply.message}
+                        </Typography>
+                      </Paper>
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography color="text.secondary" variant="body2">
+                    {t('admin.noTicketReplies')}
+                  </Typography>
+                )}
+              </Box>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <TextField
+                  label={t('admin.replyMessage')}
+                  value={replyMessage}
+                  onChange={(event) => setReplyMessage(event.target.value)}
+                  multiline
+                  minRows={3}
+                  maxRows={8}
+                  fullWidth
+                  inputProps={{ maxLength: 5000 }}
+                />
+                <FormControlLabel
+                  control={(
+                    <Checkbox
+                      checked={replyResolved}
+                      onChange={(event) => setReplyResolved(event.target.checked)}
+                    />
+                  )}
+                  label={t('admin.markTicketResolved')}
+                />
+                <Button
+                  variant="contained"
+                  startIcon={<Send />}
+                  onClick={handleSendReply}
+                  disabled={replySaving || !replyMessage.trim()}
+                  sx={{ alignSelf: 'flex-end', boxShadow: 'none' }}
+                >
+                  {replySaving ? t('common.sending') : t('admin.sendTicketReply')}
+                </Button>
+              </Box>
             </>
           )}
         </DialogContent>
         <DialogActions sx={{ p: 2.5, gap: 1 }}>
-          {selectedTicket?.status === 'open' && (
-            <Button
-              variant="contained"
-              color="success"
-              startIcon={<CheckCircle />}
-              onClick={() => handleCloseTicket(selectedTicket.id)}
-              sx={{ mr: 'auto', boxShadow: 'none' }}
-            >
-              {t('admin.closeTicket')}
-            </Button>
-          )}
-          {selectedTicket?.status === 'closed' && (
-            <Typography variant="caption" sx={{ mr: 'auto', color: 'text.secondary', fontWeight: '600' }}>
-              {t('admin.resolved')}
-            </Typography>
-          )}
           <Button onClick={() => setSelectedTicket(null)}>{t('common.close')}</Button>
         </DialogActions>
       </Dialog>

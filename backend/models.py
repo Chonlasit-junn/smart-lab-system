@@ -477,3 +477,21 @@ class Ticket(Base):
     message = Column(Text, nullable=False)
     status = Column(String(50), default="open") # สถานะเริ่มต้นคือ open
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TicketReply(Base):
+    """Admin replies and resolution updates visible to the ticket owner."""
+
+    __tablename__ = "ticket_replies"
+    __table_args__ = (
+        CheckConstraint("length(trim(message)) > 0 AND length(message) <= 5000", name="ticket_replies_message_check"),
+        {"info": {"manual_migration": True}},
+    )
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    admin_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    responder_name = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    is_resolved = Column(Boolean, nullable=False, default=False, server_default="false")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

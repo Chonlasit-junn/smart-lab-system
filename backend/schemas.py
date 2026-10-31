@@ -92,6 +92,11 @@ class TicketCreate(BaseModel):
 class TicketUpdateStatus(BaseModel):
     status: str = Field(..., min_length=1) # เช่น "closed", "in_progress"
 
+
+class TicketReplyCreate(BaseModel):
+    message: str = Field(..., min_length=1, max_length=5000)
+    is_resolved: bool = False
+
 # รูปแบบข้อมูลที่ API จะส่งกลับไปให้ Frontend
 class TicketResponse(BaseModel):
     id: int
