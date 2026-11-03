@@ -36,16 +36,16 @@ class Token(BaseModel):
 # --- Labs ---
 
 class LabCreate(BaseModel):
-    name: str = Field(..., example="Mac Lab")
-    code: str = Field(..., example="LAB01")
+    name: str = Field(..., max_length=80, example="Mac Lab")
+    code: str = Field(..., max_length=32, example="LAB01")
     capacity: int = Field(40, gt=0)
-    location: Optional[str] = None
+    location: Optional[str] = Field(None, max_length=120)
 
 class LabUpdate(BaseModel):
-    name: str
-    code: str
+    name: str = Field(..., max_length=80)
+    code: str = Field(..., max_length=32)
     capacity: int = Field(..., gt=0)
-    location: Optional[str] = None
+    location: Optional[str] = Field(None, max_length=120)
 
 class LabStatusUpdate(BaseModel):
     status: str = Field(..., example="active")
@@ -58,13 +58,13 @@ class LabCapacityUpdate(BaseModel):
 
 class ScheduleCreate(BaseModel):
     lab_id: int
-    course_code: str = Field(..., example="CS101")
-    course_name: str = Field(..., example="Introduction to Programming")
-    instructor_name: str = Field(..., example="Dr. Smith")
-    day_of_week: str = Field(..., example="Monday")
+    course_code: str = Field(..., max_length=32, example="CS101")
+    course_name: str = Field(..., max_length=120, example="Introduction to Programming")
+    instructor_name: str = Field(..., max_length=100, example="Dr. Smith")
+    day_of_week: str = Field(..., max_length=16, example="Monday")
     slot_number: int = Field(..., ge=1, le=4)
-    semester: str = Field(..., example="1")
-    academic_year: str = Field(..., example="2026")
+    semester: str = Field(..., max_length=16, example="1")
+    academic_year: str = Field(..., max_length=16, example="2026")
     valid_from: date
     valid_until: date
 

@@ -65,6 +65,16 @@ import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 
 const API_URL = import.meta.env.VITE_API_URL;
+const TEXT_LIMITS = {
+  labCode: 32,
+  labName: 80,
+  location: 120,
+  courseCode: 32,
+  courseName: 120,
+  instructorName: 100,
+  semester: 16,
+  academicYear: 16,
+};
 
 // ============================================================================
 // 2. STATIC DATA
@@ -1062,6 +1072,7 @@ export default function ManageLabs() {
                               fullWidth
                               variant="outlined"
                               size="small"
+                              slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.labCode } }}
                               value={editFormData.code}
                               onChange={(e) =>
                                 setEditFormData({
@@ -1091,6 +1102,7 @@ export default function ManageLabs() {
                               fullWidth
                               variant="outlined"
                               size="small"
+                              slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.labName } }}
                               value={editFormData.name}
                               onChange={(e) =>
                                 setEditFormData({
@@ -1150,6 +1162,7 @@ export default function ManageLabs() {
                               fullWidth
                               variant="outlined"
                               size="small"
+                              slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.location } }}
                               value={editFormData.location}
                               onChange={(e) =>
                                 setEditFormData({
@@ -1497,6 +1510,7 @@ export default function ManageLabs() {
             fullWidth
             variant="outlined"
             size="small"
+            slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.labCode } }}
             value={newLab.code}
             onChange={(e) => setNewLab({ ...newLab, code: e.target.value })}
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
@@ -1506,6 +1520,7 @@ export default function ManageLabs() {
             fullWidth
             variant="outlined"
             size="small"
+            slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.labName } }}
             value={newLab.name}
             onChange={(e) => setNewLab({ ...newLab, name: e.target.value })}
             sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
@@ -1527,6 +1542,7 @@ export default function ManageLabs() {
             fullWidth
             variant="outlined"
             size="small"
+            slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.location } }}
             value={newLab.location}
             onChange={(e) => setNewLab({ ...newLab, location: e.target.value })}
             sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
@@ -1578,6 +1594,7 @@ export default function ManageLabs() {
                 label={t("admin.courseCode")}
                 fullWidth
                 size="small"
+                slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.courseCode } }}
                 value={scheduleFormData.course_code}
                 onChange={(e) =>
                   setScheduleFormData({
@@ -1593,6 +1610,7 @@ export default function ManageLabs() {
                 label={t("admin.courseName")}
                 fullWidth
                 size="small"
+                slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.courseName } }}
                 value={scheduleFormData.course_name}
                 onChange={(e) =>
                   setScheduleFormData({
@@ -1608,6 +1626,7 @@ export default function ManageLabs() {
                 label={t("admin.instructorName")}
                 fullWidth
                 size="small"
+                slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.instructorName } }}
                 value={scheduleFormData.instructor_name}
                 onChange={(e) =>
                   setScheduleFormData({
@@ -1676,6 +1695,7 @@ export default function ManageLabs() {
                 label={t("admin.semester")}
                 fullWidth
                 size="small"
+                slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.semester } }}
                 value={scheduleFormData.semester}
                 onChange={(e) =>
                   setScheduleFormData({
@@ -1691,6 +1711,7 @@ export default function ManageLabs() {
                 label={t("admin.academicYear")}
                 fullWidth
                 size="small"
+                slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.academicYear } }}
                 value={scheduleFormData.academic_year}
                 onChange={(e) =>
                   setScheduleFormData({

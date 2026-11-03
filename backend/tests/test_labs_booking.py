@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
@@ -55,6 +56,45 @@ class LabBookingLogicTests(unittest.TestCase):
     def tearDown(self):
         self.session.close()
         self.engine.dispose()
+
+    def test_lab_text_fields_enforce_limits_for_create_and_update(self):
+        limits = {"name": 80, "code": 32, "location": 120}
+        required = {"name": "Lab", "code": "LAB01", "capacity": 40, "location": "Room 1"}
+
+        for model in (schemas.LabCreate, schemas.LabUpdate):
+            for field, max_length in limits.items():
+                with self.subTest(model=model.__name__, field=field):
+                    model(**{**required, field: "x" * max_length})
+                    with self.assertRaises(ValidationError):
+                        model(**{**required, field: "x" * (max_length + 1)})
+
+    def test_schedule_text_fields_enforce_limits(self):
+        payload = {
+            "lab_id": 1,
+            "course_code": "CS101",
+            "course_name": "Programming",
+            "instructor_name": "Instructor",
+            "day_of_week": "Monday",
+            "slot_number": 1,
+            "semester": "1",
+            "academic_year": "2026",
+            "valid_from": date(2026, 1, 1),
+            "valid_until": date(2026, 12, 31),
+        }
+        limits = {
+            "course_code": 32,
+            "course_name": 120,
+            "instructor_name": 100,
+            "day_of_week": 16,
+            "semester": 16,
+            "academic_year": 16,
+        }
+
+        for field, max_length in limits.items():
+            with self.subTest(field=field):
+                schemas.ScheduleCreate(**{**payload, field: "x" * max_length})
+                with self.assertRaises(ValidationError):
+                    schemas.ScheduleCreate(**{**payload, field: "x" * (max_length + 1)})
 
     def _future_date(self, weekday_name):
         candidate = date.today() + timedelta(days=1)
