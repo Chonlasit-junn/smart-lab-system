@@ -76,6 +76,15 @@ const TEXT_LIMITS = {
   academicYear: 16,
 };
 
+function getTextLimitHint(value, limit, t) {
+  const length = String(value ?? "").length;
+  const difference = limit - length;
+  const messageKey = difference >= 0
+    ? "admin.charactersRemaining"
+    : "admin.charactersOverLimit";
+  return `${length}/${limit} · ${Math.abs(difference)} ${t(messageKey)}`;
+}
+
 // ============================================================================
 // 2. STATIC DATA
 // ============================================================================
@@ -1073,6 +1082,7 @@ export default function ManageLabs() {
                               variant="outlined"
                               size="small"
                               slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.labCode } }}
+                              helperText={getTextLimitHint(editFormData.code, TEXT_LIMITS.labCode, t)}
                               value={editFormData.code}
                               onChange={(e) =>
                                 setEditFormData({
@@ -1103,6 +1113,7 @@ export default function ManageLabs() {
                               variant="outlined"
                               size="small"
                               slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.labName } }}
+                              helperText={getTextLimitHint(editFormData.name, TEXT_LIMITS.labName, t)}
                               value={editFormData.name}
                               onChange={(e) =>
                                 setEditFormData({
@@ -1163,6 +1174,7 @@ export default function ManageLabs() {
                               variant="outlined"
                               size="small"
                               slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.location } }}
+                              helperText={getTextLimitHint(editFormData.location, TEXT_LIMITS.location, t)}
                               value={editFormData.location}
                               onChange={(e) =>
                                 setEditFormData({
@@ -1511,6 +1523,7 @@ export default function ManageLabs() {
             variant="outlined"
             size="small"
             slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.labCode } }}
+            helperText={getTextLimitHint(newLab.code, TEXT_LIMITS.labCode, t)}
             value={newLab.code}
             onChange={(e) => setNewLab({ ...newLab, code: e.target.value })}
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
@@ -1521,6 +1534,7 @@ export default function ManageLabs() {
             variant="outlined"
             size="small"
             slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.labName } }}
+            helperText={getTextLimitHint(newLab.name, TEXT_LIMITS.labName, t)}
             value={newLab.name}
             onChange={(e) => setNewLab({ ...newLab, name: e.target.value })}
             sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
@@ -1543,6 +1557,7 @@ export default function ManageLabs() {
             variant="outlined"
             size="small"
             slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.location } }}
+            helperText={getTextLimitHint(newLab.location, TEXT_LIMITS.location, t)}
             value={newLab.location}
             onChange={(e) => setNewLab({ ...newLab, location: e.target.value })}
             sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
@@ -1595,6 +1610,7 @@ export default function ManageLabs() {
                 fullWidth
                 size="small"
                 slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.courseCode } }}
+                helperText={getTextLimitHint(scheduleFormData.course_code, TEXT_LIMITS.courseCode, t)}
                 value={scheduleFormData.course_code}
                 onChange={(e) =>
                   setScheduleFormData({
@@ -1611,6 +1627,7 @@ export default function ManageLabs() {
                 fullWidth
                 size="small"
                 slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.courseName } }}
+                helperText={getTextLimitHint(scheduleFormData.course_name, TEXT_LIMITS.courseName, t)}
                 value={scheduleFormData.course_name}
                 onChange={(e) =>
                   setScheduleFormData({
@@ -1627,6 +1644,7 @@ export default function ManageLabs() {
                 fullWidth
                 size="small"
                 slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.instructorName } }}
+                helperText={getTextLimitHint(scheduleFormData.instructor_name, TEXT_LIMITS.instructorName, t)}
                 value={scheduleFormData.instructor_name}
                 onChange={(e) =>
                   setScheduleFormData({
@@ -1696,6 +1714,7 @@ export default function ManageLabs() {
                 fullWidth
                 size="small"
                 slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.semester } }}
+                helperText={getTextLimitHint(scheduleFormData.semester, TEXT_LIMITS.semester, t)}
                 value={scheduleFormData.semester}
                 onChange={(e) =>
                   setScheduleFormData({
@@ -1712,6 +1731,7 @@ export default function ManageLabs() {
                 fullWidth
                 size="small"
                 slotProps={{ htmlInput: { maxLength: TEXT_LIMITS.academicYear } }}
+                helperText={getTextLimitHint(scheduleFormData.academic_year, TEXT_LIMITS.academicYear, t)}
                 value={scheduleFormData.academic_year}
                 onChange={(e) =>
                   setScheduleFormData({

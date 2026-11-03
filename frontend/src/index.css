@@ -1306,12 +1306,12 @@ textarea:focus-visible,
   background-color: var(--brand-hover) !important;
 }
 
-:root[data-theme="dark"] .MuiButton-outlined {
+:root[data-theme="dark"] .MuiButton-outlined:not(.MuiButton-colorError):not(.MuiButton-colorWarning):not(.MuiButton-colorSuccess) {
   color: var(--brand-color) !important;
   border-color: var(--brand-color) !important;
 }
 
-:root[data-theme="dark"] .MuiButton-outlined:hover {
+:root[data-theme="dark"] .MuiButton-outlined:not(.MuiButton-colorError):not(.MuiButton-colorWarning):not(.MuiButton-colorSuccess):hover {
   background-color: var(--brand-soft) !important;
 }
 

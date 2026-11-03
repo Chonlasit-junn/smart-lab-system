@@ -225,7 +225,7 @@ export default function AdminDevices() {
                 },
               }}
             >
-              <Table stickyHeader sx={{ minWidth: 1390, tableLayout: "fixed", "& .MuiTableCell-stickyHeader": { bgcolor: "var(--surface-subtle)" } }}>
+              <Table stickyHeader sx={{ minWidth: 1300, tableLayout: "fixed", "& .MuiTableCell-stickyHeader": { bgcolor: "var(--surface-subtle)" } }}>
                 <TableHead sx={{ bgcolor: "#f8fafc" }}>
                   <TableRow>
                     <TableCell sx={{ width: 260, fontWeight: 700 }}>{t("admin.machine")}</TableCell>
@@ -233,15 +233,14 @@ export default function AdminDevices() {
                     <TableCell sx={{ width: 180, fontWeight: 700 }}>{t("common.status")}</TableCell>
                     <TableCell sx={{ width: 150, fontWeight: 700 }}>{t("admin.agent")}</TableCell>
                     <TableCell sx={{ width: 220, fontWeight: 700 }}>{t("admin.lastSignal")}</TableCell>
-                    <TableCell align="right" sx={{ width: 190, fontWeight: 700 }}>{t("admin.manage")}</TableCell>
-                    <TableCell align="right" sx={{ width: 150, fontWeight: 700 }}>{t("common.delete")}</TableCell>
+                    <TableCell align="right" sx={{ width: 250, fontWeight: 700 }}>{t("admin.manage")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {loading ? (
-                    <TableRow><TableCell colSpan={7} align="center" sx={{ py: 7 }}><CircularProgress size={28} aria-label={t("common.loading")} /></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7 }}><CircularProgress size={28} aria-label={t("common.loading")} /></TableCell></TableRow>
                   ) : loadFailed ? null : devices.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} align="center" sx={{ py: 7, color: "#94a3b8" }}>{t("admin.noDevices")}</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7, color: "#94a3b8" }}>{t("admin.noDevices")}</TableCell></TableRow>
                   ) : devices.map((device) => (
                     <TableRow key={device.id} hover>
                       <TableCell>
@@ -264,22 +263,22 @@ export default function AdminDevices() {
                       <TableCell>{device.agent_version || t("common.source")}</TableCell>
                       <TableCell>{formatDateTime(device.last_seen_at, t("common.locale"), { fallback: "" }) || t("common.noSignal")}</TableCell>
                       <TableCell align="right">
-                        <Button size="small" variant="outlined" disabled={savingDeviceId === device.id || removingDeviceId === device.id} onClick={() => handleSaveDevice(device)} sx={{ textTransform: "none", borderRadius: 2 }}>
-                          {savingDeviceId === device.id ? t("admin.savingDevice") : t("admin.saveDevice")}
-                        </Button>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          startIcon={<DeleteOutline />}
-                          disabled={savingDeviceId === device.id || removingDeviceId === device.id}
-                          onClick={() => setDeviceToRemove(device)}
-                          sx={{ textTransform: "none", borderRadius: 2, whiteSpace: "nowrap" }}
-                        >
-                          {t("common.delete")}
-                        </Button>
+                        <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                          <Button size="small" variant="outlined" disabled={savingDeviceId === device.id || removingDeviceId === device.id} onClick={() => handleSaveDevice(device)} sx={{ textTransform: "none", borderRadius: 2, whiteSpace: "nowrap" }}>
+                            {savingDeviceId === device.id ? t("admin.savingDevice") : t("admin.saveDevice")}
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            startIcon={<DeleteOutline />}
+                            disabled={savingDeviceId === device.id || removingDeviceId === device.id}
+                            onClick={() => setDeviceToRemove(device)}
+                            sx={{ textTransform: "none", borderRadius: 2, whiteSpace: "nowrap", color: "#dc2626", borderColor: "#dc2626", "&:hover": { borderColor: "#b91c1c", bgcolor: "rgba(220, 38, 38, 0.08)" } }}
+                          >
+                            {t("common.delete")}
+                          </Button>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))}
