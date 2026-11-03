@@ -6,6 +6,11 @@ import models, schemas
 
 router = APIRouter()
 ALLOWED_TICKET_STATUSES = {"open", "in_progress", "closed"}
+TICKET_REPLY_STATUS_TO_TICKET_STATUS = {
+    "received": "open",
+    "in_progress": "in_progress",
+    "resolved": "closed",
+}
 
 
 def _require_admin(current_user: models.User, db: Session) -> None:
@@ -37,6 +42,7 @@ def _serialize_replies(db: Session, ticket_ids: list[int]) -> dict[int, list[dic
             "admin_id": reply.admin_id,
             "responder_name": reply.responder_name,
             "message": reply.message,
+            "status": reply.status,
             "is_resolved": reply.is_resolved,
             "created_at": reply.created_at,
         })
@@ -189,6 +195,11 @@ def create_ticket_reply(
     message = reply_data.message.strip()
     if not message:
         raise HTTPException(status_code=422, detail="Reply message is required.")
+    reply_status = reply_data.status
+    if reply_status is None:
+        reply_status = "resolved" if reply_data.is_resolved else "in_progress"
+    if reply_status not in TICKET_REPLY_STATUS_TO_TICKET_STATUS:
+        raise HTTPException(status_code=422, detail="Invalid ticket reply status.")
 
     ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
     if not ticket:
@@ -202,9 +213,10 @@ def create_ticket_reply(
         admin_id=current_user.id,
         responder_name=responder_name,
         message=message,
-        is_resolved=reply_data.is_resolved,
+        status=reply_status,
+        is_resolved=reply_status == "resolved",
     )
-    ticket.status = "closed" if reply_data.is_resolved else "in_progress"
+    ticket.status = TICKET_REPLY_STATUS_TO_TICKET_STATUS[reply_status]
     db.add(reply)
     db.commit()
     db.refresh(reply)
@@ -217,6 +229,7 @@ def create_ticket_reply(
             "admin_id": reply.admin_id,
             "responder_name": reply.responder_name,
             "message": reply.message,
+            "status": reply.status,
             "is_resolved": reply.is_resolved,
             "created_at": reply.created_at,
         },

@@ -95,7 +95,9 @@ class TicketUpdateStatus(BaseModel):
 
 class TicketReplyCreate(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000)
-    is_resolved: bool = False
+    status: str | None = Field(default=None, max_length=24)
+    # Retained for clients that still use the original reply payload.
+    is_resolved: bool | None = None
 
 # รูปแบบข้อมูลที่ API จะส่งกลับไปให้ Frontend
 class TicketResponse(BaseModel):

@@ -485,6 +485,7 @@ class TicketReply(Base):
     __tablename__ = "ticket_replies"
     __table_args__ = (
         CheckConstraint("length(trim(message)) > 0 AND length(message) <= 5000", name="ticket_replies_message_check"),
+        CheckConstraint("status IN ('received', 'in_progress', 'resolved')", name="ticket_replies_status_check"),
         {"info": {"manual_migration": True}},
     )
 
@@ -493,5 +494,6 @@ class TicketReply(Base):
     admin_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     responder_name = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
+    status = Column(String(24), nullable=False, default="in_progress", server_default="in_progress")
     is_resolved = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

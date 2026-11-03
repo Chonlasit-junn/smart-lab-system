@@ -81,43 +81,82 @@ class TicketReplyTests(unittest.TestCase):
         self.session.close()
         self.engine.dispose()
 
-    def test_admin_replies_record_resolution_and_are_visible_to_ticket_owner(self):
+    def test_admin_reply_statuses_are_visible_to_ticket_owner(self):
         first = tickets.create_ticket_reply(
             self.ticket.id,
-            schemas.TicketReplyCreate(message="We are checking the schedule.", is_resolved=False),
+            schemas.TicketReplyCreate(message="We have received your request.", status="received"),
             self.admin,
             self.session,
         )
         self.assertFalse(first["data"]["is_resolved"])
-        self.assertEqual(self.ticket.status, "in_progress")
+        self.assertEqual(first["data"]["status"], "received")
+        self.assertEqual(self.ticket.status, "open")
 
         second = tickets.create_ticket_reply(
             self.ticket.id,
-            schemas.TicketReplyCreate(message="The schedule has been corrected.", is_resolved=True),
+            schemas.TicketReplyCreate(message="We are working on it.", status="in_progress"),
             self.admin,
             self.session,
         )
-        self.assertTrue(second["data"]["is_resolved"])
+        self.assertFalse(second["data"]["is_resolved"])
+        self.assertEqual(second["data"]["status"], "in_progress")
+        self.assertEqual(self.ticket.status, "in_progress")
+
+        third = tickets.create_ticket_reply(
+            self.ticket.id,
+            schemas.TicketReplyCreate(message="The schedule has been corrected.", status="resolved"),
+            self.admin,
+            self.session,
+        )
+        self.assertTrue(third["data"]["is_resolved"])
+        self.assertEqual(third["data"]["status"], "resolved")
         self.assertEqual(self.ticket.status, "closed")
 
         result = tickets.get_my_tickets(self.student, self.session)
         self.assertEqual(len(result["data"]), 1)
         self.assertEqual(
             [reply["message"] for reply in result["data"][0]["replies"]],
-            ["We are checking the schedule.", "The schedule has been corrected."],
+            ["We have received your request.", "We are working on it.", "The schedule has been corrected."],
         )
         self.assertEqual(
             [reply["responder_name"] for reply in result["data"][0]["replies"]],
-            ["System Admin", "System Admin"],
+            ["System Admin", "System Admin", "System Admin"],
         )
         self.assertEqual(
             [reply["admin_id"] for reply in result["data"][0]["replies"]],
-            [self.admin.id, self.admin.id],
+            [self.admin.id, self.admin.id, self.admin.id],
         )
         self.assertEqual(
             [reply["is_resolved"] for reply in result["data"][0]["replies"]],
-            [False, True],
+            [False, False, True],
         )
+        self.assertEqual(
+            [reply["status"] for reply in result["data"][0]["replies"]],
+            ["received", "in_progress", "resolved"],
+        )
+
+    def test_legacy_resolution_payload_remains_supported(self):
+        reply = tickets.create_ticket_reply(
+            self.ticket.id,
+            schemas.TicketReplyCreate(message="Legacy API client.", is_resolved=True),
+            self.admin,
+            self.session,
+        )
+
+        self.assertEqual(reply["data"]["status"], "resolved")
+        self.assertTrue(reply["data"]["is_resolved"])
+        self.assertEqual(self.ticket.status, "closed")
+
+    def test_invalid_reply_status_is_rejected(self):
+        with self.assertRaises(HTTPException) as raised:
+            tickets.create_ticket_reply(
+                self.ticket.id,
+                schemas.TicketReplyCreate(message="Invalid status.", status="waiting"),
+                self.admin,
+                self.session,
+            )
+
+        self.assertEqual(raised.exception.status_code, 422)
 
     def test_user_only_sees_replies_for_their_own_tickets(self):
         tickets.create_ticket_reply(
@@ -172,6 +211,7 @@ class TicketReplyTests(unittest.TestCase):
 
     def test_replies_table_is_created_by_manual_migration(self):
         self.assertTrue(models.TicketReply.__table__.info["manual_migration"])
+        self.assertIn("status", models.TicketReply.__table__.columns)
 
 
 if __name__ == "__main__":

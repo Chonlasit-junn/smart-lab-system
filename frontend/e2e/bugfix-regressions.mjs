@@ -55,7 +55,7 @@ async function fixture(language, role = 'student') {
       const body = request.postDataJSON();
       state.ticketReply = body;
       return reply({ data: { id: 1, ticket_id: 1, admin_id: 9, responder_name: 'System Admin',
-        message: body.message, is_resolved: body.is_resolved, created_at: '2026-10-20T01:00:00Z' } });
+        message: body.message, status: body.status, is_resolved: body.status === 'resolved', created_at: '2026-10-20T01:00:00Z' } });
     }
     if (url.pathname.includes('/bookings/user/') || ['/tickets/me', '/tickets'].includes(url.pathname)) {
       state.calls++;
@@ -65,7 +65,7 @@ async function fixture(language, role = 'student') {
         lab_name: 'Synthetic Lab', booking_date: '2026-10-20', start_time: '08:40', end_time: '11:00',
         status: url.pathname.includes('tickets') ? 'open' : 'reserved', subject: `QA-ROW-${pageNumber}`, message: 'Synthetic ticket', user_id: 1, created_at: '2026-10-20T00:00:00Z',
         replies: url.pathname === '/tickets/me' ? [{ id: 1, responder_name: 'System Admin',
-          message: 'QA response is visible to the ticket owner.', is_resolved: true,
+          message: 'QA response is visible to the ticket owner.', status: 'resolved', is_resolved: true,
           created_at: '2026-10-20T01:00:00Z' }] : [] }];
       return reply({ data, total: data.length ? 40 : 0, page: pageNumber, page_size: 20 });
     }
@@ -103,6 +103,7 @@ try {
       if (pathname === '/my-tickets') {
         await page.getByText('QA response is visible to the ticket owner.', { exact: true }).waitFor();
         await page.getByText('System Admin', { exact: true }).waitFor();
+        await page.getByText(language === 'en' ? 'Resolved' : 'แก้ไขเสร็จสิ้น', { exact: true }).waitFor();
       }
       state.mode = 'error';
       await page.getByRole('button', { name: /page 2/i }).click();
@@ -127,11 +128,12 @@ try {
         await page.getByRole('button', { name: language === 'en' ? 'View details' : 'ดูข้อมูล', exact: true }).click();
         const dialog = page.getByRole('dialog');
         await dialog.getByRole('textbox', { name: language === 'en' ? 'Reply message' : 'ข้อความตอบกลับ' }).fill('QA resolved the issue.');
-        await dialog.getByRole('checkbox', { name: language === 'en' ? 'Mark this ticket as resolved' : 'ทำเครื่องหมายว่าแก้ไขแล้ว' }).check();
+        await dialog.getByRole('combobox', { name: language === 'en' ? 'Reply status' : 'สถานะการตอบกลับ' }).click();
+        await page.getByRole('option', { name: language === 'en' ? 'Resolved' : 'แก้ไขเสร็จสิ้น' }).click();
         await dialog.getByRole('button', { name: language === 'en' ? 'Send reply to user' : 'ส่งคำตอบให้ผู้ใช้', exact: true }).click();
         await dialog.getByText('QA resolved the issue.', { exact: true }).waitFor();
         await dialog.getByText('System Admin', { exact: true }).waitFor();
-        assert.equal(state.ticketReply?.is_resolved, true);
+        assert.equal(state.ticketReply?.status, 'resolved');
       }
       if (pathname === '/history') {
         if (language === 'th') {

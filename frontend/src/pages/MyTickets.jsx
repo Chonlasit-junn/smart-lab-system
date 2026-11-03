@@ -45,6 +45,7 @@ import SupportModal from "./SupportModal";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import { getTicketReplyStatus, getTicketReplyStatusPresentation } from "../utils/ticketStatus.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -507,12 +508,13 @@ export default function MyTickets() {
                       </TableHead>
                       <TableBody>
                         {tickets.map((ticket) => {
-                          const status = STATUS_LABELS[ticket.status] || {
+                          const latestReply = ticket.replies?.[ticket.replies.length - 1];
+                          const status = latestReply
+                            ? getTicketReplyStatusPresentation(getTicketReplyStatus(latestReply))
+                            : STATUS_LABELS[ticket.status] || {
                             key: "user.unknownStatus",
                             color: "default",
                           };
-
-                          const latestReply = ticket.replies?.[ticket.replies.length - 1];
 
                           return (
                             <TableRow
@@ -567,7 +569,7 @@ export default function MyTickets() {
                               </TableCell>
                               <TableCell>
                                 <Chip
-                                  label={t(status.key)}
+                                  label={t(status.labelKey || status.key)}
                                   color={status.color}
                                   size="small"
                                   sx={{ fontWeight: "700" }}
@@ -654,7 +656,10 @@ export default function MyTickets() {
         maxWidth="sm"
       >
         {selectedTicket && (() => {
-          const status = STATUS_LABELS[selectedTicket.status] || {
+          const latestReply = selectedTicket.replies?.[selectedTicket.replies.length - 1];
+          const status = latestReply
+            ? getTicketReplyStatusPresentation(getTicketReplyStatus(latestReply))
+            : STATUS_LABELS[selectedTicket.status] || {
             key: "user.unknownStatus",
             color: "default",
           };
@@ -689,7 +694,7 @@ export default function MyTickets() {
                       {t("common.status")}
                     </Typography>
                     <Box>
-                      <Chip label={t(status.key)} color={status.color} size="small" />
+                      <Chip label={t(status.labelKey || status.key)} color={status.color} size="small" />
                     </Box>
                   </Box>
                 </Box>
@@ -723,30 +728,33 @@ export default function MyTickets() {
                   </Typography>
                   {selectedTicket.replies?.length ? (
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, maxHeight: 360, overflowY: "auto", pr: 0.5 }}>
-                      {selectedTicket.replies.map((reply) => (
-                        <Paper
-                          key={reply.id}
-                          variant="outlined"
-                          sx={{ p: 1.5, bgcolor: "var(--surface-subtle)" }}
-                        >
-                          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1, mb: 0.75 }}>
-                            <Typography variant="body2" fontWeight="700" sx={{ overflowWrap: "anywhere" }}>
-                              {t("user.adminReplyBy")}: {reply.responder_name || t("common.unknownName")}
+                      {selectedTicket.replies.map((reply) => {
+                        const statusPresentation = getTicketReplyStatusPresentation(getTicketReplyStatus(reply));
+                        return (
+                          <Paper
+                            key={reply.id}
+                            variant="outlined"
+                            sx={{ p: 1.5, bgcolor: "var(--surface-subtle)" }}
+                          >
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1, mb: 0.75 }}>
+                              <Typography variant="body2" fontWeight="700" sx={{ overflowWrap: "anywhere" }}>
+                                {t("user.adminReplyBy")}: {reply.responder_name || t("common.unknownName")}
+                              </Typography>
+                              <Chip
+                                label={t(statusPresentation.labelKey)}
+                                color={statusPresentation.color}
+                                size="small"
+                              />
+                            </Box>
+                            <Typography variant="caption" sx={{ color: "var(--text-gray)" }}>
+                              {formatDateTime(reply.created_at, t("common.locale"), { fallback: "-", includeSeconds: true })}
                             </Typography>
-                            <Chip
-                              label={t(reply.is_resolved ? "user.closedTicket" : "user.inProgressTicket")}
-                              color={reply.is_resolved ? "success" : "info"}
-                              size="small"
-                            />
-                          </Box>
-                          <Typography variant="caption" sx={{ color: "var(--text-gray)" }}>
-                            {formatDateTime(reply.created_at, t("common.locale"), { fallback: "-", includeSeconds: true })}
-                          </Typography>
-                          <Typography sx={{ mt: 0.75, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                            {reply.message}
-                          </Typography>
-                        </Paper>
-                      ))}
+                            <Typography sx={{ mt: 0.75, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                              {reply.message}
+                            </Typography>
+                          </Paper>
+                        );
+                      })}
                     </Box>
                   ) : (
                     <Typography variant="body2" sx={{ color: "var(--text-gray)" }}>

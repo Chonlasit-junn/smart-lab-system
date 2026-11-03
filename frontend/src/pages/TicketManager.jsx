@@ -2,8 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, CircularProgress, Button, Chip, Pagination,
-  Dialog, DialogTitle, DialogContent, DialogActions, Checkbox,
-  FormControlLabel, TextField,
+  Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, TextField,
 } from '@mui/material';
 import { Send, Visibility } from '@mui/icons-material';
 import axios from 'axios';
@@ -11,6 +10,12 @@ import AdminShell from '../components/AdminShell';
 import LoadError from '../components/LoadError';
 import { formatDateTime } from '../utils/dateFormat';
 import { useLanguage } from '../context/language-context.js';
+import {
+  getInitialTicketReplyStatus,
+  getTicketReplyStatus,
+  getTicketReplyStatusPresentation,
+  getTicketStatusForReply,
+} from '../utils/ticketStatus.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -24,7 +29,7 @@ export default function TicketManager() {
   const [total, setTotal] = useState(0);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [replyMessage, setReplyMessage] = useState('');
-  const [replyResolved, setReplyResolved] = useState(false);
+  const [replyStatus, setReplyStatus] = useState('received');
   const [replySaving, setReplySaving] = useState(false);
   const ticketsControllerRef = useRef(null);
   const { t } = useLanguage();
@@ -75,13 +80,13 @@ export default function TicketManager() {
       setReplySaving(true);
       const response = await axios.post(
         `${API_URL}/admin/tickets/${selectedTicket.id}/replies`,
-        { message: replyMessage.trim(), is_resolved: replyResolved },
+        { message: replyMessage.trim(), status: replyStatus },
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const newReply = response.data?.data;
       const updatedTicket = {
         ...selectedTicket,
-        status: replyResolved ? 'closed' : 'in_progress',
+        status: getTicketStatusForReply(newReply?.status ?? replyStatus),
         replies: [...(selectedTicket.replies || []), newReply],
       };
       setTicketData(previous => ({
@@ -101,10 +106,16 @@ export default function TicketManager() {
   const openTicketDetails = (ticket) => {
     setSelectedTicket(ticket);
     setReplyMessage('');
-    setReplyResolved(ticket.status === 'closed');
+    setReplyStatus(getInitialTicketReplyStatus(ticket));
   };
 
-  const getStatusPresentation = (status) => {
+  const getStatusPresentation = (ticket) => {
+    const latestReply = ticket.replies?.[ticket.replies.length - 1];
+    if (latestReply) {
+      const replyStatus = getTicketReplyStatusPresentation(getTicketReplyStatus(latestReply));
+      return { label: t(replyStatus.labelKey), color: replyStatus.color };
+    }
+    const { status } = ticket;
     if (status === 'closed') return { label: t('user.closedTicket'), color: 'success' };
     if (status === 'in_progress') return { label: t('user.inProgressTicket'), color: 'info' };
     return { label: t('admin.pendingTicketStatus'), color: 'warning' };
@@ -144,7 +155,7 @@ export default function TicketManager() {
               <TableBody>
                 {tickets.length > 0 ? (
                   tickets.map((ticket) => {
-                    const status = getStatusPresentation(ticket.status);
+                    const status = getStatusPresentation(ticket);
                     return (
                       <TableRow key={ticket.id} sx={{ '& td': { borderBottom: '1px solid #f1f5f9' } }}>
                       <TableCell>{ticket.id}</TableCell>
@@ -248,7 +259,7 @@ export default function TicketManager() {
                   <Typography variant="caption" color="text.secondary">{t('admin.ticketStatus')}</Typography>
                   <Box>
                     {(() => {
-                      const status = getStatusPresentation(selectedTicket.status);
+                      const status = getStatusPresentation(selectedTicket);
                       return <Chip label={status.label} color={status.color} size="small" />;
                     })()}
                   </Box>
@@ -288,26 +299,29 @@ export default function TicketManager() {
                 </Typography>
                 {selectedTicket.replies?.length ? (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {selectedTicket.replies.map((reply) => (
-                      <Paper key={reply.id} variant="outlined" sx={{ p: 1.5, bgcolor: 'var(--surface-subtle)' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.75 }}>
-                          <Typography variant="body2" fontWeight="700" sx={{ overflowWrap: 'break-word' }}>
-                            {reply.responder_name}
+                    {selectedTicket.replies.map((reply) => {
+                      const statusPresentation = getTicketReplyStatusPresentation(getTicketReplyStatus(reply));
+                      return (
+                        <Paper key={reply.id} variant="outlined" sx={{ p: 1.5, bgcolor: 'var(--surface-subtle)' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.75 }}>
+                            <Typography variant="body2" fontWeight="700" sx={{ overflowWrap: 'break-word' }}>
+                              {reply.responder_name}
+                            </Typography>
+                            <Chip
+                              label={t(statusPresentation.labelKey)}
+                              color={statusPresentation.color}
+                              size="small"
+                            />
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDateTime(reply.created_at, t('common.locale'), { fallback: '-', includeSeconds: true })}
                           </Typography>
-                          <Chip
-                            label={reply.is_resolved ? t('admin.ticketResolved') : t('admin.ticketUnresolved')}
-                            color={reply.is_resolved ? 'success' : 'info'}
-                            size="small"
-                          />
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatDateTime(reply.created_at, t('common.locale'), { fallback: '-', includeSeconds: true })}
-                        </Typography>
-                        <Typography sx={{ mt: 0.75, whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>
-                          {reply.message}
-                        </Typography>
-                      </Paper>
-                    ))}
+                          <Typography sx={{ mt: 0.75, whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>
+                            {reply.message}
+                          </Typography>
+                        </Paper>
+                      );
+                    })}
                   </Box>
                 ) : (
                   <Typography color="text.secondary" variant="body2">
@@ -327,15 +341,19 @@ export default function TicketManager() {
                   fullWidth
                   inputProps={{ maxLength: 5000 }}
                 />
-                <FormControlLabel
-                  control={(
-                    <Checkbox
-                      checked={replyResolved}
-                      onChange={(event) => setReplyResolved(event.target.checked)}
-                    />
-                  )}
-                  label={t('admin.markTicketResolved')}
-                />
+                <TextField
+                  select
+                  size="small"
+                  fullWidth
+                  label={t('admin.ticketReplyStatus')}
+                  value={replyStatus}
+                  onChange={(event) => setReplyStatus(event.target.value)}
+                  disabled={replySaving}
+                >
+                  <MenuItem value="received">{t('common.ticketStatusReceived')}</MenuItem>
+                  <MenuItem value="in_progress">{t('common.ticketStatusInProgress')}</MenuItem>
+                  <MenuItem value="resolved">{t('common.ticketStatusResolved')}</MenuItem>
+                </TextField>
                 <Button
                   variant="contained"
                   startIcon={<Send />}
