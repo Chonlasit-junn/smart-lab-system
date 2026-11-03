@@ -58,6 +58,14 @@ class ViolationStateTests(unittest.TestCase):
         attempt = state.register_detection(self.start)
         self.assertEqual(attempt.number, 1)
 
+    def test_grace_can_end_early_after_the_blocked_app_is_closed(self):
+        state = ViolationState()
+        state.grant_grace(self.start)
+
+        self.assertTrue(state.clear_grace())
+        self.assertFalse(state.is_grace_active(self.start + timedelta(seconds=1)))
+        self.assertFalse(state.clear_grace())
+
 
 if __name__ == "__main__":
     unittest.main()

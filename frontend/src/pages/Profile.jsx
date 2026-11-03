@@ -367,6 +367,7 @@ export default function Profile() {
                   anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
                   transformOrigin={{ vertical: "top", horizontal: "right" }}
                   PaperProps={{
+                    className: "user-account-popover",
                     sx: {
                       mt: 1.5,
                       width: 320,
@@ -493,8 +494,9 @@ export default function Profile() {
                         "&:hover": { bgcolor: "#fef2f2" },
                       }}
                     >
-                      <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
+                      <Logout className="theme-colored" sx={{ fontSize: 20, color: "#ef4444" }} />
                       <Typography
+                        className="theme-colored"
                         fontSize="13px"
                         fontWeight="600"
                         color="#ef4444"
@@ -553,7 +555,7 @@ export default function Profile() {
             </Box>
           ) : (
             profile && (
-              <Box sx={{ maxWidth: "900px", mx: "auto", px: { xs: 0, sm: 2 } }}>
+              <Box sx={{ width: "100%", maxWidth: "1240px", mx: "auto" }}>
                 {pointsError ? (
                   <Alert severity="error" sx={{ mb: 3 }}>
                     {pointsError}
@@ -693,22 +695,21 @@ export default function Profile() {
                       </Typography>
                       <Box
                         sx={{
-                          display: "flex",
-                          justifyContent: "space-around",
+                          display: "grid",
+                          gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)",
                           alignItems: "center",
-                          flexWrap: "wrap",
-                          gap: 1,
+                          columnGap: 1.5,
                           mt: 2,
                           textAlign: "center",
                         }}
                       >
-                        <Box sx={{ minWidth: 0, flex: "1 1 64px" }}>
+                        <Box sx={{ minWidth: 0 }}>
                           <Typography
                             variant="h3"
                             fontWeight="700"
                             color="#1e293b"
                             lineHeight={1}
-                            sx={{ fontSize: "clamp(1.5rem, 8vw, 3rem)", overflowWrap: "anywhere" }}
+                            sx={{ fontSize: "clamp(1.75rem, 3vw, 2.5rem)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}
                           >
                             {profile.stats?.total_bookings ?? 0}
                           </Typography>
@@ -723,15 +724,15 @@ export default function Profile() {
                         <Divider
                           orientation="vertical"
                           flexItem
-                          sx={{ mx: 0.5, display: { xs: "none", sm: "block" } }}
+                          sx={{ mx: 0.5 }}
                         />
-                        <Box sx={{ minWidth: 0, flex: "1 1 64px" }}>
+                        <Box sx={{ minWidth: 0 }}>
                           <Typography
                             variant="h3"
                             fontWeight="700"
                             lineHeight={1}
                             color={pointColor}
-                            sx={{ fontSize: "clamp(1.5rem, 8vw, 3rem)", overflowWrap: "anywhere" }}
+                            sx={{ fontSize: "clamp(1.75rem, 3vw, 2.5rem)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}
                           >
                             {numericPoints ?? "—"}
                           </Typography>
@@ -771,9 +772,14 @@ export default function Profile() {
 
                       <Box
                         sx={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 2.5,
+                          display: "grid",
+                          gridTemplateColumns: {
+                            xs: "minmax(0, 1fr)",
+                            lg: profile.role === "student"
+                              ? "repeat(2, minmax(0, 1fr))"
+                              : "minmax(0, 1fr)",
+                          },
+                          gap: { xs: 2.5, lg: 3 },
                           mt: 2.5,
                         }}
                       >
@@ -800,21 +806,23 @@ export default function Profile() {
                               label={t("user.studentId")}
                               value={profile.student_id || "—"}
                             />
-                            <InfoRow
-                              icon={
-                                <School
-                                  sx={{ color: "#3b82f6", fontSize: 18 }}
-                                />
-                              }
-                              iconBg="#eff6ff"
-                              label={t("user.facultyDepartment")}
-                              value={
-                                FACULTY_NAMES[profile.faculty] ||
-                                profile.faculty ||
-                                "—"
-                              }
-                              sub={profile.department}
-                            />
+                            <Box sx={{ gridColumn: { lg: "1 / -1" }, minWidth: 0 }}>
+                              <InfoRow
+                                icon={
+                                  <School
+                                    sx={{ color: "#3b82f6", fontSize: 18 }}
+                                  />
+                                }
+                                iconBg="#eff6ff"
+                                label={t("user.facultyDepartment")}
+                                value={
+                                  FACULTY_NAMES[profile.faculty] ||
+                                  profile.faculty ||
+                                  "—"
+                                }
+                                sub={profile.department}
+                              />
+                            </Box>
                           </>
                         )}
 
@@ -1040,11 +1048,11 @@ export default function Profile() {
 // ── reusable info row ────────────────────────────────────────────────────────
 function InfoRow({ icon, iconBg, label, value, sub }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, minWidth: 0 }}>
       <Avatar sx={{ bgcolor: iconBg, width: 38, height: 38, flexShrink: 0 }}>
         {icon}
       </Avatar>
-      <Box sx={{ overflowWrap: "break-word" }}>
+      <Box sx={{ minWidth: 0, overflowWrap: "break-word" }}>
         <Typography
           variant="caption"
           color="#94a3b8"

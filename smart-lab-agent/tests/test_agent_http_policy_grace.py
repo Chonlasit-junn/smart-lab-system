@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -77,34 +78,6 @@ class AgentHttpTests(unittest.TestCase):
         agent.SmartLabAgent._handle_heartbeat_result(instance, 7, {"status": 403}, None)
         instance.heartbeat_timer.stop.assert_called_once()
         instance.info_bar.trigger_logout.assert_called_once()
-
-    def test_booking_required_response_is_explained_to_agent_user(self):
-        overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
-        overlay.agent = SimpleNamespace(
-            flush_outbox=Mock(),
-            get_or_create_session_attempt=Mock(return_value="client-key"),
-            discard_session_attempt=Mock(),
-            confirm_session_attempt=Mock(),
-        )
-        with patch.object(agent, "post_with_retry", side_effect=[
-            make_response(200, {"access_token": "test-token"}),
-            make_response(403, {
-                "detail": "An active Lab booking is required to start an Agent session.",
-            }),
-        ]):
-            result = agent.LoginOverlay._authenticate_and_start_session(
-                overlay,
-                "student@example.invalid",
-                "test-password",
-            )
-
-        self.assertEqual(result, {"kind": "booking_required"})
-
-        overlay.login_btn = SimpleNamespace(setText=Mock(), setEnabled=Mock())
-        overlay._show_error = Mock()
-        agent.LoginOverlay._handle_login_result(overlay, result, None)
-        overlay._show_error.assert_called_once()
-        self.assertIn("จอง Lab", overlay._show_error.call_args.args[0])
 
     def test_heartbeat_preserves_http_conflict_status(self):
         instance = SimpleNamespace(
@@ -185,6 +158,34 @@ class AgentHttpTests(unittest.TestCase):
 
         self.assertEqual(result, {"kind": "session_error", "status": 422})
 
+    def test_booking_required_response_is_explained_to_agent_user(self):
+        overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
+        overlay.agent = SimpleNamespace(
+            flush_outbox=Mock(),
+            get_or_create_session_attempt=Mock(return_value="client-key"),
+            discard_session_attempt=Mock(),
+            confirm_session_attempt=Mock(),
+        )
+        with patch.object(agent, "post_with_retry", side_effect=[
+            make_response(200, {"access_token": "test-token"}),
+            make_response(403, {
+                "detail": "An active Lab booking is required to start an Agent session.",
+            }),
+        ]):
+            result = agent.LoginOverlay._authenticate_and_start_session(
+                overlay,
+                "student@example.invalid",
+                "test-password",
+            )
+
+        self.assertEqual(result, {"kind": "booking_required"})
+
+        overlay.login_btn = SimpleNamespace(setText=Mock(), setEnabled=Mock())
+        overlay._show_error = Mock()
+        agent.LoginOverlay._handle_login_result(overlay, result, None)
+        overlay._show_error.assert_called_once()
+        self.assertIn("จอง Lab", overlay._show_error.call_args.args[0])
+
     def test_login_response_without_access_token_does_not_start_a_session(self):
         overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
         overlay.agent = SimpleNamespace(
@@ -240,7 +241,10 @@ class AgentHttpTests(unittest.TestCase):
         outbox.mark_sent.assert_called_once_with("usage-event")
 
     def test_fallback_usage_summary_is_sent_in_bounded_batches(self):
-        instance = SimpleNamespace(current_access_token="agent-token")
+        instance = SimpleNamespace(
+            current_access_token="agent-token",
+            _send_fallback_violation_logs=Mock(),
+        )
         summary = [{"name": f"Program {index}", "event_id": f"usage-{index}"}
                    for index in range(205)]
 
@@ -328,6 +332,7 @@ class AgentPolicyTests(unittest.TestCase):
             policy_version=None,
             policy_source=None,
             seen_process_ids=set(),
+            seen_visible_process_ids=set(),
         )
 
     def test_empty_policy_clears_cached_rules(self):
@@ -380,6 +385,7 @@ class AgentPolicyTests(unittest.TestCase):
         instance.policy_version = None
         instance.policy_source = None
         instance.seen_process_ids = set()
+        instance.seen_visible_process_ids = set()
         instance.violation_reported = False
         instance.violation_state = agent.ViolationState()
         instance.violation_dialog_active = False
@@ -466,7 +472,10 @@ class AgentGracePeriodTests(unittest.TestCase):
         instance.violation_state = SimpleNamespace(
             clear_expired_grace=Mock(return_value=False),
             is_grace_active=Mock(return_value=True),
+            clear_grace=Mock(return_value=True),
         )
+        instance.violation_grace_context = {"program_name": "Blocked App"}
+        instance._violation_is_still_present = Mock(return_value=True)
         instance.policy_rules = [
             {
                 "id": 1,
@@ -477,6 +486,7 @@ class AgentGracePeriodTests(unittest.TestCase):
             }
         ]
         instance.seen_process_ids = set()
+        instance.seen_visible_process_ids = set()
         instance.current_activity_name = None
         instance.current_activity_started_at = None
         instance.usage_segments = []
@@ -484,12 +494,14 @@ class AgentGracePeriodTests(unittest.TestCase):
         instance._handle_violation_detection = Mock()
         active_window = SimpleNamespace(title="Blocked App")
 
-        with patch.object(agent.gw, "getActiveWindow", return_value=active_window):
+        with patch.object(agent.gw, "getActiveWindow", return_value=active_window), patch.object(
+            agent, "_usage_name_for_window", return_value="blocked.exe",
+        ):
             agent.SmartLabAgent.track_usage(instance)
 
         instance._find_new_process_match.assert_not_called()
         instance._handle_violation_detection.assert_not_called()
-        self.assertEqual(instance.current_activity_name, "Blocked App")
+        self.assertEqual(instance.current_activity_name, "blocked.exe")
         self.assertIsNotNone(instance.current_activity_started_at)
 
     def test_violation_detection_resumes_after_grace_expires(self):
@@ -502,18 +514,21 @@ class AgentGracePeriodTests(unittest.TestCase):
             clear_expired_grace=Mock(return_value=True),
             is_grace_active=Mock(return_value=False),
         )
+        instance.violation_grace_context = {"program_name": "Blocked App"}
         matched_rule = {"app_name": "Blocked App", "match_value": "blocked"}
         instance._find_new_process_match = Mock(
             return_value=("blocked.exe", r"C:\\blocked.exe", matched_rule, "executable_identity",
-                          {"original_filename": "blocked.exe"})
+                          {"original_filename": "blocked.exe"}, 123, False)
         )
         instance._handle_violation_detection = Mock()
         instance.seen_process_ids = {123}
+        instance.seen_visible_process_ids = set()
 
         with patch.object(agent.gw, "getActiveWindow") as get_active_window:
             agent.SmartLabAgent.track_usage(instance)
 
         self.assertEqual(instance.seen_process_ids, set())
+        self.assertIsNone(instance.violation_grace_context)
         instance._handle_violation_detection.assert_called_once()
         context = instance._handle_violation_detection.call_args.args[0]
         self.assertEqual(context["process_name"], "blocked.exe")
@@ -535,12 +550,32 @@ class AgentTelemetryTests(unittest.TestCase):
         instance.policy_version = "original-version"
         instance.policy_token = "original-receipt"
         instance.seen_process_ids = {123}
+        instance.seen_visible_process_ids = set()
         instance.violation_state = agent.ViolationState()
+        instance.violation_grace_context = None
         instance.violation_reported = False
         instance.violation_dialog_active = False
         instance.monitor_timer = Mock()
         instance._finalize_violation = Mock()
         return instance
+
+    @contextmanager
+    def foreground_process(
+        self, *, exe_path=r"C:\Windows\notepad.exe", identity=None,
+        process_name="notepad.exe", window_class="Notepad",
+    ):
+        window = SimpleNamespace(_hWnd=99, title="StarRail - Notepad")
+        process = Mock(spec=["exe", "name"])
+        process.exe.return_value = exe_path
+        process.name.return_value = process_name
+        if identity is None:
+            identity = {"original_filename": "NOTEPAD.EXE"}
+        with patch.object(agent.gw, "getActiveWindow", return_value=window), patch.object(
+            agent, "_window_process_id", return_value=os.getpid() + 1,
+        ), patch.object(agent.psutil, "Process", return_value=process), patch.object(
+            agent, "read_executable_identity", return_value=identity,
+        ), patch.object(agent, "_window_class_name", return_value=window_class):
+            yield window, process
 
     def warning_context(self, instance):
         return {
@@ -558,8 +593,38 @@ class AgentTelemetryTests(unittest.TestCase):
             instance._handle_violation_detection(self.warning_context(instance))
         instance._finalize_violation.assert_not_called()
         instance.monitor_timer.start.assert_called_once_with(5000)
-        self.assertEqual(instance.seen_process_ids, set())
+        self.assertEqual(instance.seen_process_ids, {123})
         self.assertEqual(instance.violation_state.attempts, 1)
+
+    def test_closing_app_during_grace_ends_chance_and_reopened_app_is_detected(self):
+        instance = self.make_agent()
+        now = agent.datetime.now()
+        instance.violation_state.register_detection(now)
+        instance.violation_state.grant_grace(now)
+        instance.violation_grace_context = self.warning_context(instance)
+        instance.violation_grace_context["process_id"] = 123
+        process = SimpleNamespace(info={"pid": 456, "name": "blocked.exe"},
+                                  exe=Mock(return_value=r"C:\blocked.exe"))
+        process_iter = Mock(return_value=[process])
+        read_identity = Mock(return_value={"original_filename": "blocked.exe"})
+        instance.seen_process_ids = {123}
+        dialog = Mock()
+        dialog.exec.return_value = agent.QDialog.DialogCode.Accepted
+
+        with patch.object(agent, "ViolationDialog", return_value=dialog), patch.object(
+            agent.psutil, "process_iter", process_iter,
+        ), patch.object(agent, "read_executable_identity", read_identity), patch.object(
+            agent.gw, "getActiveWindow",
+        ) as get_active_window:
+            agent.SmartLabAgent.track_usage(instance)
+
+        self.assertEqual(instance.violation_state.attempts, 2)
+        self.assertEqual(instance.violation_grace_context.get("process_id"), 456)
+        self.assertTrue(instance.violation_state.is_grace_active(agent.datetime.now()))
+        self.assertEqual(process_iter.call_count, 2)
+        self.assertEqual(read_identity.call_count, 1)
+        dialog.exec.assert_called_once()
+        get_active_window.assert_not_called()
 
     def test_open_app_after_warning_uses_original_timestamp_and_policy(self):
         instance = self.make_agent()
@@ -615,12 +680,60 @@ class AgentTelemetryTests(unittest.TestCase):
                 process = SimpleNamespace(info={"pid": 123, "name": observed},
                                           exe=Mock(return_value=r"C:\apps\program.exe"))
                 with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
+                    agent, "_visible_window_process_ids", return_value=set(),
+                ), patch.object(
                     agent, "read_executable_identity", return_value={"original_filename": original},
                 ):
                     result = instance._find_new_process_match()
                 self.assertEqual(result is not None, expected)
                 if result:
                     self.assertEqual(result[4]["original_filename"], original)
+
+    def test_same_process_is_detected_again_when_its_window_reopens(self):
+        instance = self.make_agent()
+        instance.seen_process_ids.clear()
+        process = SimpleNamespace(
+            info={"pid": 123, "name": "blocked.exe"},
+            exe=Mock(return_value=r"C:\blocked.exe"),
+        )
+        with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
+            agent, "_visible_window_process_ids", return_value=set(),
+        ), patch.object(
+            agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"},
+        ):
+            first_open = instance._find_new_process_match()
+            closed_but_resident = instance._find_new_process_match()
+
+        self.assertIsNotNone(first_open)
+        self.assertIsNone(closed_but_resident)
+
+        with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
+            agent, "_visible_window_process_ids", return_value={123},
+        ), patch.object(
+            agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"},
+        ):
+            reopened = instance._find_new_process_match()
+            same_open_episode = instance._find_new_process_match()
+
+        self.assertIsNotNone(reopened)
+        self.assertTrue(reopened[6])
+        self.assertIsNone(same_open_episode)
+
+    def test_visible_process_warning_ends_when_its_window_closes(self):
+        instance = self.make_agent()
+        process = SimpleNamespace(
+            info={"pid": 123, "name": "blocked.exe"},
+            exe=Mock(return_value=r"C:\blocked.exe"),
+        )
+        context = {
+            **self.warning_context(instance),
+            "process_id": 123,
+            "process_window_visible": True,
+        }
+        with patch.object(agent, "_visible_window_process_ids", return_value=set()), patch.object(
+            agent.psutil, "process_iter", return_value=[process],
+        ):
+            self.assertFalse(instance._violation_is_still_present(context))
 
     def test_inaccessible_process_name_alone_cannot_continue_warning(self):
         instance = self.make_agent()
@@ -707,17 +820,207 @@ class AgentTelemetryTests(unittest.TestCase):
             self.assertEqual(segment["duration"], 30)
             self.assertEqual(segment["name"], "Editor")
 
+    def test_violation_enqueue_failure_uses_fallback_even_with_an_outbox(self):
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.stop_browser_monitor = Mock()
+        instance.monitor_timer = Mock()
+        instance.heartbeat_timer = Mock()
+        instance.policy_timer = Mock()
+        instance._close_current_activity = Mock()
+        instance.usage_segments = []
+        instance.outbox = Mock()
+        instance.outbox.has_pending_for_session.return_value = False
+        instance._pending_fallback_violations = [{
+            "session_id": 12,
+            "event_id": "violation-retry",
+            "program_name": "blocked.exe",
+        }]
+        instance._queue_outbox = Mock(side_effect=[False, True])
+        instance.flush_outbox = Mock()
+        instance.background_tasks = Mock()
+        instance._cleanup_session = Mock()
+        instance.current_access_token = "test-token"
+        instance.current_session_id = 12
+        instance.current_activity_name = None
+        instance.current_activity_started_at = None
+        instance.policy_rules = []
+        instance.policy_version = None
+        instance.policy_source = None
+        instance.policy_token = None
+        instance.seen_process_ids = set()
+        instance.seen_visible_process_ids = set()
+        instance.violation_state = agent.ViolationState()
+        instance.violation_grace_context = None
+        instance.violation_dialog_active = False
+        call_order = []
+
+        with patch.object(agent, "DEBUG_MODE", False), patch.object(
+            agent.os, "system", side_effect=lambda _command: call_order.append("logout"),
+        ) as logoff:
+            agent.SmartLabAgent.stop_and_send_logs(instance, 12, "violation")
+            logoff.assert_not_called()
+        deliver = instance.background_tasks.submit.call_args.args[1]
+        handle_delivery = instance.background_tasks.submit.call_args.args[2]
+
+        def record_post(url, **_kwargs):
+            call_order.append("violation" if url.endswith("/agent/log-violation") else "other")
+            return make_response(200, {})
+
+        instance.flush_outbox.side_effect = lambda **_kwargs: call_order.append("outbox")
+        with patch.object(agent, "post_with_retry", side_effect=record_post), patch.object(
+            agent.os, "system", side_effect=lambda _command: call_order.append("logout"),
+        ) as logoff:
+            deliver()
+            handle_delivery(False, None)
+            logoff.assert_called_once_with("shutdown /l /f")
+
+        self.assertEqual(call_order, ["violation", "outbox", "logout"])
+        self.assertEqual(instance._pending_fallback_violations, [])
+
     def test_monitor_tick_checkpoints_an_unchanged_foreground_app(self):
         instance = self.make_agent()
         started_at = agent._utc_now().replace(microsecond=0)
-        instance._track_active_activity("Editor", started_at)
+        instance._track_active_activity("notepad.exe", started_at)
         instance._find_new_process_match = Mock(return_value=None)
-        with patch.object(agent, "_utc_now", return_value=started_at + timedelta(seconds=30)), patch.object(
-            agent.gw, "getActiveWindow", return_value=SimpleNamespace(title="Editor"),
+        with self.foreground_process(), patch.object(
+            agent, "_utc_now", return_value=started_at + timedelta(seconds=30),
         ):
             instance.track_usage()
         instance._queue_outbox.assert_called_once()
-        self.assertEqual(instance.current_activity_name, "Editor")
+        self.assertEqual(instance.current_activity_name, "notepad.exe")
+
+    def test_window_title_changes_do_not_split_usage_or_leak_document_titles(self):
+        instance = self.make_agent()
+        instance._find_new_process_match = Mock(return_value=None)
+        started_at = agent._utc_now().replace(microsecond=0)
+        with self.foreground_process() as (window, process):
+            for index, title in enumerate((
+                "StarRail - Notepad", "private-document.txt", "Settings", "",
+            )):
+                window.title = title
+                with patch.object(agent, "_utc_now", return_value=started_at + timedelta(seconds=5 * index)):
+                    instance.track_usage()
+                self.assertEqual(instance.current_activity_name, "notepad.exe")
+            process.name.assert_not_called()
+
+        instance._queue_outbox.assert_not_called()
+        instance._close_current_activity(started_at + timedelta(seconds=20))
+        payload = instance._queue_outbox.call_args.kwargs["payload"]
+        segment = json.loads(payload["usage_data"])[0]
+        self.assertEqual(segment["name"], "notepad.exe")
+        self.assertEqual(segment["duration"], 20)
+        self.assertEqual(set(segment), {"event_id", "name", "started_at", "ended_at", "duration"})
+
+    def test_switching_real_executables_with_the_same_title_splits_usage(self):
+        instance = self.make_agent()
+        instance._find_new_process_match = Mock(return_value=None)
+        started_at = agent._utc_now().replace(microsecond=0)
+        for name, offset in (("notepad.exe", 0), ("chrome.exe", 10)):
+            with self.foreground_process(
+                exe_path=rf"C:\Apps\{name}", identity={"original_filename": name},
+            ) as (window, _process), patch.object(
+                agent, "_utc_now", return_value=started_at + timedelta(seconds=offset),
+            ):
+                window.title = "The same document title"
+                instance.track_usage()
+        instance._close_current_activity(started_at + timedelta(seconds=20))
+        segments = [json.loads(call.kwargs["payload"]["usage_data"])[0]
+                    for call in instance._queue_outbox.call_args_list]
+        self.assertEqual([segment["name"] for segment in segments], ["notepad.exe", "chrome.exe"])
+        self.assertEqual([segment["duration"] for segment in segments], [10, 10])
+        self.assertEqual(segments[0]["ended_at"], segments[1]["started_at"])
+
+    def test_usage_of_a_renamed_notepad_uses_its_original_executable_name(self):
+        instance = self.make_agent()
+        instance._find_new_process_match = Mock(return_value=None)
+        with self.foreground_process(
+            exe_path=r"C:\Apps\StarRail.exe", process_name="StarRail.exe",
+        ):
+            instance.track_usage()
+        self.assertEqual(instance.current_activity_name, "notepad.exe")
+        instance._finalize_violation.assert_not_called()
+
+    def test_usage_without_metadata_falls_back_to_executable_basename(self):
+        instance = self.make_agent()
+        instance._find_new_process_match = Mock(return_value=None)
+        with self.foreground_process(exe_path=r"C:\Tools\My-Editor.EXE", identity={}):
+            instance.track_usage()
+        self.assertEqual(instance.current_activity_name, "my-editor.exe")
+
+    def test_usage_can_still_read_process_name_when_image_path_is_denied(self):
+        instance = self.make_agent()
+        instance._find_new_process_match = Mock(return_value=None)
+        with self.foreground_process(process_name="NOTEPAD.EXE") as (_window, process), patch.object(
+            agent, "read_executable_identity",
+        ) as read_identity:
+            process.exe.side_effect = agent.psutil.AccessDenied(123)
+            instance.track_usage()
+        self.assertEqual(instance.current_activity_name, "notepad.exe")
+        read_identity.assert_not_called()
+
+    def test_unreadable_or_exited_foreground_process_ends_the_previous_interval(self):
+        for error in (agent.psutil.AccessDenied(123), agent.psutil.NoSuchProcess(123)):
+            with self.subTest(error=type(error).__name__):
+                instance = self.make_agent()
+                instance._find_new_process_match = Mock(return_value=None)
+                started_at = agent._utc_now().replace(microsecond=0)
+                instance._track_active_activity("notepad.exe", started_at)
+                with self.foreground_process() as (_window, process), patch.object(
+                    agent, "_utc_now", return_value=started_at + timedelta(seconds=5),
+                ):
+                    process.exe.side_effect = error
+                    process.name.side_effect = error
+                    instance.track_usage()
+                self.assertIsNone(instance.current_activity_name)
+                instance._queue_outbox.assert_called_once()
+                segment = json.loads(instance._queue_outbox.call_args.kwargs["payload"]["usage_data"])[0]
+                self.assertEqual(segment["name"], "notepad.exe")
+                self.assertEqual(segment["duration"], 5)
+
+    def test_windows_system_processes_remain_excluded_from_usage(self):
+        for name in ("SystemSettings.exe", "SearchHost.exe", "SearchApp.exe", "SearchUI.exe", "LockApp.exe"):
+            with self.subTest(name=name):
+                instance = self.make_agent()
+                instance._find_new_process_match = Mock(return_value=None)
+                with self.foreground_process(exe_path=rf"C:\Windows\{name}", identity={"original_filename": name}):
+                    instance.track_usage()
+                self.assertIsNone(instance.current_activity_name)
+                instance._queue_outbox.assert_not_called()
+
+    def test_desktop_and_taskbar_are_excluded_but_file_explorer_is_counted(self):
+        for window_class, expected in (
+            ("Progman", None), ("WorkerW", None), ("Shell_TrayWnd", None),
+            ("Shell_SecondaryTrayWnd", None), ("CabinetWClass", "explorer.exe"),
+        ):
+            with self.subTest(window_class=window_class):
+                instance = self.make_agent()
+                instance._find_new_process_match = Mock(return_value=None)
+                with self.foreground_process(
+                    exe_path=r"C:\Windows\explorer.exe", identity={"original_filename": "EXPLORER.EXE"},
+                    window_class=window_class,
+                ):
+                    instance.track_usage()
+                self.assertEqual(instance.current_activity_name, expected)
+
+    def test_missing_window_handle_never_falls_back_to_window_title(self):
+        window = SimpleNamespace(title="StarRail", _hWnd=0)
+        with patch.object(agent.psutil, "Process") as process:
+            self.assertIsNone(agent._usage_name_for_window(window))
+        process.assert_not_called()
+
+    def test_window_class_is_read_using_a_64_bit_handle(self):
+        handle = 0x100000001
+
+        def get_class_name(observed_handle, output, length):
+            self.assertEqual(observed_handle, handle)
+            self.assertGreater(length, len("CabinetWClass"))
+            output.value = "CabinetWClass"
+            return len(output.value)
+
+        user32 = SimpleNamespace(GetClassNameW=get_class_name)
+        with patch.object(agent.ctypes, "windll", SimpleNamespace(user32=user32), create=True):
+            self.assertEqual(agent._window_class_name(SimpleNamespace(_hWnd=handle)), "CabinetWClass")
+        self.assertIs(get_class_name.argtypes[0], agent.ctypes.c_void_p)
 
     def test_agent_owned_window_is_not_recorded_as_an_application(self):
         instance = self.make_agent()
@@ -725,13 +1028,14 @@ class AgentTelemetryTests(unittest.TestCase):
             clear_expired_grace=Mock(return_value=False),
             is_grace_active=Mock(return_value=True),
         )
-        with patch.object(agent, "_is_agent_window", return_value=True), patch.object(
-            agent.gw, "getActiveWindow", return_value=SimpleNamespace(title="Smart Lab Access"),
-        ):
+        with patch.object(agent, "_window_process_id", return_value=os.getpid()), patch.object(
+            agent.gw, "getActiveWindow", return_value=SimpleNamespace(_hWnd=99, title="Renamed Agent"),
+        ), patch.object(agent.psutil, "Process") as process:
             instance.track_usage()
 
         self.assertIsNone(instance.current_activity_name)
         instance._queue_outbox.assert_not_called()
+        process.assert_not_called()
 
     def test_agent_process_is_not_matched_as_a_forbidden_application(self):
         instance = self.make_agent()
@@ -756,6 +1060,35 @@ class AgentTelemetryTests(unittest.TestCase):
         ):
             self.assertTrue(agent._is_agent_window(SimpleNamespace(_hWnd=99)))
             self.assertFalse(agent._is_agent_window(SimpleNamespace(_hWnd=0)))
+        self.assertIs(get_window_process_id.argtypes[0], agent.ctypes.c_void_p)
+
+    @unittest.skipUnless(os.name == "nt", "Windows HWND ownership API")
+    def test_native_message_window_is_identified_by_process_not_title(self):
+        api = agent.ctypes.WinDLL("user32", use_last_error=True)
+        create_window = api.CreateWindowExW
+        create_window.argtypes = [
+            agent.ctypes.c_ulong, agent.ctypes.c_wchar_p, agent.ctypes.c_wchar_p,
+            agent.ctypes.c_ulong, agent.ctypes.c_int, agent.ctypes.c_int,
+            agent.ctypes.c_int, agent.ctypes.c_int, agent.ctypes.c_void_p,
+            agent.ctypes.c_void_p, agent.ctypes.c_void_p, agent.ctypes.c_void_p,
+        ]
+        create_window.restype = agent.ctypes.c_void_p
+        destroy_window = api.DestroyWindow
+        destroy_window.argtypes = [agent.ctypes.c_void_p]
+        destroy_window.restype = agent.ctypes.c_int
+        # HWND_MESSAGE creates an invisible window owned only by this test.
+        handle = create_window(0, "STATIC", "StarRail - Notepad", 0, 0, 0, 0, 0,
+                               agent.ctypes.c_void_p(-3), None, None, None)
+        self.assertTrue(handle, f"CreateWindowExW failed: {agent.ctypes.get_last_error()}")
+        try:
+            window = SimpleNamespace(_hWnd=handle)
+            self.assertEqual(agent._window_process_id(window), os.getpid())
+            self.assertEqual(agent._window_class_name(window).casefold(), "static")
+            with patch.object(agent.psutil, "Process") as process:
+                self.assertIsNone(agent._usage_name_for_window(window))
+            process.assert_not_called()
+        finally:
+            destroy_window(handle)
 
     def test_violation_metadata_is_saved_in_the_durable_payload(self):
         instance = self.make_agent()

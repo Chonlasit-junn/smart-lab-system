@@ -46,6 +46,12 @@ class ViolationState:
         self.grace_until = None
         return True
 
+    def clear_grace(self) -> bool:
+        if self.grace_until is None:
+            return False
+        self.grace_until = None
+        return True
+
     def register_detection(self, now: datetime) -> Optional[ViolationAttempt]:
         """Register a detection unless the session is still in its grace period."""
 

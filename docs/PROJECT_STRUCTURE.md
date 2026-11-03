@@ -40,7 +40,7 @@ gatekeeper/venv/                # Python environment ของ Gatekeeper
 
 โฟลเดอร์ build และ archive เหล่านี้ถูก ignore โดย Git อยู่แล้ว การย้ายเข้า archive ช่วยลดความรก แต่ **ไม่ลดพื้นที่ดิสก์** และไม่ได้ลบไฟล์
 
-MSI ล่าสุดคือ `smart-lab-agent/dist_msi/1.1.6-20261022-200752/SmartLabAgent.msi` (45.44 MB) การ build ครั้งต่อไปยังสร้างโฟลเดอร์ใหม่ตามเวอร์ชันและ timestamp โดยไม่ทับของเดิม ไม่ใช้ชื่อ archive เป็นตัวตัดสินว่าเวอร์ชันใดใหม่ที่สุด
+MSI ล่าสุดคือ `smart-lab-agent/dist_msi/1.1.9-25691025-152743/1.1.9 SmartLabAgent.msi` (45,445,632 bytes หรือ 45.45 MB) รวม Agent และตัวลงทะเบียนจาก source ล่าสุด พร้อมการบันทึกชื่อโปรแกรม usage จาก executable จริง การ build ครั้งต่อไปยังสร้างโฟลเดอร์ใหม่ตามเวอร์ชันและ timestamp โดยไม่ทับของเดิม ไม่ใช้ชื่อ archive เป็นตัวตัดสินว่าเวอร์ชันใดใหม่ที่สุด
 
 ## ข้อควรระวัง
 

@@ -1,0 +1,168 @@
+{
+  "scope": "code review and simulations; no real camera, private faces, network API or database calls",
+  "collector_scenarios": [
+    {
+      "scenario": "all_five_good_with_motion",
+      "valid_samples": 5,
+      "backend_request": {
+        "score": 0.949999988079071,
+        "liveness_passed": true,
+        "reason": null
+      }
+    },
+    {
+      "scenario": "one_detector_miss",
+      "valid_samples": 4,
+      "backend_request": {
+        "score": 0.949999988079071,
+        "liveness_passed": false,
+        "reason": "insufficient_samples"
+      }
+    },
+    {
+      "scenario": "one_multiple_face_detection",
+      "valid_samples": 4,
+      "backend_request": {
+        "score": 0.949999988079071,
+        "liveness_passed": false,
+        "reason": "insufficient_samples"
+      }
+    },
+    {
+      "scenario": "all_five_good_but_small_motion",
+      "valid_samples": 5,
+      "backend_request": {
+        "score": 0.949999988079071,
+        "liveness_passed": false,
+        "reason": "no_motion"
+      }
+    }
+  ],
+  "motion_heuristic": {
+    "six_pixel_translation_with_tracking_crop": 0.0,
+    "brightness_plus_three_without_translation": 3.0
+  },
+  "public_demo_haar_and_onnx": [
+    {
+      "scale": 0.6,
+      "rotation_degrees": 0,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 0.6,
+      "rotation_degrees": 10,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 0.6,
+      "rotation_degrees": -10,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 0.6,
+      "rotation_degrees": 20,
+      "detected_faces": 1,
+      "liveness_score": 0.3131304979324341
+    },
+    {
+      "scale": 0.6,
+      "rotation_degrees": -20,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 0.8,
+      "rotation_degrees": 0,
+      "detected_faces": 1,
+      "liveness_score": 0.00029736655415035784
+    },
+    {
+      "scale": 0.8,
+      "rotation_degrees": 10,
+      "detected_faces": 2,
+      "liveness_score": null
+    },
+    {
+      "scale": 0.8,
+      "rotation_degrees": -10,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 0.8,
+      "rotation_degrees": 20,
+      "detected_faces": 1,
+      "liveness_score": 0.255801796913147
+    },
+    {
+      "scale": 0.8,
+      "rotation_degrees": -20,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 1.0,
+      "rotation_degrees": 0,
+      "detected_faces": 1,
+      "liveness_score": 0.001626540208235383
+    },
+    {
+      "scale": 1.0,
+      "rotation_degrees": 10,
+      "detected_faces": 1,
+      "liveness_score": 0.039404504001140594
+    },
+    {
+      "scale": 1.0,
+      "rotation_degrees": -10,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 1.0,
+      "rotation_degrees": 20,
+      "detected_faces": 1,
+      "liveness_score": 0.05550049990415573
+    },
+    {
+      "scale": 1.0,
+      "rotation_degrees": -20,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 1.2,
+      "rotation_degrees": 0,
+      "detected_faces": 1,
+      "liveness_score": 0.0006744338315911591
+    },
+    {
+      "scale": 1.2,
+      "rotation_degrees": 10,
+      "detected_faces": 1,
+      "liveness_score": 0.06424734741449356
+    },
+    {
+      "scale": 1.2,
+      "rotation_degrees": -10,
+      "detected_faces": 0,
+      "liveness_score": null
+    },
+    {
+      "scale": 1.2,
+      "rotation_degrees": 20,
+      "detected_faces": 1,
+      "liveness_score": 0.3861602544784546
+    },
+    {
+      "scale": 1.2,
+      "rotation_degrees": -20,
+      "detected_faces": 0,
+      "liveness_score": null
+    }
+  ],
+  "notes": "Public demo transforms test mechanics, not population false-rejection accuracy."
+}

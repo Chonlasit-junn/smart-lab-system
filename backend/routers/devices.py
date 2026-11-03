@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 import models
@@ -194,6 +195,8 @@ def list_lab_devices(
     rows = db.query(models.LabDevice, models.Lab).join(
         models.Lab,
         models.Lab.id == models.LabDevice.lab_id,
+    ).filter(
+        models.LabDevice.status != "revoked",
     ).order_by(models.Lab.code.asc(), models.LabDevice.device_name.asc()).all()
     return {"data": [_serialize_device(device, lab) for device, lab in rows]}
 
@@ -243,6 +246,49 @@ def update_lab_device(
     db.refresh(device)
     lab = db.query(models.Lab).filter(models.Lab.id == device.lab_id).first()
     return {"message": "Device updated successfully.", "device": _serialize_device(device, lab)}
+
+
+@router.delete("/admin/lab-devices/{device_pk}")
+def remove_lab_device(
+    device_pk: int,
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    device = db.query(models.LabDevice).filter(
+        models.LabDevice.id == device_pk,
+    ).with_for_update().first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found.")
+
+    active_session_query = db.query(models.LabAccessLog).filter(
+        models.LabAccessLog.session_status == "active",
+        models.LabAccessLog.exit_time.is_(None),
+    )
+    if device.device_mac:
+        active_session_query = active_session_query.filter(or_(
+            models.LabAccessLog.lab_device_id == device.id,
+            and_(
+                models.LabAccessLog.lab_device_id.is_(None),
+                func.lower(func.trim(models.LabAccessLog.device_mac)) == device.device_mac.lower(),
+            ),
+        ))
+    else:
+        active_session_query = active_session_query.filter(
+            models.LabAccessLog.lab_device_id == device.id,
+        )
+
+    if active_session_query.first():
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot remove a device while it has an active session.",
+        )
+
+    # Retain the device row so historical access logs keep their foreign key.
+    # Rotating the stored hash immediately invalidates the workstation token.
+    device.status = "revoked"
+    device.agent_token_hash = hash_device_token(secrets.token_urlsafe(32))
+    db.commit()
+    return {"message": "Device registration removed."}
 
 
 @router.post("/agent/register-device")

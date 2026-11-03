@@ -6,6 +6,10 @@ import {
   Button,
   CircularProgress,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   IconButton,
   MenuItem,
@@ -23,6 +27,7 @@ import {
 import {
   Close,
   Computer,
+  DeleteOutline,
   Logout,
   Person,
 } from "@mui/icons-material";
@@ -56,6 +61,8 @@ export default function AdminDevices() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [savingDeviceId, setSavingDeviceId] = useState(null);
+  const [removingDeviceId, setRemovingDeviceId] = useState(null);
+  const [deviceToRemove, setDeviceToRemove] = useState(null);
   const [notice, setNotice] = useState({ open: false, message: "", severity: "success" });
 
   const showNotice = (message, severity = "success") => {
@@ -117,6 +124,25 @@ export default function AdminDevices() {
       showNotice(requestError.response?.data?.detail || t("admin.deviceSaveFailed"), "error");
     } finally {
       setSavingDeviceId(null);
+    }
+  };
+
+  const handleRemoveDevice = async () => {
+    if (!deviceToRemove) return;
+    const device = deviceToRemove;
+    try {
+      setRemovingDeviceId(device.id);
+      await axios.delete(`${API_URL}/admin/lab-devices/${device.id}`, authConfig());
+      setDeviceToRemove(null);
+      showNotice(t("admin.deviceRemoved"));
+      await fetchData();
+    } catch (requestError) {
+      const message = requestError.response?.status === 409
+        ? t("admin.deviceRemoveActiveSession")
+        : requestError.response?.data?.detail || t("admin.deviceRemoveFailed");
+      showNotice(message, "error");
+    } finally {
+      setRemovingDeviceId(null);
     }
   };
 
@@ -182,8 +208,24 @@ export default function AdminDevices() {
 
           {loadFailed && <LoadError onRetry={fetchData} />}
           <Paper className="surface-card data-table-shell" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, overflow: "hidden" }}>
-            <TableContainer sx={{ overflowX: "auto" }}>
-              <Table sx={{ minWidth: 1240, tableLayout: "fixed" }}>
+            <TableContainer
+              sx={{
+                maxHeight: { xs: "60vh", md: "calc(100vh - 330px)" },
+                minHeight: 280,
+                overflowX: "auto",
+                overflowY: "auto",
+                scrollbarColor: "var(--text-muted) var(--surface-subtle)",
+                scrollbarWidth: "thin",
+                "&::-webkit-scrollbar": { width: 10, height: 10 },
+                "&::-webkit-scrollbar-track": { backgroundColor: "var(--surface-subtle)" },
+                "&::-webkit-scrollbar-thumb": {
+                  backgroundColor: "var(--text-muted)",
+                  border: "2px solid var(--surface-subtle)",
+                  borderRadius: 999,
+                },
+              }}
+            >
+              <Table stickyHeader sx={{ minWidth: 1390, tableLayout: "fixed", "& .MuiTableCell-stickyHeader": { bgcolor: "var(--surface-subtle)" } }}>
                 <TableHead sx={{ bgcolor: "#f8fafc" }}>
                   <TableRow>
                     <TableCell sx={{ width: 260, fontWeight: 700 }}>{t("admin.machine")}</TableCell>
@@ -192,13 +234,14 @@ export default function AdminDevices() {
                     <TableCell sx={{ width: 150, fontWeight: 700 }}>{t("admin.agent")}</TableCell>
                     <TableCell sx={{ width: 220, fontWeight: 700 }}>{t("admin.lastSignal")}</TableCell>
                     <TableCell align="right" sx={{ width: 190, fontWeight: 700 }}>{t("admin.manage")}</TableCell>
+                    <TableCell align="right" sx={{ width: 150, fontWeight: 700 }}>{t("common.delete")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {loading ? (
-                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7 }}><CircularProgress size={28} aria-label={t("common.loading")} /></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} align="center" sx={{ py: 7 }}><CircularProgress size={28} aria-label={t("common.loading")} /></TableCell></TableRow>
                   ) : loadFailed ? null : devices.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 7, color: "#94a3b8" }}>{t("admin.noDevices")}</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} align="center" sx={{ py: 7, color: "#94a3b8" }}>{t("admin.noDevices")}</TableCell></TableRow>
                   ) : devices.map((device) => (
                     <TableRow key={device.id} hover>
                       <TableCell>
@@ -221,8 +264,21 @@ export default function AdminDevices() {
                       <TableCell>{device.agent_version || t("common.source")}</TableCell>
                       <TableCell>{formatDateTime(device.last_seen_at, t("common.locale"), { fallback: "" }) || t("common.noSignal")}</TableCell>
                       <TableCell align="right">
-                        <Button size="small" variant="outlined" disabled={savingDeviceId === device.id} onClick={() => handleSaveDevice(device)} sx={{ textTransform: "none", borderRadius: 2 }}>
+                        <Button size="small" variant="outlined" disabled={savingDeviceId === device.id || removingDeviceId === device.id} onClick={() => handleSaveDevice(device)} sx={{ textTransform: "none", borderRadius: 2 }}>
                           {savingDeviceId === device.id ? t("admin.savingDevice") : t("admin.saveDevice")}
+                        </Button>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          startIcon={<DeleteOutline />}
+                          disabled={savingDeviceId === device.id || removingDeviceId === device.id}
+                          onClick={() => setDeviceToRemove(device)}
+                          sx={{ textTransform: "none", borderRadius: 2, whiteSpace: "nowrap" }}
+                        >
+                          {t("common.delete")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -233,6 +289,38 @@ export default function AdminDevices() {
           </Paper>
         </Box>
       </Box>
+
+      <Dialog
+        open={Boolean(deviceToRemove)}
+        onClose={() => removingDeviceId === null && setDeviceToRemove(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t("admin.removeDeviceTitle")}</DialogTitle>
+        <DialogContent>
+          <Typography>{t("admin.removeDeviceConfirm")}</Typography>
+          <Typography fontWeight={700} sx={{ mt: 1, overflowWrap: "break-word" }}>
+            {deviceToRemove?.device_name}
+          </Typography>
+          <Alert severity="info" sx={{ mt: 2 }}>
+            {t("admin.deviceRemovalPreservesLogs")}
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button disabled={removingDeviceId !== null} onClick={() => setDeviceToRemove(null)}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            startIcon={removingDeviceId !== null ? <CircularProgress size={16} color="inherit" /> : <DeleteOutline />}
+            disabled={removingDeviceId !== null}
+            onClick={handleRemoveDevice}
+          >
+            {removingDeviceId !== null ? t("admin.removingDevice") : t("common.delete")}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar open={notice.open} autoHideDuration={3500} onClose={() => setNotice((current) => ({ ...current, open: false }))}>
         <Alert severity={notice.severity} onClose={() => setNotice((current) => ({ ...current, open: false }))}>{notice.message}</Alert>

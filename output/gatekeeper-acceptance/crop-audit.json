@@ -1,0 +1,87 @@
+[
+  {
+    "frame": "original_portrait",
+    "box_source": "haar",
+    "box": [
+      288,
+      170,
+      121,
+      216
+    ],
+    "current_crop_shape": [
+      569,
+      294,
+      3
+    ],
+    "current_crop_score": 0.9325467944145203,
+    "upstream_crop_score": 0.9928713440895081
+  },
+  {
+    "frame": "original_portrait",
+    "box_source": "upstream_retina",
+    "box": [
+      106,
+      147,
+      207,
+      213
+    ],
+    "current_crop_shape": [
+      541,
+      480,
+      3
+    ],
+    "current_crop_score": 0.9909670948982239,
+    "upstream_crop_score": 0.990223228931427
+  },
+  {
+    "frame": "resize_landscape",
+    "box_source": "upstream_retina",
+    "box": [
+      159,
+      89,
+      227,
+      222
+    ],
+    "current_crop_shape": [
+      480,
+      578,
+      3
+    ],
+    "current_crop_score": 0.9999407529830933,
+    "upstream_crop_score": 0.999947190284729
+  },
+  {
+    "frame": "fit_landscape",
+    "box_source": "haar",
+    "box": [
+      222,
+      96,
+      172,
+      172
+    ],
+    "current_crop_shape": [
+      414,
+      464,
+      3
+    ],
+    "current_crop_score": 0.001626540208235383,
+    "upstream_crop_score": 0.0009069020743481815
+  },
+  {
+    "frame": "fit_landscape",
+    "box_source": "upstream_retina",
+    "box": [
+      218,
+      110,
+      158,
+      160
+    ],
+    "current_crop_shape": [
+      406,
+      426,
+      3
+    ],
+    "current_crop_score": 0.07047738134860992,
+    "upstream_crop_score": 0.47984665632247925
+  }
+]

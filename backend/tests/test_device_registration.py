@@ -129,6 +129,116 @@ class DeviceRegistrationTests(unittest.TestCase):
             any(dependency.call is require_admin_user for dependency in route.dependant.dependencies)
         )
 
+    def test_admin_remove_route_requires_admin_dependency(self):
+        route = next(
+            route
+            for route in devices.router.routes
+            if getattr(route, "path", None) == "/admin/lab-devices/{device_pk}"
+            and "DELETE" in getattr(route, "methods", set())
+        )
+
+        self.assertTrue(
+            any(dependency.call is require_admin_user for dependency in route.dependant.dependencies)
+        )
+
+    def test_admin_removal_revokes_device_and_preserves_historical_logs(self):
+        registration = devices.register_device_as_admin(
+            devices.AdminDeviceRegister(
+                lab_id=self.lab.id,
+                device_id="device-remove-001",
+                device_name="LAB-PC-REMOVE",
+                device_mac="AA:BB:CC:DD:EE:11",
+            ),
+            self.admin,
+            self.session,
+        )
+        device = self.session.query(models.LabDevice).filter(
+            models.LabDevice.device_id == registration["device_id"],
+        ).one()
+        original_token_hash = device.agent_token_hash
+        user = models.User(
+            first_name="Past",
+            last_name="User",
+            email="past@example.com",
+            password="hashed",
+        )
+        self.session.add(user)
+        self.session.flush()
+        access_log = models.LabAccessLog(
+            user_id=user.id,
+            lab_id=self.lab.id,
+            lab_device_id=device.id,
+            device_used=device.device_name,
+            device_mac=device.device_mac,
+            session_status="completed",
+            status="success",
+            access_type="manual",
+            exit_time=datetime.now(timezone.utc),
+        )
+        self.session.add(access_log)
+        self.session.commit()
+
+        result = devices.remove_lab_device(device.id, self.admin, self.session)
+
+        self.session.refresh(device)
+        self.session.refresh(access_log)
+        self.assertEqual(result["message"], "Device registration removed.")
+        self.assertEqual(device.status, "revoked")
+        self.assertNotEqual(device.agent_token_hash, original_token_hash)
+        self.assertEqual(access_log.lab_device_id, device.id)
+        self.assertEqual(access_log.device_used, "LAB-PC-REMOVE")
+        self.assertEqual(devices.list_lab_devices(self.admin, self.session)["data"], [])
+        with self.assertRaises(HTTPException) as raised:
+            require_registered_device(
+                self.session,
+                registration["device_id"],
+                registration["device_token"],
+            )
+        self.assertEqual(raised.exception.status_code, 403)
+
+    def test_admin_cannot_remove_device_with_active_session(self):
+        registration = devices.register_device_as_admin(
+            devices.AdminDeviceRegister(
+                lab_id=self.lab.id,
+                device_id="device-remove-active",
+                device_name="LAB-PC-ACTIVE",
+                device_mac="AA:BB:CC:DD:EE:12",
+            ),
+            self.admin,
+            self.session,
+        )
+        device = self.session.query(models.LabDevice).filter(
+            models.LabDevice.device_id == registration["device_id"],
+        ).one()
+        original_token_hash = device.agent_token_hash
+        user = models.User(
+            first_name="Current",
+            last_name="User",
+            email="current@example.com",
+            password="hashed",
+        )
+        self.session.add(user)
+        self.session.flush()
+        self.session.add(models.LabAccessLog(
+            user_id=user.id,
+            lab_id=self.lab.id,
+            lab_device_id=device.id,
+            device_used=device.device_name,
+            device_mac=device.device_mac,
+            session_status="active",
+            status="success",
+            access_type="manual",
+        ))
+        self.session.commit()
+
+        with self.assertRaises(HTTPException) as raised:
+            devices.remove_lab_device(device.id, self.admin, self.session)
+
+        self.session.refresh(device)
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(device.status, "active")
+        self.assertEqual(device.agent_token_hash, original_token_hash)
+
     def test_agent_start_session_requires_authenticated_user_dependency(self):
         route = next(
             route

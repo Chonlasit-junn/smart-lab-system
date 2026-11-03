@@ -1,0 +1,18 @@
+{
+  "scope": "one public upstream demo subject, synthetic framing and rotation; not a live-user accuracy test",
+  "current_haar_boxes": [
+    [
+      230,
+      130,
+      132,
+      132
+    ],
+    [
+      210,
+      56,
+      160,
+      160
+    ]
+  ],
+  "intersection_over_union": 0.3584238444051528
+}

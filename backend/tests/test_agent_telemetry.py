@@ -110,6 +110,40 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertEqual(points.call_count, 1)
         self.assertEqual(points.call_args.kwargs["effective_at"], self.detected_at)
 
+    def test_distinct_violations_across_sessions_each_create_a_point_event(self):
+        second_session = models.LabAccessLog(
+            user_id=self.user.id,
+            lab_id=self.lab.id,
+            lab_device_id=self.device.id,
+            access_type="manual",
+            status="success",
+            session_status="active",
+            entry_time=self.detected_at - timedelta(minutes=30),
+            device_mac="aa:bb:cc:dd:ee:ff",
+        )
+        self.db.add(second_session)
+        self.db.commit()
+
+        self.deliver(event_id="violation-session-one")
+        self.deliver(
+            session_id=second_session.id,
+            event_id="violation-session-two",
+        )
+
+        violations = self.db.query(models.UsageViolation).order_by(
+            models.UsageViolation.id,
+        ).all()
+        point_logs = self.db.query(models.PointLog).filter(
+            models.PointLog.reason == "forbidden_app",
+        ).order_by(models.PointLog.id).all()
+        points = self.db.query(models.UserPoints).filter_by(user_id=self.user.id).one()
+        self.assertEqual([row.lab_access_log_id for row in violations], [
+            self.session.id,
+            second_session.id,
+        ])
+        self.assertEqual([row.change for row in point_logs], [-10, -10])
+        self.assertEqual(points.points, 80)
+
     def test_usage_endpoint_rejects_missing_or_unbound_device_credentials(self):
         other_token = "other-device-token"
         other_device = models.LabDevice(
@@ -178,6 +212,30 @@ class AgentTelemetryTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.status_code, 413)
         self.assertEqual(self.db.query(models.ProgramUsageLog).count(), 0)
+
+    def test_usage_accepts_executable_names_and_legacy_labels_in_the_same_payload(self):
+        names = ["notepad.exe", "chrome.exe", "Notepad"]
+        payload = [{
+            "event_id": f"usage-name-{index}",
+            "name": name,
+            "started_at": (self.detected_at + timedelta(minutes=index)).isoformat(),
+            "ended_at": (self.detected_at + timedelta(minutes=index + 1)).isoformat(),
+            "duration": 60,
+        } for index, name in enumerate(names)]
+        for expected_created, expected_duplicates in ((3, 0), (0, 3)):
+            result = agent.log_usage(
+                session_id=self.session.id,
+                usage_data=json.dumps(payload),
+                device_id=self.device.device_id,
+                device_token=self.device_token,
+                db=self.db,
+            )
+            self.assertEqual(result["created_count"], expected_created)
+            self.assertEqual(result["duplicate_count"], expected_duplicates)
+        rows = self.db.query(models.ProgramUsageLog).order_by(models.ProgramUsageLog.id).all()
+        self.assertEqual([row.program_name for row in rows], names)
+        self.assertEqual([row.duration_seconds for row in rows], [60, 60, 60])
+        self.assertTrue(all(row.lab_access_log_id == self.session.id for row in rows))
 
     def test_violation_endpoint_authenticates_before_duplicate_acknowledgment(self):
         with patch.object(agent, "apply_point_event", return_value={}) as points:

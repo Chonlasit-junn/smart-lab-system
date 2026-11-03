@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import ntpath
 import os
 from ctypes import wintypes
 from functools import lru_cache
@@ -75,3 +76,29 @@ def read_executable_identity(path: str) -> dict[str, str]:
         return dict(_read_version_info(os.path.abspath(path), stat.st_mtime_ns, stat.st_size))
     except (OSError, ValueError):
         return {}
+
+
+def program_usage_name(
+    process_name: str,
+    exe_path: str | None = None,
+    executable_identity: dict[str, str] | None = None,
+) -> str | None:
+    """Name a usage interval from its executable, never its window title.
+
+    OriginalFilename survives a simple EXE rename. ProductName is deliberately
+    excluded: unrelated Windows applications can share an OS product name.
+    Missing metadata falls back to the actual image filename, not enforcement
+    evidence; blacklist matching retains its stricter identity requirements.
+    """
+    identity = executable_identity or {}
+    for value in (
+        identity.get("original_filename"),
+        identity.get("internal_name"),
+        exe_path,
+        process_name,
+    ):
+        if isinstance(value, str):
+            name = ntpath.basename(value.strip()).casefold()
+            if name and name not in {".", ".."}:
+                return name
+    return None

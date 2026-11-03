@@ -5,6 +5,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   IconButton,
   Paper,
@@ -30,6 +34,7 @@ import {
   Person,
   Settings,
   SupportAgent,
+  Visibility,
 } from "@mui/icons-material";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -76,6 +81,7 @@ export default function MyTickets() {
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [selectedTicket, setSelectedTicket] = useState(null);
 
   const userIdentity = currentUser?.id || currentUser?.email;
   const tickets = ticketData.identity === userIdentity && ticketData.page === page ? ticketData.items : [];
@@ -265,6 +271,7 @@ export default function MyTickets() {
                   anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
                   transformOrigin={{ vertical: "top", horizontal: "right" }}
                   PaperProps={{
+                    className: "user-account-popover",
                     sx: {
                       mt: 1.5,
                       width: 320,
@@ -385,8 +392,8 @@ export default function MyTickets() {
                         "&:hover": { bgcolor: "#fef2f2" },
                       }}
                     >
-                      <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
-                      <Typography fontSize="13px" fontWeight="600" color="#ef4444">
+                      <Logout className="theme-colored" sx={{ fontSize: 20, color: "#ef4444" }} />
+                      <Typography className="theme-colored" fontSize="13px" fontWeight="600" color="#ef4444">
                         {t("common.logout")}
                       </Typography>
                     </Box>
@@ -411,7 +418,7 @@ export default function MyTickets() {
                 border: "2px solid #cbd5e1",
                 borderRadius: 4,
                 width: "100%",
-                maxWidth: "900px",
+                maxWidth: "1200px",
                 mx: "auto",
                 bgcolor: "white",
               }}
@@ -429,8 +436,16 @@ export default function MyTickets() {
 
               {tickets.length > 0 ? (
                 <>
-                  <TableContainer>
-                    <Table sx={{ minWidth: 1040 }}>
+                  <TableContainer sx={{ width: "100%", maxWidth: "100%", overflowX: "auto" }}>
+                    <Table sx={{ width: "100%", minWidth: 940, tableLayout: "fixed" }}>
+                      <colgroup>
+                        <col style={{ width: 145 }} />
+                        <col style={{ width: 200 }} />
+                        <col style={{ width: 145 }} />
+                        <col style={{ width: 115 }} />
+                        <col style={{ width: 220 }} />
+                        <col style={{ width: 115 }} />
+                      </colgroup>
                       <TableHead>
                         <TableRow>
                           <TableCell
@@ -478,6 +493,16 @@ export default function MyTickets() {
                           >
                             {t("user.adminResponse")}
                           </TableCell>
+                          <TableCell
+                            sx={{
+                              fontWeight: "600",
+                              borderBottom: "1px solid #e2e8f0",
+                              color: "#64748b",
+                              textAlign: "center",
+                            }}
+                          >
+                            {t("admin.viewDetails")}
+                          </TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -486,6 +511,8 @@ export default function MyTickets() {
                             key: "user.unknownStatus",
                             color: "default",
                           };
+
+                          const latestReply = ticket.replies?.[ticket.replies.length - 1];
 
                           return (
                             <TableRow
@@ -496,36 +523,49 @@ export default function MyTickets() {
                             >
                               <TableCell
                                 sx={{
-                                  minWidth: 180,
-                                  maxWidth: 240,
+                                  minWidth: 0,
                                   fontWeight: "600",
                                   color: "#334155",
-                                  wordBreak: "break-word",
                                 }}
                               >
-                                {ticket.subject}
+                                <Box
+                                  sx={{
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {ticket.subject || "—"}
+                                </Box>
                               </TableCell>
                               <TableCell
                                 sx={{
-                                  minWidth: 260,
-                                  maxWidth: 420,
+                                  minWidth: 0,
                                   color: "#475569",
-                                  whiteSpace: "pre-wrap",
-                                  wordBreak: "break-word",
                                 }}
                               >
-                                {ticket.message}
+                                <Box
+                                  sx={{
+                                    display: "-webkit-box",
+                                    overflow: "hidden",
+                                    WebkitBoxOrient: "vertical",
+                                    WebkitLineClamp: 2,
+                                    overflowWrap: "anywhere",
+                                    lineHeight: 1.4,
+                                  }}
+                                >
+                                  {ticket.message || "—"}
+                                </Box>
                               </TableCell>
                               <TableCell
                                 sx={{
-                                  minWidth: 170,
                                   color: "#475569",
                                   whiteSpace: "nowrap",
                                 }}
                               >
                                 {formatDateTime(ticket.created_at, t("common.locale"), { fallback: "-" })}
                               </TableCell>
-                              <TableCell sx={{ minWidth: 150 }}>
+                              <TableCell>
                                 <Chip
                                   label={t(status.key)}
                                   color={status.color}
@@ -533,39 +573,47 @@ export default function MyTickets() {
                                   sx={{ fontWeight: "700" }}
                                 />
                               </TableCell>
-                              <TableCell sx={{ minWidth: 280, maxWidth: 420 }}>
-                                {ticket.replies?.length ? (
-                                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1, maxHeight: 260, overflowY: "auto", pr: 0.5 }}>
-                                    {ticket.replies.map((reply) => (
-                                      <Paper
-                                        key={reply.id}
-                                        variant="outlined"
-                                        sx={{ p: 1.25, bgcolor: "var(--surface-subtle)" }}
-                                      >
-                                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 0.5 }}>
-                                          <Typography variant="caption" fontWeight="700">
-                                            {t("user.adminReplyBy")}: {reply.responder_name || t("common.unknownName")}
-                                          </Typography>
-                                          <Chip
-                                            label={t(reply.is_resolved ? "user.closedTicket" : "user.inProgressTicket")}
-                                            color={reply.is_resolved ? "success" : "info"}
-                                            size="small"
-                                          />
-                                        </Box>
-                                        <Typography variant="caption" color="text.secondary">
-                                          {formatDateTime(reply.created_at, t("common.locale"), { fallback: "-", includeSeconds: true })}
-                                        </Typography>
-                                        <Typography sx={{ mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
-                                          {reply.message}
-                                        </Typography>
-                                      </Paper>
-                                    ))}
+                              <TableCell sx={{ minWidth: 0 }}>
+                                {latestReply ? (
+                                  <Box sx={{ minWidth: 0 }}>
+                                    <Typography
+                                      variant="caption"
+                                      fontWeight="700"
+                                      noWrap
+                                      title={latestReply.responder_name || t("common.unknownName")}
+                                    >
+                                      {t("user.adminReplyBy")}: {latestReply.responder_name || t("common.unknownName")}
+                                    </Typography>
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        display: "-webkit-box",
+                                        overflow: "hidden",
+                                        WebkitBoxOrient: "vertical",
+                                        WebkitLineClamp: 2,
+                                        overflowWrap: "anywhere",
+                                        lineHeight: 1.4,
+                                      }}
+                                    >
+                                      {latestReply.message}
+                                    </Typography>
                                   </Box>
                                 ) : (
                                   <Typography variant="body2" color="text.secondary">
                                     {t("user.awaitingAdminResponse")}
                                   </Typography>
                                 )}
+                              </TableCell>
+                              <TableCell align="center">
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  startIcon={<Visibility />}
+                                  onClick={() => setSelectedTicket(ticket)}
+                                  sx={{ textTransform: "none", whiteSpace: "nowrap" }}
+                                >
+                                  {t("admin.viewDetails")}
+                                </Button>
                               </TableCell>
                             </TableRow>
                           );
@@ -598,6 +646,122 @@ export default function MyTickets() {
           )}
         </div>
       </div>
+
+      <Dialog
+        open={Boolean(selectedTicket)}
+        onClose={() => setSelectedTicket(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        {selectedTicket && (() => {
+          const status = STATUS_LABELS[selectedTicket.status] || {
+            key: "user.unknownStatus",
+            color: "default",
+          };
+
+          return (
+            <>
+              <DialogTitle
+                sx={{
+                  fontWeight: "700",
+                  overflowWrap: "anywhere",
+                  maxHeight: "20vh",
+                  overflowY: "auto",
+                }}
+              >
+                {selectedTicket.subject || t("user.myRequests")}
+              </DialogTitle>
+              <DialogContent
+                dividers
+                sx={{ display: "flex", flexDirection: "column", gap: 2, borderColor: "var(--border-light)" }}
+              >
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: "var(--text-gray)" }}>
+                      {t("user.submittedAt")}
+                    </Typography>
+                    <Typography>
+                      {formatDateTime(selectedTicket.created_at, t("common.locale"), { fallback: "-" })}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: "var(--text-gray)" }}>
+                      {t("common.status")}
+                    </Typography>
+                    <Box>
+                      <Chip label={t(status.key)} color={status.color} size="small" />
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Box>
+                  <Typography variant="subtitle2" fontWeight="700">
+                    {t("user.message")}
+                  </Typography>
+                  <Paper
+                    variant="outlined"
+                    role="region"
+                    aria-label={t("user.message")}
+                    sx={{
+                      mt: 0.75,
+                      p: 2,
+                      maxHeight: "min(35vh, 320px)",
+                      overflowY: "auto",
+                      overflowWrap: "anywhere",
+                      whiteSpace: "pre-wrap",
+                      bgcolor: "var(--surface-subtle)",
+                      color: "var(--text-dark)",
+                    }}
+                  >
+                    {selectedTicket.message || "—"}
+                  </Paper>
+                </Box>
+
+                <Box>
+                  <Typography variant="subtitle2" fontWeight="700" sx={{ mb: 1 }}>
+                    {t("user.adminResponse")}
+                  </Typography>
+                  {selectedTicket.replies?.length ? (
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1, maxHeight: 360, overflowY: "auto", pr: 0.5 }}>
+                      {selectedTicket.replies.map((reply) => (
+                        <Paper
+                          key={reply.id}
+                          variant="outlined"
+                          sx={{ p: 1.5, bgcolor: "var(--surface-subtle)" }}
+                        >
+                          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1, mb: 0.75 }}>
+                            <Typography variant="body2" fontWeight="700" sx={{ overflowWrap: "anywhere" }}>
+                              {t("user.adminReplyBy")}: {reply.responder_name || t("common.unknownName")}
+                            </Typography>
+                            <Chip
+                              label={t(reply.is_resolved ? "user.closedTicket" : "user.inProgressTicket")}
+                              color={reply.is_resolved ? "success" : "info"}
+                              size="small"
+                            />
+                          </Box>
+                          <Typography variant="caption" sx={{ color: "var(--text-gray)" }}>
+                            {formatDateTime(reply.created_at, t("common.locale"), { fallback: "-", includeSeconds: true })}
+                          </Typography>
+                          <Typography sx={{ mt: 0.75, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                            {reply.message}
+                          </Typography>
+                        </Paper>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" sx={{ color: "var(--text-gray)" }}>
+                      {t("user.awaitingAdminResponse")}
+                    </Typography>
+                  )}
+                </Box>
+              </DialogContent>
+              <DialogActions sx={{ p: 2 }}>
+                <Button onClick={() => setSelectedTicket(null)}>{t("common.close")}</Button>
+              </DialogActions>
+            </>
+          );
+        })()}
+      </Dialog>
 
       <SupportModal
         open={isSupportOpen}

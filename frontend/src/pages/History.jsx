@@ -256,6 +256,7 @@ export default function History() {
                   anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
                   transformOrigin={{ vertical: "top", horizontal: "right" }}
                   PaperProps={{
+                    className: "user-account-popover",
                     sx: {
                       mt: 1.5,
                       width: 320,
@@ -382,8 +383,9 @@ export default function History() {
                         "&:hover": { bgcolor: "#fef2f2" },
                       }}
                     >
-                      <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
+                      <Logout className="theme-colored" sx={{ fontSize: 20, color: "#ef4444" }} />
                       <Typography
+                        className="theme-colored"
                         fontSize="13px"
                         fontWeight="600"
                         color="#ef4444"

@@ -1229,6 +1229,25 @@ textarea:focus-visible,
   border-color: var(--border-light) !important;
 }
 
+/* Account popovers render in a body-level portal, outside `.app-layout`, so
+ * they need the same dark-theme text treatment explicitly. */
+:root[data-theme="dark"] .user-account-popover .MuiTypography-root:not(.theme-colored) {
+  color: var(--text-dark) !important;
+}
+
+:root[data-theme="dark"] .user-account-popover .MuiTypography-body2:not(.theme-colored),
+:root[data-theme="dark"] .user-account-popover .MuiTypography-caption:not(.theme-colored) {
+  color: var(--text-gray) !important;
+}
+
+:root[data-theme="dark"] .user-account-popover .MuiSvgIcon-root:not(.theme-colored) {
+  color: var(--text-muted) !important;
+}
+
+:root[data-theme="dark"] .user-account-popover .profile-avatar--large {
+  color: #f8fafc !important;
+}
+
 :root[data-theme="dark"] .MuiTableCell-root {
   color: var(--text-dark) !important;
   border-color: var(--border-light) !important;
