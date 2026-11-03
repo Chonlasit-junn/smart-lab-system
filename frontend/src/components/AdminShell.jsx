@@ -4,7 +4,6 @@ import {
   Logout,
   Menu as MenuIcon,
   Person,
-  Settings,
 } from "@mui/icons-material";
 import {
   Avatar,
@@ -126,11 +125,11 @@ export default function AdminShell({ title, children }) {
         <Divider sx={{ my: 0.5 }} />
         <Button
           fullWidth
-          startIcon={<Settings />}
+          startIcon={<Person />}
           onClick={() => handleNavigate("/profile")}
           className="admin-account-action"
         >
-          {t("common.settings")}
+          {t("common.manageAccount")}
         </Button>
         <Button
           fullWidth

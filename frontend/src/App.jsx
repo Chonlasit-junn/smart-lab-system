@@ -7,9 +7,8 @@ import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/auth-context';
 import { ThemeProvider as AppThemeProvider } from './context/theme-context.jsx';
 import { useTheme } from './context/theme-context.js';
-import ThemeToggle from './components/ThemeToggle';
 import { LanguageProvider } from './context/language-context.jsx';
-import LanguageToggle from './components/LanguageToggle';
+import DisplayPreferencesMenu from './components/DisplayPreferencesMenu';
 import AdminMobileNavigation from './components/AdminMobileNavigation';
 
 const Login = lazy(() => import('./pages/Login'));
@@ -222,8 +221,7 @@ function AppContent() {
           <AdminMobileNavigation />
           </Suspense>
           </RouteErrorBoundary>
-          <LanguageToggle className="global-language-toggle" />
-          <ThemeToggle className="global-theme-toggle" />
+          <DisplayPreferencesMenu />
         </AuthProvider>
       </BrowserRouter>
     </MuiThemeProvider>

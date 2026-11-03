@@ -1177,11 +1177,13 @@ textarea:focus-visible,
    5. ACCESSIBLE THEME ADAPTATIONS
    ========================================================================== */
 
-/* The switch stays available on login, user pages, and admin pages. */
-.global-theme-toggle {
+/* One compact menu keeps language and theme controls available everywhere. */
+.global-display-preferences {
   position: fixed !important;
   right: 24px;
   bottom: 24px;
+  width: 48px;
+  height: 48px;
   z-index: 1400;
   color: var(--text-dark) !important;
   background-color: var(--card-bg) !important;
@@ -1190,30 +1192,8 @@ textarea:focus-visible,
   transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
-.global-theme-toggle:hover {
+.global-display-preferences:hover {
   background-color: var(--brand-soft) !important;
-  color: var(--brand-color) !important;
-  transform: translateY(-1px);
-}
-
-.global-language-toggle {
-  position: fixed !important;
-  right: 24px;
-  bottom: 76px;
-  z-index: 1400;
-  min-width: 112px !important;
-  min-height: 36px !important;
-  color: var(--text-dark) !important;
-  background-color: var(--card-bg) !important;
-  border-color: var(--border-light) !important;
-  box-shadow: 0 8px 20px var(--shadow-color);
-  text-transform: none !important;
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-
-.global-language-toggle:hover {
-  background-color: var(--brand-soft) !important;
-  border-color: var(--brand-color) !important;
   color: var(--brand-color) !important;
   transform: translateY(-1px);
 }

@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { Avatar, Badge, Box, IconButton, Popover, Typography } from "@mui/material";
-import { Notifications } from "@mui/icons-material";
+import { Avatar, Badge, Box, Button, IconButton, Popover, Typography } from "@mui/material";
+import { DeleteSweep, Notifications } from "@mui/icons-material";
 import { useLanguage } from "../context/language-context.js";
 import { formatDateTime } from "../utils/dateFormat";
 import { getPointReasonLabel } from "../utils/pointReason";
 import { useNotificationReadState } from "../context/useNotificationReadState.js";
+import { useNotificationClearState } from "../context/useNotificationClearState.js";
 import { useNotifications } from "../context/useNotifications.js";
 import { useAuth } from "../context/auth-context";
 import LoadError from "./LoadError";
@@ -20,10 +21,11 @@ export default function NotificationBell({
   const [anchorEl, setAnchorEl] = useState(null);
   const { logs: pointLogs, loading, ready, error, refresh } = useNotifications(loadNotifications);
   const [lastSeenLogId, markNotificationsRead] = useNotificationReadState(currentUser?.email);
+  const [clearedThroughId, clearNotificationsThrough] = useNotificationClearState(currentUser?.email);
 
   const visiblePointLogs = useMemo(
-    () => pointLogs.slice(0, 10),
-    [pointLogs],
+    () => pointLogs.filter((log) => log.id > clearedThroughId).slice(0, 10),
+    [clearedThroughId, pointLogs],
   );
 
   const notifications = useMemo(
@@ -55,6 +57,13 @@ export default function NotificationBell({
     if (latestId > lastSeenLogId) {
       markNotificationsRead(latestId);
     }
+  };
+
+  const handleClearNotifications = () => {
+    const latestId = pointLogs.reduce((latest, log) => Math.max(latest, Number(log.id) || 0), 0);
+    if (!latestId) return;
+    markNotificationsRead(latestId);
+    clearNotificationsThrough(latestId);
   };
 
   return (
@@ -103,6 +112,8 @@ export default function NotificationBell({
           sx={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
             px: 2.5,
             py: 2,
             flexShrink: 0,
@@ -111,6 +122,16 @@ export default function NotificationBell({
           <Typography fontSize="16px" fontWeight="600">
             {t("common.notifications")}
           </Typography>
+          <Button
+            size="small"
+            startIcon={<DeleteSweep fontSize="small" />}
+            onClick={handleClearNotifications}
+            disabled={notifications.length === 0}
+            aria-label={t("common.clearNotifications")}
+            sx={{ ml: "auto", minWidth: 0, whiteSpace: "nowrap", textTransform: "none" }}
+          >
+            {t("common.clearNotifications")}
+          </Button>
         </Box>
 
         <Box sx={{ overflowY: "auto", px: 1, pb: 1 }}>

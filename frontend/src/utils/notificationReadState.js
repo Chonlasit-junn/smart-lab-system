@@ -5,6 +5,11 @@ export function notificationReadKey(email) {
   return identity ? `last_seen_point_log_id:${encodeURIComponent(identity)}` : null;
 }
 
+export function notificationClearKey(email) {
+  const readKey = notificationReadKey(email);
+  return readKey ? `cleared_point_log_id:${readKey.slice('last_seen_point_log_id:'.length)}` : null;
+}
+
 export function readNotificationId(storage, key) {
   if (!key) return 0;
   try {

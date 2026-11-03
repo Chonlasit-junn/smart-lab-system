@@ -36,7 +36,6 @@ import {
   Menu as MenuIcon,
   ArrowBack,
   CheckCircle,
-  Settings,
   Close,
   MoreVert as MoreVertIcon,
 } from "@mui/icons-material";
@@ -684,31 +683,6 @@ export default function Booking() {
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
                     <AdminModeSwitch destination="admin" onNavigate={handleCloseUserMenu} />
-                    <Box
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#f8fafc" },
-                      }}
-                    >
-                      <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="600"
-                        color="#1e293b"
-                      >
-                        {t("common.settings")}
-                      </Typography>
-                    </Box>
                     <Box
                       onClick={handleLogoutAction}
                       sx={{

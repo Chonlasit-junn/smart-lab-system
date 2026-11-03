@@ -206,7 +206,7 @@ export default function Register() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       alert(t.registrationSuccess);
-      navigate('/login');
+      navigate('/');
     } catch (err) {
       setError(otpErrorMessage(err, t, t.registrationFailed));
       if (isOtpError(err)) {
@@ -579,7 +579,7 @@ export default function Register() {
 
             {step !== 4 && (
               <div className="login-links">
-                <RouterLink to="/login" className="login-link">
+                <RouterLink to="/" className="login-link">
                   {t.alreadyAccount} <b>{t.loginHere}</b>
                 </RouterLink>
               </div>

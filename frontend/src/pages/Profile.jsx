@@ -30,7 +30,6 @@ import {
   CalendarMonth,
   Star,
   Person,
-  Settings,
   Close,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
@@ -43,6 +42,7 @@ import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
 import { useNotifications } from "../context/useNotifications.js";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import SupportModal from "./SupportModal";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -90,6 +90,7 @@ export default function Profile() {
   tRef.current = t;
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -285,7 +286,22 @@ export default function Profile() {
           className="sidebar-menu"
           style={{ flex: "none", paddingBottom: "24px" }}
         >
-          <div className="menu-item">
+          <div
+            className="menu-item"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              setIsSidebarOpen(false);
+              setIsSupportOpen(true);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setIsSidebarOpen(false);
+                setIsSupportOpen(true);
+              }
+            }}
+          >
             <SupportAgent /> {t("common.support")}
           </div>
         </div>
@@ -456,31 +472,6 @@ export default function Profile() {
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
                     <AdminModeSwitch destination="admin" onNavigate={handleCloseUserMenu} />
-                    <Box
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#f8fafc" },
-                      }}
-                    >
-                      <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="600"
-                        color="#1e293b"
-                      >
-                        {t("common.settings")}
-                      </Typography>
-                    </Box>
                     <Box
                       onClick={handleLogoutAction}
                       sx={{
@@ -1041,6 +1032,7 @@ export default function Profile() {
           )}
         </div>
       </div>
+      <SupportModal open={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
     </div>
   );
 }

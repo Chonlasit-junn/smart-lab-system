@@ -36,7 +36,6 @@ import {
   Computer,
   Person,
   Menu as MenuIcon,
-  Settings,
   Close,
 } from "@mui/icons-material";
 import CancelIcon from "@mui/icons-material/Cancel";
@@ -49,6 +48,7 @@ import { formatDate } from "../utils/dateFormat";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import SupportModal from "./SupportModal";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -58,6 +58,7 @@ export default function Reserved() {
   const { t } = useLanguage();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [bookingData, setBookingData] = useState({ identity: null, page: 0, items: [] });
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -198,7 +199,22 @@ export default function Reserved() {
           className="sidebar-menu"
           style={{ flex: "none", paddingBottom: "24px" }}
         >
-          <div className="menu-item">
+          <div
+            className="menu-item"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              setIsSidebarOpen(false);
+              setIsSupportOpen(true);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setIsSidebarOpen(false);
+                setIsSupportOpen(true);
+              }
+            }}
+          >
             <SupportAgent /> {t("common.support")}
           </div>
         </div>
@@ -372,31 +388,6 @@ export default function Reserved() {
                   {/* Menu Action List */}
                   <Box sx={{ px: 1, py: 1 }}>
                     <AdminModeSwitch destination="admin" onNavigate={handleCloseUserMenu} />
-                    <Box
-                      onClick={() => {
-                        handleCloseUserMenu();
-                        navigate("/profile");
-                      }}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        px: 1.5,
-                        py: 1,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        "&:hover": { bgcolor: "#f8fafc" },
-                      }}
-                    >
-                      <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                      <Typography
-                        fontSize="13px"
-                        fontWeight="600"
-                        color="#1e293b"
-                      >
-                        {t("common.settings")}
-                      </Typography>
-                    </Box>
                     <Box
                       onClick={handleLogoutAction}
                       sx={{
@@ -674,6 +665,7 @@ export default function Reserved() {
           </Button>
         </DialogActions>
       </Dialog>
+      <SupportModal open={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
     </div>
   );
 }

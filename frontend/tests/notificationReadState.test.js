@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { notificationReadKey, readNotificationId, saveNotificationId } from '../src/utils/notificationReadState.js';
+import { notificationClearKey, notificationReadKey, readNotificationId, saveNotificationId } from '../src/utils/notificationReadState.js';
 
 const memory = () => {
   const values = new Map();
@@ -25,6 +25,17 @@ test('identity is stable across case/whitespace and counts never move backwards'
   assert.equal(notificationReadKey(' A@EXAMPLE.COM '), key);
   assert.equal(saveNotificationId(storage, key, 100), 100);
   assert.equal(saveNotificationId(storage, key, 3), 100);
+});
+
+test('cleared notifications use an account-scoped monotonic watermark', () => {
+  const storage = memory();
+  const a = notificationClearKey('A@example.com'), b = notificationClearKey('b@example.com');
+  assert.equal(a, notificationClearKey(' a@EXAMPLE.com '));
+  assert.equal(saveNotificationId(storage, a, 100), 100);
+  assert.equal(saveNotificationId(storage, a, 4), 100);
+  assert.equal(readNotificationId(storage, a), 100);
+  assert.equal(readNotificationId(storage, b), 0);
+  assert.equal(notificationClearKey(undefined), null);
 });
 
 test('missing accounts, invalid storage values and unavailable storage fail safely', () => {

@@ -27,11 +27,10 @@ import {
   Computer,
   PendingActions,
   SupportAgent,
-  Settings,
   Close,
   CameraAlt,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
@@ -127,8 +126,9 @@ export default function Admin() {
       v: stats.totalRequests,
       c: "#3b82f6",
       i: <Person />,
+      path: "/admin/reports",
     },
-    { label: t("admin.activeUsers"), v: stats.activeUsers, c: "#10b981", i: <Group /> },
+    { label: t("admin.activeUsers"), v: stats.activeUsers, c: "#10b981", i: <Group />, path: "/admin/roles" },
     {
       label: t("admin.pendingUsersCard"),
       v: stats.pendingApprovals,
@@ -136,7 +136,7 @@ export default function Admin() {
       i: <PendingActions />,
       path: "/verify-users",
     },
-    { label: t("admin.supportTickets"), v: 0, c: "#ef4444", i: <SupportAgent /> },
+    { label: t("admin.supportTickets"), v: 0, c: "#ef4444", i: <SupportAgent />, path: "/ticket" },
   ];
 
   return (
@@ -381,31 +381,9 @@ export default function Admin() {
 
                 <Divider />
 
-                {/* settings + sign out */}
+                {/* account actions */}
                 <Box sx={{ px: 1, py: 1 }}>
                   <AdminModeSwitch destination="booking" onNavigate={handleCloseUserMenu} />
-                  <Box
-                    onClick={handleCloseUserMenu}
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1.5,
-                      px: 1.5,
-                      py: 1,
-                      borderRadius: 2,
-                      cursor: "pointer",
-                      "&:hover": { bgcolor: "#f8fafc" },
-                    }}
-                  >
-                    <Settings sx={{ fontSize: 20, color: "#64748b" }} />
-                    <Typography
-                      fontSize="13px"
-                      fontWeight="600"
-                      color="#1e293b"
-                    >
-                      {t("common.settings")}
-                    </Typography>
-                  </Box>
                   <Box
                     onClick={handleLogout}
                     sx={{
@@ -448,14 +426,16 @@ export default function Admin() {
             </Box>
           ) : empty ? <Typography sx={{ py: 8, textAlign: "center" }} color="text.secondary">{t("common.noData")}</Typography> : (
             <>
-              {/* stat cards — clicking Pending Users navigates to the verify page */}
+              {/* Summary cards link to the matching Admin pages. */}
               <Grid container spacing={4} sx={{ mb: 6 }}>
                 {STATS_DATA.map((s, idx) => (
                   <Grid item xs={12} sm={6} md={3} key={idx}>
                     <Paper
+                      component={RouterLink}
+                      to={s.path}
+                      aria-label={`${s.label}: ${s.v}`}
                       className="surface-card"
                       elevation={0}
-                      onClick={() => s.path && navigate(s.path)}
                       sx={{
                         p: 4,
                         borderRadius: 6,
@@ -463,14 +443,15 @@ export default function Admin() {
                         alignItems: "center",
                         gap: 3,
                         border: "1px solid #e2e8f0",
-                        cursor: s.path ? "pointer" : "default",
+                        color: "inherit",
+                        textDecoration: "none",
+                        cursor: "pointer",
                         transition: "0.2s",
-                        "&:hover": s.path
-                          ? {
-                              boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-                              transform: "translateY(-2px)",
-                            }
-                          : {},
+                        "&:hover": {
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+                          transform: "translateY(-2px)",
+                        },
+                        "&:focus-visible": { outline: "3px solid #2563eb", outlineOffset: 2 },
                       }}
                     >
                       <Avatar

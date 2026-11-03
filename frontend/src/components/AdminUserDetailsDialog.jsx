@@ -106,6 +106,22 @@ const getPointReason = (reason, t) => ({
   admin_grant: t("admin.userDetails.pointAdminGrant"),
 }[reason] || reason || t("admin.userDetails.pointAdjustment"));
 
+const historyPanelScrollSx = {
+  maxHeight: "min(60vh, 520px)",
+  overflowY: "auto",
+  overflowX: "hidden",
+  overscrollBehavior: "contain",
+  scrollbarColor: "var(--text-muted) var(--surface-subtle)",
+  scrollbarWidth: "thin",
+  "&::-webkit-scrollbar": { width: 10 },
+  "&::-webkit-scrollbar-track": { backgroundColor: "var(--surface-subtle)" },
+  "&::-webkit-scrollbar-thumb": {
+    backgroundColor: "var(--text-muted)",
+    border: "2px solid var(--surface-subtle)",
+    borderRadius: 999,
+  },
+};
+
 function EmptyHistory({ icon, title, description }) {
   return (
     <Box sx={{ py: 7, textAlign: "center", color: "#94a3b8" }}>
@@ -465,11 +481,13 @@ export default function AdminUserDetailsDialog({
                 {tabs.map((item) => <Tab key={item.label} label={`${item.label} (${item.count})`} />)}
               </Tabs>
               <Box sx={{ p: { xs: 0, md: 1 } }}>
-                {tab === 0 && <UserBookings rows={detail.bookings || []} t={t} locale={locale} />}
-                {tab === 1 && <UserSessions rows={detail.sessions || []} t={t} locale={locale} />}
-                {tab === 2 && <UserProgramUsage rows={detail.program_usage || []} t={t} locale={locale} />}
-                {tab === 3 && <UserPointHistory pointLogs={detail.point_history || []} dailyScores={detail.daily_scores || []} t={t} locale={locale} />}
-                {tab === 4 && <UserViolations rows={detail.violations || []} t={t} locale={locale} />}
+                <Box sx={historyPanelScrollSx}>
+                  {tab === 0 && <UserBookings rows={detail.bookings || []} t={t} locale={locale} />}
+                  {tab === 1 && <UserSessions rows={detail.sessions || []} t={t} locale={locale} />}
+                  {tab === 2 && <UserProgramUsage rows={detail.program_usage || []} t={t} locale={locale} />}
+                  {tab === 3 && <UserPointHistory pointLogs={detail.point_history || []} dailyScores={detail.daily_scores || []} t={t} locale={locale} />}
+                  {tab === 4 && <UserViolations rows={detail.violations || []} t={t} locale={locale} />}
+                </Box>
               </Box>
             </Paper>
           </>

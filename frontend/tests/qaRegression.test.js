@@ -36,8 +36,21 @@ test('only admin accounts can switch modes and return paths stay within admin pa
   assert.equal(canSwitchAdminMode({ roleName: 'admin' }), true);
   assert.equal(canSwitchAdminMode({ roleName: 'student' }), false);
   assert.equal(canSwitchAdminMode(null), false);
-  assert.equal(getAdminReturnPath('/manage-labs'), '/manage-labs');
-  assert.equal(getAdminReturnPath('/admin/points'), '/admin/points');
+  for (const path of [
+    '/admin',
+    '/admin/points',
+    '/admin/points/policy',
+    '/admin/roles',
+    '/admin/devices',
+    '/admin/reports',
+    '/manage-labs',
+    '/verify-users',
+    '/blacklist',
+    '/ticket',
+    '/profile',
+  ]) {
+    assert.equal(getAdminReturnPath(path), path);
+  }
   assert.equal(getAdminReturnPath('/booking'), '/admin');
   assert.equal(getAdminReturnPath('https://example.com'), '/admin');
 });
