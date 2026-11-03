@@ -126,7 +126,7 @@ function ProfileField({ label, value, fallback }) {
       <Typography variant="caption" color="#94a3b8" fontWeight="600">
         {label}
       </Typography>
-      <Typography variant="body2" color="#334155" fontWeight="500" sx={{ mt: 0.35, overflowWrap: "anywhere" }}>
+      <Typography variant="body2" color="#334155" fontWeight="500" sx={{ mt: 0.35, overflowWrap: "break-word" }}>
         {value || fallback}
       </Typography>
     </Box>
@@ -162,7 +162,7 @@ function UserBookings({ rows, t, locale }) {
                   <Typography variant="body2" fontWeight="600" color="#334155">{booking.lab_code || "—"}</Typography>
                   <Typography variant="caption" color="#94a3b8">{booking.lab_name || t("admin.userDetails.noRoom")}</Typography>
                 </TableCell>
-                <TableCell sx={{ maxWidth: 260, overflowWrap: "anywhere" }}>{booking.purpose || t("common.notSpecified")}</TableCell>
+                <TableCell sx={{ maxWidth: 260, overflowWrap: "break-word" }}>{booking.purpose || t("common.notSpecified")}</TableCell>
                 <TableCell><Chip label={status.label} size="small" sx={{ bgcolor: status.bg, color: status.color, fontWeight: "700" }} /></TableCell>
               </TableRow>
             );
@@ -242,7 +242,7 @@ function UserProgramUsage({ rows, t, locale }) {
                 <Typography variant="body2" fontWeight="600" color="#334155">{formatDateTime(usage.usage_start_time, locale)}</Typography>
                 <Typography variant="caption" color="#94a3b8">{t("admin.userDetails.until")} {formatDateTime(usage.usage_end_time, locale)}</Typography>
               </TableCell>
-              <TableCell sx={{ maxWidth: 220, overflowWrap: "anywhere" }}>
+              <TableCell sx={{ maxWidth: 220, overflowWrap: "break-word" }}>
                 <Typography variant="body2" fontWeight="600" color="#334155">{usage.program_name || t("admin.userDetails.noProgram")}</Typography>
                 <Typography variant="caption" color="#94a3b8">{t("admin.userDetails.event")} #{usage.id}</Typography>
               </TableCell>
@@ -251,7 +251,7 @@ function UserProgramUsage({ rows, t, locale }) {
                 <Typography variant="caption" color="#94a3b8">{usage.lab_name || t("admin.userDetails.noRoom")}</Typography>
               </TableCell>
               <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDuration(usage.duration_seconds, t)}</TableCell>
-              <TableCell sx={{ maxWidth: 180, overflowWrap: "anywhere" }}>{usage.device_name || t("admin.userDetails.noDevice")}</TableCell>
+              <TableCell sx={{ maxWidth: 180, overflowWrap: "break-word" }}>{usage.device_name || t("admin.userDetails.noDevice")}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -280,11 +280,11 @@ function UserViolations({ rows, t, locale }) {
           {rows.map((violation) => (
             <TableRow key={violation.id} sx={{ "& td": { borderBottom: "1px solid #f1f5f9" } }}>
               <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDateTime(violation.detected_at, locale)}</TableCell>
-              <TableCell sx={{ maxWidth: 220, overflowWrap: "anywhere" }}>
+              <TableCell sx={{ maxWidth: 220, overflowWrap: "break-word" }}>
                 <Typography variant="body2" fontWeight="600" color="#b91c1c">{violation.program_name || t("admin.userDetails.noProgram")}</Typography>
                 <Typography variant="caption" color="#94a3b8">{violation.reason || t("admin.userDetails.noReason")}</Typography>
               </TableCell>
-              <TableCell sx={{ maxWidth: 330, overflowWrap: "anywhere" }}>
+              <TableCell sx={{ maxWidth: 330, overflowWrap: "break-word" }}>
                 <Typography variant="body2" color="#334155">{violation.process_name || t("admin.userDetails.noProcess")}</Typography>
                 <Typography variant="caption" color="#94a3b8">{violation.window_title || violation.exe_path || t("admin.userDetails.noDetails")}</Typography>
               </TableCell>
@@ -318,7 +318,7 @@ function UserPointHistory({ pointLogs, dailyScores, t, locale }) {
                 {pointLogs.map((log) => (
                   <TableRow key={log.id} sx={{ "& td": { borderBottom: "1px solid #f1f5f9" } }}>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDateTime(log.created_at, locale)}</TableCell>
-                    <TableCell sx={{ maxWidth: 260, overflowWrap: "anywhere" }}>
+                    <TableCell sx={{ maxWidth: 260, overflowWrap: "break-word" }}>
                       <Typography variant="body2" fontWeight="600" color="#334155">{getPointReason(log.reason, t)}</Typography>
                       <Typography variant="caption" color="#94a3b8">{log.note || t("admin.userDetails.noDetails")}</Typography>
                     </TableCell>
@@ -410,10 +410,10 @@ export default function AdminUserDetailsDialog({
               {getInitials(profile)}
             </Avatar>
             <Box sx={{ minWidth: 0 }}>
-              <Typography variant="h5" fontWeight="700" color="#1e293b" sx={{ overflowWrap: "anywhere" }}>
+              <Typography variant="h5" fontWeight="700" color="#1e293b" sx={{ overflowWrap: "break-word" }}>
                 {profileName}
               </Typography>
-              <Typography variant="body2" color="#64748b" sx={{ overflowWrap: "anywhere" }}>
+              <Typography variant="body2" color="#64748b" sx={{ overflowWrap: "break-word" }}>
                 {profile.email || t("common.noEmail")} · {t("common.userId")} #{profile.id || selectedUser?.user_id || "—"}
               </Typography>
               <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>

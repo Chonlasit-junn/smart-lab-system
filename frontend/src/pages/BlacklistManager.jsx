@@ -289,7 +289,7 @@ export default function BlacklistManager() {
             variant="h5"
             fontWeight="700"
             sx={{ color: "#1e293b", letterSpacing: "-1px", fontSize: { xs: 18, md: 24 },
-              width: { xs: "100%", md: "auto" }, minWidth: 0, overflowWrap: "anywhere" }}
+              width: { xs: "100%", md: "auto" }, minWidth: 0, overflowWrap: "break-word" }}
           >
             {t("admin.blacklistTitle")}
           </Typography>
@@ -688,7 +688,7 @@ export default function BlacklistManager() {
                                       mt: 0.3,
                                     }}
                                   />
-                                  <Typography variant="caption" display="block" sx={{ color: "text.secondary", overflowWrap: "anywhere" }}>
+                                  <Typography variant="caption" display="block" sx={{ color: "text.secondary", overflowWrap: "break-word" }}>
                                     {item.match_value || item.app_name}
                                   </Typography>
                                 </Box>
@@ -702,7 +702,7 @@ export default function BlacklistManager() {
                                 fontWeight: "400",
                                 maxWidth: 400,
                                 minWidth: 0,
-                                overflowWrap: "anywhere",
+                                overflowWrap: "break-word",
                                 whiteSpace: "normal",
                               }}
                             >

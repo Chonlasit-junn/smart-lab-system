@@ -805,7 +805,7 @@ export default function ManageLabs() {
                               sx={{
                                 flex: 1,
                                 minWidth: 0,
-                                overflowWrap: "anywhere",
+                                overflowWrap: "break-word",
                                 whiteSpace: "normal",
                               }}
                             >
@@ -872,7 +872,7 @@ export default function ManageLabs() {
                                 alignItems: "center",
                                 gap: 1,
                                 minWidth: 0,
-                                overflowWrap: "anywhere",
+                                overflowWrap: "break-word",
                                 textAlign: "right",
                               }}
                             >

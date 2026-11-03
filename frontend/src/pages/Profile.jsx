@@ -1044,7 +1044,7 @@ function InfoRow({ icon, iconBg, label, value, sub }) {
       <Avatar sx={{ bgcolor: iconBg, width: 38, height: 38, flexShrink: 0 }}>
         {icon}
       </Avatar>
-      <Box>
+      <Box sx={{ overflowWrap: "break-word" }}>
         <Typography
           variant="caption"
           color="#94a3b8"

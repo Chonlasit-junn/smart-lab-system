@@ -893,7 +893,7 @@ export default function Booking() {
                                   alignItems: "center",
                                   gap: 1,
                                   minWidth: 0,
-                                  overflowWrap: "anywhere",
+                                  overflowWrap: "break-word",
                                   textAlign: "right",
                                 }}
                               >

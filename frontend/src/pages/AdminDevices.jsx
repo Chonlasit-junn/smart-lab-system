@@ -183,15 +183,15 @@ export default function AdminDevices() {
           {loadFailed && <LoadError onRetry={fetchData} />}
           <Paper className="surface-card data-table-shell" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, overflow: "hidden" }}>
             <TableContainer sx={{ overflowX: "auto" }}>
-              <Table sx={{ minWidth: 980 }}>
+              <Table sx={{ minWidth: 1240, tableLayout: "fixed" }}>
                 <TableHead sx={{ bgcolor: "#f8fafc" }}>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>{t("admin.machine")}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t("user.lab")}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t("common.status")}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t("admin.agent")}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{t("admin.lastSignal")}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>{t("admin.manage")}</TableCell>
+                    <TableCell sx={{ width: 260, fontWeight: 700 }}>{t("admin.machine")}</TableCell>
+                    <TableCell sx={{ width: 240, fontWeight: 700 }}>{t("user.lab")}</TableCell>
+                    <TableCell sx={{ width: 180, fontWeight: 700 }}>{t("common.status")}</TableCell>
+                    <TableCell sx={{ width: 150, fontWeight: 700 }}>{t("admin.agent")}</TableCell>
+                    <TableCell sx={{ width: 220, fontWeight: 700 }}>{t("admin.lastSignal")}</TableCell>
+                    <TableCell align="right" sx={{ width: 190, fontWeight: 700 }}>{t("admin.manage")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>

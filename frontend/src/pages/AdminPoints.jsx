@@ -722,7 +722,7 @@ export default function AdminPoints() {
                         <Typography
                           variant="caption"
                           color="var(--text-gray)"
-                          sx={{ overflowWrap: "anywhere" }}
+                          sx={{ overflowWrap: "break-word" }}
                         >
                           {request.email || `${t("common.userId")} #${request.user_id}`} ·
                           {t("admin.requestSentAt")} {formatDateTime(request.created_at, t("common.locale"))}

@@ -132,7 +132,7 @@ body {
   font-weight: 300;
   font-family: var(--font-family-ui);
   line-height: 1.4;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   background-color: var(--bg-color);
   color: var(--text-dark);
   -webkit-font-smoothing: antialiased;
@@ -141,16 +141,24 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Keep long user-provided values inside their layout across every route.
- * In particular, unbroken names, URLs, and descriptions must not widen tables. */
+/* Keep long user-provided values in bounds without breaking ordinary words
+ * at arbitrary characters. Tables scroll horizontally when their columns need
+ * more room instead of compressing their headers into vertical text. */
 .MuiTableContainer-root {
   width: 100%;
   max-width: 100%;
+  overflow-x: auto;
 }
 
 .MuiTableCell-root {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.MuiTableHead-root .MuiTableCell-root {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 /* MUI's noWrap utility clips long values. Let them wrap so the complete value
@@ -159,7 +167,7 @@ body {
   min-width: 0;
   max-width: 100%;
   overflow: visible !important;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   text-overflow: clip !important;
   white-space: normal !important;
 }
@@ -576,7 +584,7 @@ option,
 /* Keep long page titles within the header while leaving room for search. */
 .top-header > :first-child .MuiTypography-root {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   white-space: normal;
 }
 
@@ -1028,7 +1036,7 @@ textarea:focus-visible,
   min-height: 42px;
   height: auto;
   overflow: visible;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   line-height: 21px;
 }
 
@@ -1071,7 +1079,7 @@ textarea:focus-visible,
 .room-card-meta__location {
   flex: 1 1 120px;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   line-height: 1.35;
   text-align: right;
 }

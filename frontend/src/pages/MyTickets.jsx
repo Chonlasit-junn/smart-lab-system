@@ -555,7 +555,7 @@ export default function MyTickets() {
                                         <Typography variant="caption" color="text.secondary">
                                           {formatDateTime(reply.created_at, t("common.locale"), { fallback: "-", includeSeconds: true })}
                                         </Typography>
-                                        <Typography sx={{ mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                                        <Typography sx={{ mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
                                           {reply.message}
                                         </Typography>
                                       </Paper>

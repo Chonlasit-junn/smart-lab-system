@@ -17,12 +17,12 @@ export default function AdminProfile() {
             {currentUser?.initial || "A"}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="h5" fontWeight={600} sx={{ overflowWrap: "anywhere" }}>{name}</Typography>
+            <Typography variant="h5" fontWeight={600} sx={{ overflowWrap: "break-word" }}>{name}</Typography>
             <Typography variant="body2" color="text.secondary">{t("user.adminRole")}</Typography>
           </Box>
         </Box>
         <Typography variant="overline" color="text.secondary">{t("user.personalInfo")}</Typography>
-        <Box sx={{ mt: 1.5, p: 2, borderRadius: 2, bgcolor: "background.default", overflowWrap: "anywhere" }}>
+        <Box sx={{ mt: 1.5, p: 2, borderRadius: 2, bgcolor: "background.default", overflowWrap: "break-word" }}>
           <Typography variant="caption" color="text.secondary">{t("common.email")}</Typography>
           <Typography variant="body1">{profile.email || currentUser?.email || "—"}</Typography>
         </Box>

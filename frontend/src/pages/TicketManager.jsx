@@ -148,7 +148,7 @@ export default function TicketManager() {
                     return (
                       <TableRow key={ticket.id} sx={{ '& td': { borderBottom: '1px solid #f1f5f9' } }}>
                       <TableCell>{ticket.id}</TableCell>
-                      <TableCell sx={{ overflowWrap: 'anywhere' }}>
+                      <TableCell sx={{ overflowWrap: 'break-word' }}>
                         {ticket.user_name || t('common.unknownName')}
                       </TableCell>
                       <TableCell sx={{ minWidth: 0 }}>
@@ -223,7 +223,7 @@ export default function TicketManager() {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle sx={{ fontWeight: '600', overflowWrap: 'anywhere' }}>
+        <DialogTitle sx={{ fontWeight: '600', overflowWrap: 'break-word' }}>
           {t('admin.viewDetails')}
         </DialogTitle>
         <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -232,11 +232,11 @@ export default function TicketManager() {
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">{t('admin.ticketId')}</Typography>
-                  <Typography sx={{ overflowWrap: 'anywhere' }}>{selectedTicket.id}</Typography>
+                  <Typography sx={{ overflowWrap: 'break-word' }}>{selectedTicket.id}</Typography>
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">{t('admin.ticketReporter')}</Typography>
-                  <Typography sx={{ overflowWrap: 'anywhere' }}>
+                  <Typography sx={{ overflowWrap: 'break-word' }}>
                     {selectedTicket.user_name || t('common.unknownName')}
                   </Typography>
                 </Box>
@@ -257,7 +257,7 @@ export default function TicketManager() {
 
               <Box>
                 <Typography variant="caption" color="text.secondary">{t('admin.ticketSubject')}</Typography>
-                <Typography sx={{ fontWeight: '600', overflowWrap: 'anywhere' }}>
+                <Typography sx={{ fontWeight: '600', overflowWrap: 'break-word' }}>
                   {selectedTicket.subject || '—'}
                 </Typography>
               </Box>
@@ -273,7 +273,7 @@ export default function TicketManager() {
                     p: 2,
                     maxHeight: 'min(42vh, 360px)',
                     overflowY: 'auto',
-                    overflowWrap: 'anywhere',
+                    overflowWrap: 'break-word',
                     whiteSpace: 'pre-wrap',
                     bgcolor: 'var(--surface-subtle)',
                   }}
@@ -291,7 +291,7 @@ export default function TicketManager() {
                     {selectedTicket.replies.map((reply) => (
                       <Paper key={reply.id} variant="outlined" sx={{ p: 1.5, bgcolor: 'var(--surface-subtle)' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.75 }}>
-                          <Typography variant="body2" fontWeight="700" sx={{ overflowWrap: 'anywhere' }}>
+                          <Typography variant="body2" fontWeight="700" sx={{ overflowWrap: 'break-word' }}>
                             {reply.responder_name}
                           </Typography>
                           <Chip
@@ -303,7 +303,7 @@ export default function TicketManager() {
                         <Typography variant="caption" color="text.secondary">
                           {formatDateTime(reply.created_at, t('common.locale'), { fallback: '-', includeSeconds: true })}
                         </Typography>
-                        <Typography sx={{ mt: 0.75, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                        <Typography sx={{ mt: 0.75, whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>
                           {reply.message}
                         </Typography>
                       </Paper>
