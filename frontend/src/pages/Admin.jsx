@@ -40,6 +40,7 @@ import { formatDate } from "../utils/dateFormat";
 import { filterAdminReservations } from "../utils/adminSearch";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -87,7 +88,6 @@ export default function Admin() {
   const [recentReservations, setRecentReservations] = useState([]);
   const [reservationSearch, setReservationSearch] = useState("");
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
-  const reservationSearchInputRef = useRef(null);
   const visibleRecentReservations = useMemo(
     () => filterAdminReservations(recentReservations, reservationSearch, t("common.locale")),
     [recentReservations, reservationSearch, t],
@@ -97,10 +97,6 @@ export default function Admin() {
   useEffect(() => {
     document.title = `${t("admin.dashboard")} | Smart Lab Admin`;
   }, [t]);
-
-  useEffect(() => {
-    if (isMobileSearchOpen) reservationSearchInputRef.current?.focus();
-  }, [isMobileSearchOpen]);
 
   const fetchDashboardData = useCallback(async () => {
     dashboardControllerRef.current?.abort();
@@ -230,7 +226,7 @@ export default function Admin() {
       >
         {/* top header */}
         <Box
-          className={`top-header admin-top-header admin-dashboard-header${isMobileSearchOpen ? " mobile-search-open" : ""}`}
+          className={`top-header admin-top-header admin-dashboard-header has-expandable-header-search${isMobileSearchOpen ? " mobile-search-open" : ""}`}
           sx={{
             display: "flex",
             alignItems: "center",
@@ -251,9 +247,13 @@ export default function Admin() {
             {t("admin.dashboard")}
           </Typography>
           <Box className="admin-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Box className={`admin-dashboard-search${isMobileSearchOpen ? " is-open" : ""}`}>
+            <ExpandableHeaderSearch
+              id="admin-reservation-search"
+              label={t("admin.searchReservations")}
+              isOpen={isMobileSearchOpen}
+              onExpandedChange={setIsMobileSearchOpen}
+            >
               <Paper
-                id="admin-reservation-search"
                 className="admin-search-control"
                 elevation={0}
                 sx={{
@@ -267,28 +267,14 @@ export default function Admin() {
               >
                 <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
                 <InputBase
-                  inputRef={reservationSearchInputRef}
                   placeholder={t("admin.searchReservations")}
                   aria-label={t("admin.searchReservations")}
                   value={reservationSearch}
                   onChange={(event) => setReservationSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setIsMobileSearchOpen(false);
-                  }}
                   fullWidth
                 />
               </Paper>
-              <IconButton
-                className="admin-mobile-search-toggle"
-                aria-label={isMobileSearchOpen ? t("common.close") : t("admin.searchReservations")}
-                aria-expanded={isMobileSearchOpen}
-                aria-controls="admin-reservation-search"
-                onClick={() => setIsMobileSearchOpen((open) => !open)}
-                size="small"
-              >
-                {isMobileSearchOpen ? <Close /> : <Search />}
-              </IconButton>
-            </Box>
+            </ExpandableHeaderSearch>
             <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"

@@ -695,8 +695,16 @@ option,
   display: none;
 }
 
-.admin-mobile-search-toggle {
-  display: none;
+.expandable-header-search-toggle {
+  display: none !important;
+}
+
+.expandable-header-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .admin-points-table-scroll {
@@ -1553,6 +1561,89 @@ textarea:focus-visible,
   .search-bar {
     display: none;
   }
+
+  .booking-header-actions {
+    flex: 0 0 auto;
+    gap: 8px !important;
+  }
+
+  .booking-top-header .expandable-header-search {
+    position: relative;
+    z-index: 1002;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    overflow: visible;
+  }
+
+  .booking-top-header .expandable-header-search-field {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    z-index: 1;
+    display: flex !important;
+    flex: 0 0 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    margin: 0;
+    padding: 4px 44px 4px 12px;
+    overflow: hidden;
+    box-sizing: border-box;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+    visibility: hidden;
+    transition:
+      width 240ms ease,
+      opacity 160ms ease,
+      visibility 0s linear 240ms;
+  }
+
+  .booking-top-header .expandable-header-search.is-open .expandable-header-search-field {
+    flex-basis: min(220px, calc(100vw - 190px)) !important;
+    width: min(220px, calc(100vw - 190px)) !important;
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+    transition:
+      width 240ms ease,
+      opacity 160ms ease,
+      visibility 0s;
+  }
+
+  .booking-top-header .expandable-header-search-toggle {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    z-index: 2;
+    display: inline-flex !important;
+    width: 40px;
+    height: 40px;
+    padding: 6px;
+    transform: translateY(-50%);
+    color: #111827;
+  }
+
+  .booking-top-header.mobile-search-open .booking-page-heading {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-18px);
+    visibility: hidden;
+    transition:
+      opacity 180ms ease,
+      transform 220ms ease,
+      visibility 0s linear 180ms;
+  }
+
+  .booking-top-header .booking-page-heading {
+    transform: translateX(0);
+    transition:
+      opacity 180ms ease,
+      transform 220ms ease,
+      visibility 0s;
+  }
+
   .profile-text-container {
     display: none !important;
   }
@@ -1801,13 +1892,39 @@ textarea:focus-visible,
     row-gap: 0 !important;
   }
 
-  .app-layout.admin-layout:not(.admin-shell) .admin-dashboard-header .admin-header-actions {
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header.has-expandable-header-search {
+    flex-wrap: nowrap !important;
+    row-gap: 0 !important;
+  }
+
+  .admin-top-header.has-expandable-header-search .admin-page-heading {
+    width: auto !important;
+    min-width: 0;
+    transform: translateX(0);
+    transition:
+      opacity 180ms ease,
+      transform 220ms ease,
+      visibility 0s;
+  }
+
+  .admin-top-header.has-expandable-header-search.mobile-search-open .admin-page-heading {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-18px);
+    visibility: hidden;
+    transition:
+      opacity 180ms ease,
+      transform 220ms ease,
+      visibility 0s linear 180ms;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header.has-expandable-header-search .admin-header-actions {
     display: flex !important;
     flex: 0 0 auto;
     gap: 8px !important;
   }
 
-  .admin-dashboard-header .admin-dashboard-search {
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header.has-expandable-header-search .expandable-header-search {
     position: relative;
     z-index: 1002;
     flex: 0 0 40px;
@@ -1816,7 +1933,7 @@ textarea:focus-visible,
     overflow: visible;
   }
 
-  .app-layout.admin-layout:not(.admin-shell) .admin-dashboard-header .admin-dashboard-search .admin-search-control {
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header.has-expandable-header-search .expandable-header-search .expandable-header-search-field {
     position: absolute;
     top: 50%;
     right: 0;
@@ -1840,7 +1957,7 @@ textarea:focus-visible,
       visibility 0s linear 240ms;
   }
 
-  .app-layout.admin-layout:not(.admin-shell) .admin-dashboard-header.mobile-search-open .admin-dashboard-search .admin-search-control {
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header.has-expandable-header-search .expandable-header-search.is-open .expandable-header-search-field {
     flex-basis: min(220px, calc(100vw - 190px)) !important;
     width: min(220px, calc(100vw - 190px)) !important;
     opacity: 1;
@@ -1853,7 +1970,7 @@ textarea:focus-visible,
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25) !important;
   }
 
-  .admin-dashboard-header .admin-mobile-search-toggle {
+  .admin-top-header.has-expandable-header-search .expandable-header-search-toggle {
     position: absolute;
     top: 50%;
     right: 0;
@@ -1865,13 +1982,27 @@ textarea:focus-visible,
     transform: translateY(-50%);
   }
 
-  .admin-dashboard-header .admin-dashboard-search .admin-search-control .MuiInputBase-root {
+  .admin-top-header.has-expandable-header-search .expandable-header-search-field .MuiInputBase-root {
     min-width: 0;
     flex: 1 1 auto;
   }
 
-  .admin-dashboard-header .admin-dashboard-search .admin-search-control .MuiSvgIcon-root {
+  .admin-top-header.has-expandable-header-search .expandable-header-search-field .MuiSvgIcon-root {
     flex: 0 0 auto;
+  }
+
+  .admin-top-header.has-expandable-header-search .admin-header-actions > .MuiBox-root {
+    order: 2;
+  }
+
+  .admin-top-header.has-expandable-header-search .admin-notification-button,
+  .admin-top-header.has-expandable-header-search .admin-header-divider,
+  .admin-top-header.has-expandable-header-search .MuiDivider-root {
+    order: 2;
+  }
+
+  .admin-top-header.has-expandable-header-search .admin-user-summary {
+    display: none !important;
   }
 
   .admin-dashboard-reservations-paper {

@@ -36,6 +36,7 @@ import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
+import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import { isPendingUser } from "./verifyUsersUtils";
 
@@ -75,6 +76,7 @@ export default function VerifyUsers() {
   const [loading, setLoading] = useState(true);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [processingId, setProcessingId] = useState(null);
   const [error, setError] = useState("");
   const [loadFailed, setLoadFailed] = useState(false);
@@ -244,7 +246,7 @@ export default function VerifyUsers() {
       >
         {/* HEADER */}
         <Box
-          className="top-header admin-top-header"
+          className={`top-header admin-top-header has-expandable-header-search${isMobileSearchOpen ? " mobile-search-open" : ""}`}
           sx={{
             display: "flex",
             alignItems: "center",
@@ -271,35 +273,43 @@ export default function VerifyUsers() {
             <Typography
               variant="h5"
               fontWeight="700"
+              className="admin-page-heading"
               sx={{ color: "#1e293b", letterSpacing: "-1px" }}
             >
               {t("admin.verifyTitle")}
             </Typography>
           </Box>
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Paper
-              className="admin-search-control"
-              elevation={0}
-              sx={{
-                px: 2,
-                py: 0.5,
-                display: { xs: "none", sm: "flex" },
-                alignItems: "center",
-                width: { sm: 220, md: 360 },
-                height: 44,
-              }}
+          <Box className="admin-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <ExpandableHeaderSearch
+              id="admin-pending-user-search"
+              label={t("admin.searchPendingUsers")}
+              isOpen={isMobileSearchOpen}
+              onExpandedChange={setIsMobileSearchOpen}
             >
-              <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
-              <InputBase
-                placeholder={t("admin.searchPendingUsers")}
-                fullWidth
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                sx={{ fontSize: "14px", fontWeight: "400" }}
-                inputProps={{ "aria-label": t("admin.searchPendingUsers") }}
-              />
-            </Paper>
+              <Paper
+                className="admin-search-control"
+                elevation={0}
+                sx={{
+                  px: 2,
+                  py: 0.5,
+                  display: { xs: "none", sm: "flex" },
+                  alignItems: "center",
+                  width: { sm: 220, md: 360 },
+                  height: 44,
+                }}
+              >
+                <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
+                <InputBase
+                  placeholder={t("admin.searchPendingUsers")}
+                  fullWidth
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  sx={{ fontSize: "14px", fontWeight: "400" }}
+                  inputProps={{ "aria-label": t("admin.searchPendingUsers") }}
+                />
+              </Paper>
+            </ExpandableHeaderSearch>
             <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"

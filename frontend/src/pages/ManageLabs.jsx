@@ -56,6 +56,7 @@ import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
 
 // นำเข้า MUI DatePicker
@@ -135,6 +136,7 @@ export default function ManageLabs() {
   const [viewMode, setViewMode] = useState("list");
   const [activeLab, setActiveLab] = useState(null);
   const [labSearch, setLabSearch] = useState("");
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const [labs, setLabs] = useState([]);
   const visibleLabs = useMemo(() => filterLabsBySearch(labs, labSearch), [labSearch, labs]);
@@ -490,7 +492,7 @@ export default function ManageLabs() {
       >
         {/* HEADER */}
         <Box
-          className="top-header admin-top-header"
+          className={`top-header admin-top-header has-expandable-header-search${isMobileSearchOpen ? " mobile-search-open" : ""}`}
           sx={{
             display: "flex",
             alignItems: "center",
@@ -511,29 +513,37 @@ export default function ManageLabs() {
             {viewMode === "list" ? t("admin.manageLabsTitle") : t("common.details")}
           </Typography>
           <Box className="admin-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Paper
-              className="admin-search-control"
-              elevation={0}
-              sx={{
-                px: 2,
-                py: 0.5,
-                display: "flex",
-                alignItems: "center",
-                width: 400,
-                height: 44,
-              }}
+            <ExpandableHeaderSearch
+              id="admin-lab-search"
+              label={t("admin.searchLabs")}
+              isOpen={isMobileSearchOpen}
+              onExpandedChange={setIsMobileSearchOpen}
+              disabled={viewMode !== "list"}
             >
-              <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
-              <InputBase
-                placeholder={t("admin.searchLabs")}
-                aria-label={t("admin.searchLabs")}
-                value={labSearch}
-                onChange={(event) => setLabSearch(event.target.value)}
-                disabled={viewMode !== "list"}
-                fullWidth
-                sx={{ fontSize: "15px", fontWeight: "400" }}
-              />
-            </Paper>
+              <Paper
+                className="admin-search-control"
+                elevation={0}
+                sx={{
+                  px: 2,
+                  py: 0.5,
+                  display: "flex",
+                  alignItems: "center",
+                  width: 400,
+                  height: 44,
+                }}
+              >
+                <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
+                <InputBase
+                  placeholder={t("admin.searchLabs")}
+                  aria-label={t("admin.searchLabs")}
+                  value={labSearch}
+                  onChange={(event) => setLabSearch(event.target.value)}
+                  disabled={viewMode !== "list"}
+                  fullWidth
+                  sx={{ fontSize: "15px", fontWeight: "400" }}
+                />
+              </Paper>
+            </ExpandableHeaderSearch>
             <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"

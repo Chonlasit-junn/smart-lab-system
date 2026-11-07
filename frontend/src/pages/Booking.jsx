@@ -44,6 +44,7 @@ import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import { buildBookingPayload } from "../utils/bookingPayload";
+import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import {
   getLabCalendarDate,
   getLabDateReference,
@@ -92,6 +93,7 @@ export default function Booking() {
   // UI States
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isHeaderSearchOpen, setIsHeaderSearchOpen] = useState(false);
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
@@ -494,7 +496,7 @@ export default function Booking() {
       {/* MAIN AREA */}
       <div className="main-area">
         {/* HEADER */}
-        <div className="top-header">
+        <div className={`top-header booking-top-header${isHeaderSearchOpen ? " mobile-search-open" : ""}`}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <IconButton
               sx={{ display: { xs: "block", md: "none" }, color: "#111827" }}
@@ -506,6 +508,7 @@ export default function Booking() {
               variant="h5"
               fontWeight="700"
               color="#111827"
+              className="booking-page-heading"
               sx={{ display: { xs: "none", sm: "block" } }}
             >
               <span className="font-baseline-text">{t("user.pageTitle")}</span>
@@ -513,25 +516,32 @@ export default function Booking() {
           </Box>
 
           <Box
+            className="booking-header-actions"
             sx={{
               display: "flex",
               alignItems: "center",
               gap: { xs: 1, sm: 3 },
             }}
           >
-            <div className="search-bar">
-              <Search sx={{ color: "#94a3b8" }} />
-              <input
-                type="text"
-                placeholder={t("user.searchRooms")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                disabled={!!selectedRoom}
-              />
-            </div>
-            <IconButton sx={{ display: { xs: "block", md: "none" } }}>
-              <Search sx={{ color: "#111827" }} />
-            </IconButton>
+            <ExpandableHeaderSearch
+              id="booking-room-search"
+              label={t("user.searchRooms")}
+              isOpen={isHeaderSearchOpen}
+              onExpandedChange={setIsHeaderSearchOpen}
+              disabled={!!selectedRoom}
+            >
+              <div className="search-bar">
+                <Search sx={{ color: "#94a3b8" }} />
+                <input
+                  type="text"
+                  placeholder={t("user.searchRooms")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  disabled={!!selectedRoom}
+                  aria-label={t("user.searchRooms")}
+                />
+              </div>
+            </ExpandableHeaderSearch>
             <NotificationBell compact />
 
             {/* Profile Section */}

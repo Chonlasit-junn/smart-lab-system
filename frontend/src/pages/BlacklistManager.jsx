@@ -46,6 +46,7 @@ import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import { blacklistFormError, serializeBlacklistForm } from "../utils/blacklistPolicy";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -77,6 +78,7 @@ export default function BlacklistManager() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const [openDialog, setOpenDialog] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -270,7 +272,7 @@ export default function BlacklistManager() {
       >
         {/* HEADER */}
         <Box
-          className="top-header admin-top-header"
+          className={`top-header admin-top-header has-expandable-header-search${isMobileSearchOpen ? " mobile-search-open" : ""}`}
           sx={{
             "&.admin-top-header": {
               height: { xs: "auto", md: 72 },
@@ -291,35 +293,44 @@ export default function BlacklistManager() {
           <Typography
             variant="h5"
             fontWeight="700"
+            className="admin-page-heading"
             sx={{ color: "#1e293b", letterSpacing: "-1px", fontSize: { xs: 18, md: 24 },
               width: { xs: "100%", md: "auto" }, minWidth: 0, overflowWrap: "break-word" }}
           >
             {t("admin.blacklistTitle")}
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 2 }, minWidth: 0, width: { xs: "100%", md: "auto" } }}>
-            <Paper
-              className="admin-search-control"
-              elevation={0}
-              sx={{
-                px: 2,
-                py: 0.5,
-                display: "flex",
-                alignItems: "center",
-                width: { xs: "auto", md: 400 },
-                flex: { xs: 1, md: "0 1 auto" },
-                minWidth: 0,
-                height: 44,
-              }}
+          <Box className="admin-header-actions" sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 2 }, minWidth: 0, width: { xs: "auto", md: "auto" } }}>
+            <ExpandableHeaderSearch
+              id="admin-blacklist-search"
+              label={t("admin.searchBlacklist")}
+              isOpen={isMobileSearchOpen}
+              onExpandedChange={setIsMobileSearchOpen}
             >
-              <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
-              <InputBase
-                placeholder={t("admin.searchBlacklist")}
-                fullWidth
-                sx={{ fontSize: "15px", fontWeight: "400" }}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </Paper>
+              <Paper
+                className="admin-search-control"
+                elevation={0}
+                sx={{
+                  px: 2,
+                  py: 0.5,
+                  display: "flex",
+                  alignItems: "center",
+                  width: { xs: "auto", md: 400 },
+                  flex: { xs: 1, md: "0 1 auto" },
+                  minWidth: 0,
+                  height: 44,
+                }}
+              >
+                <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
+                <InputBase
+                  placeholder={t("admin.searchBlacklist")}
+                  aria-label={t("admin.searchBlacklist")}
+                  fullWidth
+                  sx={{ fontSize: "15px", fontWeight: "400" }}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </Paper>
+            </ExpandableHeaderSearch>
             <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
