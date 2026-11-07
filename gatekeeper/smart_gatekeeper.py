@@ -69,7 +69,7 @@ ctk.set_default_color_theme("blue")
 
 class GatekeeperDemo(ctk.CTk):
 
-    def __init__(self):
+    def __init__(self, force_registration=False):
         super().__init__()
         self.title("Smart Lab — AI Gatekeeper")
         self.geometry("1024x620")
@@ -106,10 +106,12 @@ class GatekeeperDemo(ctk.CTk):
         self.registration_dialog_open = False
         self._registration_dialog = None
 
-        if self.registration:
+        if self.registration and not force_registration:
             self._start_scanner()
         else:
             self._show_registration_required()
+        if force_registration:
+            self.after(150, self._open_registration)
 
     def _show_registration_required(self):
         self.geometry("620x350")
@@ -684,6 +686,6 @@ if __name__ == "__main__":
             report = {"ok": False, "error_type": type(exc).__name__}
         Path(sys.argv[2]).write_text(json.dumps(report, indent=2), encoding="utf-8")
         raise SystemExit(0 if report["ok"] else 1)
-    app = GatekeeperDemo()
+    app = GatekeeperDemo(force_registration="--register" in sys.argv[1:])
     app.protocol("WM_DELETE_WINDOW", app.on_closing)
     app.mainloop()

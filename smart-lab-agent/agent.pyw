@@ -8,6 +8,7 @@ import threading
 import uuid
 import time
 import requests
+from agent_qa import start_session_headers
 import pygetwindow as gw
 from datetime import datetime, timezone
 from agent_device import load_device_registration
@@ -662,7 +663,10 @@ class LoginOverlay(QWidget):
         if not isinstance(access_token, str) or not access_token.strip():
             return {"kind": "invalid_credentials"}
         self.agent.current_access_token = access_token
-        session_headers = {"Authorization": f"Bearer {access_token}"}
+        session_headers = start_session_headers(
+            access_token,
+            qa_no_booking_time=os.getenv("SMART_LAB_AGENT_QA_NO_BOOKING_TIME") == "1",
+        )
 
         # Deliver any prior session's durable requests before claiming this device.
         self.agent.flush_outbox(limit=5)

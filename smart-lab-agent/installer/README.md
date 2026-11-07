@@ -111,6 +111,43 @@ Build on Windows for the target architecture. The build machine needs:
 - PyInstaller 6.20.0 in that environment (`python -m pip install pyinstaller==6.20.0`).
 - Visual Studio 2022 or Visual Studio 2026 with the official [Microsoft Visual Studio Installer Projects extension](https://marketplace.visualstudio.com/items?itemName=VisualStudioClient.MicrosoftVisualStudio2022InstallerProjects).
 
+The same builder can create the standalone Gatekeeper MSI. It uses
+`gatekeeper\.venv` and the current `smart_gatekeeper.spec` with ONNX Runtime,
+the bundled FP32 model, camera startup improvements, and the scanner registration
+flow. The Gatekeeper MSI installs separately under `Smart Lab\Face Scanner`.
+
+```powershell
+# Current Agent source, QA-only booking-time bypass
+.\smart-lab-agent\installer\build_msi.ps1 -Product Agent -Version 1.1.11 -QaNoBookingTime
+
+# Standalone face scanner
+.\smart-lab-agent\installer\build_msi.ps1 -Product Gatekeeper -Version 1.0.0
+```
+
+The QA installer provides a **Register QA Agent** shortcut. It launches the
+registration wizard in the same isolated QA data directory used by the QA Agent,
+so the device credential saved after registration is visible to that Agent. The
+Agent QA shortcut sends `X-SmartLab-QA-No-Booking-Time: 1` only when it starts
+the app. Registration state and outbox data are kept separately under
+`%LOCALAPPDATA%\SmartLabAgentQA\SmartLabAgent`, so installing it beside a
+regular Agent does not replace that Agent's saved device credential. The bypass is honored only if the QA Backend also has
+`SMART_LAB_AGENT_QA_NO_BOOKING_TIME=1`; it remains disabled otherwise. It skips
+only the booking time-window check and still requires a same-day reserved or
+attended booking, an authenticated matching user, a registered active Lab device,
+an active Lab, Guest approval, and no active ban. Keep this flag off in production.
+
+Gatekeeper registers a distinct `gatekeeper-…` device against its selected Lab
+and stores its credential in the current Windows user's LocalAppData. Migration
+017 (`backend/migrations/017_gatekeeper_scan_logs.sql`) must be applied to the
+target QA database before scan-history logging can be tested; this build does not
+run migrations. Verify the packaged face runtime without opening a camera or
+calling the Backend with:
+
+```powershell
+& '.\gatekeeper\dist_msi\<build-folder>\payload\SmartGatekeeper.exe' `
+  --liveness-self-test "$env:TEMP\gatekeeper-self-test.json"
+```
+
 From the repository root, run:
 
 ```powershell
@@ -122,15 +159,16 @@ add `-UseVisualStudioAutomation`. This uses a new hidden IDE instance to build t
 same project and applies the same shortcut validation; it does not repair/update
 Visual Studio or modify registry settings.
 
-The default uses `smart-lab-agent\venv\Scripts\python.exe`. A different Python may be selected with `-PythonPath`, but it must have the project runtime dependencies and PyInstaller 6.20.0 installed.
+The Agent default uses `smart-lab-agent\venv\Scripts\python.exe`; Gatekeeper uses `gatekeeper\.venv\Scripts\python.exe`. A different Python may be selected with `-PythonPath`, but it must have the product runtime dependencies and PyInstaller 6.20.0 installed.
 
 If the runtime dependencies are already installed in the project virtual environment, install the build dependency there with:
 
 ```powershell
 .\smart-lab-agent\venv\Scripts\python.exe -m pip install -r .\smart-lab-agent\requirements-build.txt
+.\gatekeeper\.venv\Scripts\python.exe -m pip install -r .\gatekeeper\requirements-build.txt
 ```
 
-The script packages the shared Agent/registration entry point as a self-contained, one-file executable, generates a temporary Visual Studio Setup Project from `SmartLabAgent.vdproj.template`, and invokes `devenv.com` to create the MSI. The registration shortcut launches the same executable with the internal `--register` argument. It does not install Visual Studio or the extension, and it does not make registry changes. Microsoft documents that command-line builds of `.vdproj` projects may require running Visual Studio's `DisableOutOfProcBuild.exe` once for the same Windows account; see the [Microsoft build instructions](https://learn.microsoft.com/en-us/visualstudio/ide/reference/build-devenv-exe?view=visualstudio#build-a-setup-project).
+The script packages the selected product as a self-contained, one-file executable, generates a temporary Visual Studio Setup Project from `SmartLabAgent.vdproj.template`, and invokes Visual Studio to create the MSI. Each product has its own upgrade identity, installation folder, Start Menu/Desktop shortcuts, and uninstall entry. Microsoft documents that command-line builds of `.vdproj` projects may require running Visual Studio's `DisableOutOfProcBuild.exe` once for the same Windows account; see the [Microsoft build instructions](https://learn.microsoft.com/en-us/visualstudio/ide/reference/build-devenv-exe?view=visualstudio#build-a-setup-project).
 
 Packaging runs Python in isolated mode and temporarily restricts the build process's
 `PATH` to Windows and the selected Python runtime. This prevents unrelated tools
@@ -141,8 +179,10 @@ Windows system ICU as configured in `qt_runtime.py`. Python, Qt, Tcl/Tk, softwar
 OpenGL, TLS certificates and the URL reader remain included; no optional runtime
 components are removed to meet the size target. Target machines still require
 the supported Windows 10/11 environment, not a separate Python/Qt installation.
-The build rejects MSI output of 50,000,000 bytes or larger (decimal 50 MB),
+The Agent build rejects MSI output of 50,000,000 bytes or larger (decimal 50 MB),
 including installer-only rebuilds, to catch future packaging size regressions.
+Gatekeeper includes its camera, ONNX Runtime, and face model, so it uses its own
+larger standalone package and is not subject to the Agent's 50 MB limit.
 
 For an installer-only rebuild using an already-built, verified shared executable, pass the directory containing `SmartLabDevice.exe` with `-PrebuiltPayloadPath`; this skips PyInstaller but still creates a new MSI:
 
@@ -150,4 +190,4 @@ For an installer-only rebuild using an already-built, verified shared executable
 .\smart-lab-agent\installer\build_msi.ps1 -Version 1.1.1 -PrebuiltPayloadPath 'C:\build-output\payload'
 ```
 
-Build files are placed in ignored `smart-lab-agent\build_msi\` and `smart-lab-agent\dist_msi\` directories. Each run uses a timestamped directory and does not overwrite an earlier MSI. This project does not include a code-signing certificate; production distribution should sign the MSI and executables with the organization's certificate. An unsigned build may trigger Windows reputation or SmartScreen warnings.
+Build files are placed in ignored `smart-lab-agent\build_msi\` and `smart-lab-agent\dist_msi\` directories. Standard Agent builds go under `dist_msi\agent\`, and QA Agent builds go under `dist_msi\qa\`; each uses a timestamped directory and does not overwrite an earlier MSI. Gatekeeper builds remain under its separate `gatekeeper\dist_msi\` directory. This project does not include a code-signing certificate; production distribution should sign the MSI and executables with the organization's certificate. An unsigned build may trigger Windows reputation or SmartScreen warnings.

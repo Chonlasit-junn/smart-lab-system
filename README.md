@@ -386,9 +386,10 @@ npm run build
 ## โครงสร้างสำคัญ
 
 ดู [คู่มือจัดวางไฟล์และผลลัพธ์ build](docs/PROJECT_STRUCTURE.md) สำหรับหน้าที่ของแต่ละโฟลเดอร์และข้อควรระวังก่อนย้ายหรือลบไฟล์
+ดู [Tech Stack](docs/TECH_STACK.md) สำหรับเทคโนโลยี, dependency manifests และภาพการเชื่อมต่อของแต่ละระบบ
 
 ```text
-docs/                       # คู่มือโครงสร้างโปรเจค
+docs/                       # คู่มือโครงสร้างและเทคโนโลยีโปรเจค
 scripts/                    # เครื่องมือตรวจสอบข้ามระบบ
 tests/fixtures/             # ข้อมูลทดสอบร่วมของ Frontend / Backend / Agent
 

@@ -92,7 +92,7 @@ export default function Login() {
   };
 
   return (
-    <div className="login-wrapper" style={{ position: 'relative' }}>
+    <div className="login-wrapper login-page" style={{ position: 'relative' }}>
 
       <div className="login-container">
 

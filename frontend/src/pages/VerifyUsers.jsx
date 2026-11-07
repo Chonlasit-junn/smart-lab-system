@@ -38,6 +38,7 @@ import AdminNotificationBell from "../components/AdminNotificationBell";
 import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import { isPendingUser } from "./verifyUsersUtils";
+import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -499,7 +500,12 @@ export default function VerifyUsers() {
                 </Paper>
               ) : (
                 <Box
+                  tabIndex={0}
+                  aria-label={t("admin.verifyTitle")}
                   sx={{
+                    ...verticalScrollAreaSx,
+                    overflowX: "hidden",
+                    pr: 1,
                     display: "grid",
                     gridTemplateColumns: {
                       xs: "minmax(0, 1fr)",

@@ -59,3 +59,13 @@ def current_lab_booking(db, user_id, lab_id, lab_time):
         models.Booking.end_time > lab_time.time(),
         models.Booking.status.in_(("reserved", "attended")),
     ).order_by(models.Booking.start_time.asc(), models.Booking.id.asc()).first()
+
+
+def same_day_lab_booking(db, user_id, lab_id, lab_date):
+    """Return a valid booking for the Lab calendar date, regardless of its time slot."""
+    return db.query(models.Booking).filter(
+        models.Booking.user_id == user_id,
+        models.Booking.lab_id == lab_id,
+        models.Booking.booking_date == lab_date,
+        models.Booking.status.in_(("reserved", "attended")),
+    ).order_by(models.Booking.start_time.asc(), models.Booking.id.asc()).first()

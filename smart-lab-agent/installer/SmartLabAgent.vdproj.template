@@ -3,7 +3,7 @@
 "VSVersion" = "3:800"
 "ProjectType" = "8:{978C614F-708E-4E1A-B201-565925725DBA}"
 "IsWebType" = "8:FALSE"
-"ProjectName" = "8:SmartLabAgentInstaller"
+"ProjectName" = "8:__PROJECT_NAME__"
 "LanguageId" = "3:1033"
 "CodePage" = "3:1252"
 "UILanguageId" = "3:1033"
@@ -65,8 +65,8 @@
         {
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
             {
-            "SourcePath" = "8:__DEVICE_EXE__"
-            "TargetName" = "8:SmartLabDevice.exe"
+            "SourcePath" = "8:__APP_EXE_PATH__"
+            "TargetName" = "8:__APP_EXE_NAME__"
             "Tag" = "8:"
             "Folder" = "8:_11111111111111111111111111111111"
             "Condition" = "8:"
@@ -91,7 +91,7 @@
         {
             "{3C67513D-01DD-4637-8A68-80971EB9504F}:_11111111111111111111111111111111"
             {
-            "DefaultLocation" = "8:[ProgramFiles64Folder]Smart Lab\\Device Agent"
+            "DefaultLocation" = "8:[ProgramFiles64Folder]__INSTALL_FOLDER__"
             "Name" = "8:#1925"
             "AlwaysCreate" = "11:FALSE"
             "Condition" = "8:"
@@ -149,10 +149,10 @@
         "Product"
         {
         "Name" = "8:Microsoft Visual Studio"
-        "ProductName" = "8:Smart Lab Device Agent"
+        "ProductName" = "8:__PRODUCT_NAME__"
         "ProductCode" = "8:__PRODUCT_CODE__"
         "PackageCode" = "8:__PACKAGE_CODE__"
-        "UpgradeCode" = "8:{78B9A7C1-A3F4-4D82-974A-A7A69E9121CC}"
+        "UpgradeCode" = "8:__UPGRADE_CODE__"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
@@ -161,11 +161,11 @@
         "Manufacturer" = "8:Smart Lab"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
-        "Title" = "8:Smart Lab Device Agent"
+        "Title" = "8:__PRODUCT_NAME__"
         "Subject" = "8:Lab computer registration and Agent"
         "ARPCONTACT" = "8:Smart Lab"
         "Keywords" = "8:Smart Lab, Agent, Lab Registration"
-        "ARPCOMMENTS" = "8:Registers this computer and runs the Smart Lab Agent."
+        "ARPCOMMENTS" = "8:__PRODUCT_COMMENTS__"
         "ARPURLINFOABOUT" = "8:"
         "ARPPRODUCTICON" = "8:"
         "ARPIconIndex" = "3:0"
@@ -216,9 +216,9 @@
         {
             "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
             {
-            "Name" = "8:Smart Lab Agent"
-            "Arguments" = "8:"
-            "Description" = "8:Smart Lab Agent"
+            "Name" = "8:__PRIMARY_SHORTCUT_NAME__"
+            "Arguments" = "8:__PRIMARY_SHORTCUT_ARGUMENTS__"
+            "Description" = "8:__PRIMARY_SHORTCUT_NAME__"
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
@@ -230,9 +230,9 @@
             }
             "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
             {
-            "Name" = "8:Register This Computer"
-            "Arguments" = "8:--register"
-            "Description" = "8:Register this Lab computer"
+            "Name" = "8:__REGISTER_SHORTCUT_NAME__"
+            "Arguments" = "8:__REGISTER_SHORTCUT_ARGUMENTS__"
+            "Description" = "8:__REGISTER_SHORTCUT_NAME__"
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
@@ -244,9 +244,9 @@
             }
             "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
             {
-            "Name" = "8:Smart Lab Agent"
-            "Arguments" = "8:"
-            "Description" = "8:Smart Lab Agent"
+            "Name" = "8:__PRIMARY_SHORTCUT_NAME__"
+            "Arguments" = "8:__PRIMARY_SHORTCUT_ARGUMENTS__"
+            "Description" = "8:__PRIMARY_SHORTCUT_NAME__"
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
@@ -258,9 +258,9 @@
             }
             "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
             {
-            "Name" = "8:Register This Computer"
-            "Arguments" = "8:--register"
-            "Description" = "8:Register this Lab computer"
+            "Name" = "8:__REGISTER_SHORTCUT_NAME__"
+            "Arguments" = "8:__REGISTER_SHORTCUT_ARGUMENTS__"
+            "Description" = "8:__REGISTER_SHORTCUT_NAME__"
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"

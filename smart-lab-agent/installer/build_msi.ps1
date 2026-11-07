@@ -2,6 +2,9 @@ param(
     [string]$Version = "1.0.0",
     [string]$PythonPath = "",
     [string]$PrebuiltPayloadPath = "",
+    [ValidateSet("Agent", "Gatekeeper")]
+    [string]$Product = "Agent",
+    [switch]$QaNoBookingTime,
     [switch]$UseVisualStudioAutomation
 )
 
@@ -16,7 +19,36 @@ foreach ($part in $Version.Split('.')) {
     }
 }
 
-$agentRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$agentRoot = Join-Path $repoRoot "smart-lab-agent"
+$gatekeeperRoot = Join-Path $repoRoot "gatekeeper"
+$projectRoot = if ($Product -eq "Gatekeeper") { $gatekeeperRoot } else { $agentRoot }
+$isQaAgent = $Product -eq "Agent" -and $QaNoBookingTime.IsPresent
+if ($QaNoBookingTime -and $Product -ne "Agent") {
+    throw "-QaNoBookingTime is only valid when building the Agent product."
+}
+
+$appExeName = if ($Product -eq "Gatekeeper") { "SmartGatekeeper.exe" } else { "SmartLabDevice.exe" }
+$appDisplayName = if ($Product -eq "Gatekeeper") { "Smart Lab Gatekeeper" } elseif ($isQaAgent) { "Smart Lab Agent QA - No Booking Time" } else { "Smart Lab Agent" }
+$registerShortcutName = if ($Product -eq "Gatekeeper") { "Register This Scanner" } elseif ($isQaAgent) { "Register QA Agent" } else { "Register This Computer" }
+$registerShortcutArguments = if ($isQaAgent) { "--qa-no-booking-time --register" } else { "--register" }
+$productName = if ($Product -eq "Gatekeeper") { "Smart Lab Face Scanner" } elseif ($isQaAgent) { "Smart Lab Agent QA - No Booking Time" } else { "Smart Lab Device Agent" }
+$productComments = if ($Product -eq "Gatekeeper") { "Registers this computer as a face scanner and verifies lab access." } elseif ($isQaAgent) { "QA-only Agent build. Ignores booking time only when the QA Backend flag is enabled." } else { "Registers this computer and runs the Smart Lab Agent." }
+$installFolder = if ($Product -eq "Gatekeeper") { "Smart Lab\Face Scanner" } elseif ($isQaAgent) { "Smart Lab\Agent QA" } else { "Smart Lab\Device Agent" }
+$buildVariant = if ($Product -eq "Gatekeeper") { "gatekeeper" } elseif ($isQaAgent) { "qa-no-booking-time" } else { "agent" }
+$installerProjectName = if ($Product -eq "Gatekeeper") { "SmartGatekeeperInstaller" } else { "SmartLabAgentInstaller" }
+$registryBasePath = if ($Product -eq "Gatekeeper") { "Software\Smart Lab\Face Scanner" } elseif ($isQaAgent) { "Software\Smart Lab\Agent QA" } else { "Software\Smart Lab\Device Agent" }
+$upgradeCode = if ($Product -eq "Gatekeeper") { "{6E77A21F-69D9-4D82-90D0-52BDF4F0C571}" } elseif ($isQaAgent) { "{87B146E3-9F71-4610-9D5A-E3D72384D8C9}" } else { "{78B9A7C1-A3F4-4D82-974A-A7A69E9121CC}" }
+
+$componentIds = if ($Product -eq "Gatekeeper") {
+    @{ Desktop = "{B119D16C-425B-43DD-9F29-32D1C7D05011}"; Register = "{B119D16C-425B-43DD-9F29-32D1C7D05012}"; Uninstall = "{B119D16C-425B-43DD-9F29-32D1C7D05013}" }
+} elseif ($isQaAgent) {
+    @{ Desktop = "{8E5A1D66-83A1-4E20-AF36-03720862A021}"; Register = "{8E5A1D66-83A1-4E20-AF36-03720862A022}"; Uninstall = "{8E5A1D66-83A1-4E20-AF36-03720862A023}" }
+} else {
+    @{ Desktop = "{C41B79CE-2E28-41BD-B743-7607AB300021}"; Register = "{C41B79CE-2E28-41BD-B743-7607AB300022}"; Uninstall = "{C41B79CE-2E28-41BD-B743-7607AB300023}" }
+}
+$primaryShortcutArguments = if ($isQaAgent) { "--qa-no-booking-time" } else { "" }
+
 $usePrebuiltPayload = -not [string]::IsNullOrWhiteSpace($PrebuiltPayloadPath)
 $python = $null
 $resolvedPrebuiltPayloadPath = $null
@@ -29,10 +61,10 @@ if ($usePrebuiltPayload) {
     $python = if ($PythonPath) {
         (Resolve-Path -LiteralPath $PythonPath).Path
     } else {
-        Join-Path $agentRoot "venv\Scripts\python.exe"
+        Join-Path $projectRoot $(if ($Product -eq "Gatekeeper") { ".venv\Scripts\python.exe" } else { "venv\Scripts\python.exe" })
     }
     if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-        throw "Project Python environment not found at '$python'. Create smart-lab-agent\venv first."
+        throw "Project Python environment not found at '$python'."
     }
 }
 
@@ -63,37 +95,58 @@ if (-not (Test-Path -LiteralPath $vsiDirectory -PathType Container)) {
 }
 
 if (-not $usePrebuiltPayload) {
-    & $python -B -c "import PyInstaller; assert PyInstaller.__version__ == '6.20.0'; import PyQt6, psutil, requests, pygetwindow"
+    $dependencyCheck = if ($Product -eq "Gatekeeper") {
+        "import PyInstaller; assert PyInstaller.__version__ == '6.20.0'; import cv2, numpy, onnxruntime, customtkinter, PIL, requests"
+    } else {
+        "import PyInstaller; assert PyInstaller.__version__ == '6.20.0'; import PyQt6, psutil, requests, pygetwindow"
+    }
+    & $python -B -c $dependencyCheck
     if ($LASTEXITCODE -ne 0) {
-        throw "PyInstaller 6.20.0 and the project runtime dependencies are required. Install with: `"$python`" -m pip install pyinstaller==6.20.0"
+        throw "PyInstaller 6.20.0 and the project runtime dependencies are required. Install with: `"$python`" -m pip install -r requirements-build.txt"
     }
 }
 
-$buildId = "{0}-{1}" -f $Version, (Get-Date -Format "yyyyMMdd-HHmmss")
-$buildRoot = Join-Path $agentRoot "build_msi\$buildId"
+$buildId = "{0}-{1}-{2}" -f $Version, $buildVariant, (Get-Date -Format "yyyyMMdd-HHmmss")
+$buildRoot = Join-Path $projectRoot "build_msi\$buildId"
 $payloadRoot = Join-Path $buildRoot "payload"
-$distRoot = Join-Path $agentRoot "dist_msi\$buildId"
-$projectPath = Join-Path $buildRoot "SmartLabAgentInstaller.vdproj"
-$solutionPath = Join-Path $buildRoot "SmartLabAgentInstaller.sln"
+$distRoot = Join-Path $projectRoot "dist_msi"
+if ($Product -eq "Agent") {
+    $distributionKind = if ($isQaAgent) { "qa" } else { "agent" }
+    $distRoot = Join-Path $distRoot $distributionKind
+}
+$distRoot = Join-Path $distRoot $buildId
+$projectPath = Join-Path $buildRoot "$installerProjectName.vdproj"
+$solutionPath = Join-Path $buildRoot "$installerProjectName.sln"
 $buildLog = Join-Path $buildRoot "visualstudio-build.log"
 
 New-Item -ItemType Directory -Path $payloadRoot, $distRoot, (Join-Path $buildRoot "pyinstaller-work\device"), (Join-Path $buildRoot "spec") -Force | Out-Null
 
 if ($usePrebuiltPayload) {
-    $prebuiltPayload = Join-Path $resolvedPrebuiltPayloadPath "SmartLabDevice.exe"
+    $prebuiltPayload = Join-Path $resolvedPrebuiltPayloadPath $appExeName
     if (-not (Test-Path -LiteralPath $prebuiltPayload -PathType Leaf)) {
         throw "Expected prebuilt application payload was not found: '$prebuiltPayload'."
     }
     Copy-Item -LiteralPath $prebuiltPayload -Destination $payloadRoot
 } else {
-    $deviceBuildArgs = @(
-        "-I", "-B", "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
-        "--name", "SmartLabDevice",
-        "--distpath", $payloadRoot,
-        "--workpath", (Join-Path $buildRoot "pyinstaller-work\device"),
-        "--specpath", (Join-Path $buildRoot "spec"),
-        (Join-Path $agentRoot "smart_lab_device.py")
-    )
+    if ($Product -eq "Gatekeeper") {
+        $deviceBuildArgs = @(
+            "-I", "-B", "-m", "PyInstaller", "--noconfirm", "--clean",
+            "--distpath", $payloadRoot,
+            "--workpath", (Join-Path $buildRoot "pyinstaller-work\gatekeeper"),
+            (Join-Path $projectRoot "smart_gatekeeper.spec")
+        )
+        $buildWorkingDirectory = $projectRoot
+    } else {
+        $deviceBuildArgs = @(
+            "-I", "-B", "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
+            "--name", "SmartLabDevice",
+            "--distpath", $payloadRoot,
+            "--workpath", (Join-Path $buildRoot "pyinstaller-work\device"),
+            "--specpath", (Join-Path $buildRoot "spec"),
+            (Join-Path $agentRoot "smart_lab_device.py")
+        )
+        $buildWorkingDirectory = $agentRoot
+    }
     # Do not resolve Qt's Windows ICU dependency from unrelated tools on PATH
     # (e.g. Poppler/Conda). Those DLLs are both incompatible and much larger.
     # qt_runtime.py already pins the Windows system ICU in the installed app.
@@ -110,18 +163,20 @@ if ($usePrebuiltPayload) {
             $pythonRuntimeRoot,
             (Join-Path $pythonRuntimeRoot 'DLLs')
         ) -join [System.IO.Path]::PathSeparator
+        Push-Location $buildWorkingDirectory
         & $python @deviceBuildArgs
         if ($LASTEXITCODE -ne 0) {
-            throw "PyInstaller failed while packaging the shared Agent and registration executable (exit code $LASTEXITCODE)."
+            throw "PyInstaller failed while packaging $Product (exit code $LASTEXITCODE)."
         }
     } finally {
+        if ((Get-Location).Path -eq $buildWorkingDirectory) { Pop-Location }
         $env:PATH = $originalBuildPath
     }
 }
 
-$deviceExe = Join-Path $payloadRoot "SmartLabDevice.exe"
-if (-not (Test-Path -LiteralPath $deviceExe -PathType Leaf)) {
-    throw "Expected application payload was not created: '$deviceExe'."
+$appExePath = Join-Path $payloadRoot $appExeName
+if (-not (Test-Path -LiteralPath $appExePath -PathType Leaf)) {
+    throw "Expected application payload was not created: '$appExePath'."
 }
 
 function ConvertTo-VdprojValue([string]$Value) {
@@ -130,21 +185,37 @@ function ConvertTo-VdprojValue([string]$Value) {
 
 $productHash = [System.Security.Cryptography.MD5]::Create()
 try {
-    $productBytes = $productHash.ComputeHash([System.Text.Encoding]::UTF8.GetBytes("SmartLabDeviceAgent:$Version"))
+    $productIdentity = if ($Product -eq "Agent" -and -not $isQaAgent) {
+        "SmartLabDeviceAgent:$Version"
+    } else {
+        "SmartLab:${Product}:${buildVariant}:$Version"
+    }
+    $productBytes = $productHash.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($productIdentity))
 } finally {
     $productHash.Dispose()
 }
 $productCode = ([guid]::new($productBytes)).ToString('B').ToUpperInvariant()
 $packageCode = [guid]::NewGuid().ToString('B').ToUpperInvariant()
-$msiPath = Join-Path $distRoot "SmartLabAgent.msi"
+$msiFileName = if ($Product -eq "Gatekeeper") { "SmartLabGatekeeper.msi" } elseif ($isQaAgent) { "SmartLabAgent-QA-NoBookingTime.msi" } else { "SmartLabAgent.msi" }
+$msiPath = Join-Path $distRoot $msiFileName
 $templatePath = Join-Path $PSScriptRoot "SmartLabAgent.vdproj.template"
 $projectTemplate = Get-Content -LiteralPath $templatePath -Raw
 $replacements = @{
     "__OUTPUT_MSI__" = ConvertTo-VdprojValue $msiPath
-    "__DEVICE_EXE__" = ConvertTo-VdprojValue $deviceExe
+    "__APP_EXE_PATH__" = ConvertTo-VdprojValue $appExePath
+    "__APP_EXE_NAME__" = $appExeName
     "__PRODUCT_CODE__" = $productCode
     "__PACKAGE_CODE__" = $packageCode
     "__VERSION__" = $Version
+    "__PROJECT_NAME__" = $installerProjectName
+    "__INSTALL_FOLDER__" = ConvertTo-VdprojValue $installFolder
+    "__PRODUCT_NAME__" = $productName
+    "__PRODUCT_COMMENTS__" = $productComments
+    "__UPGRADE_CODE__" = $upgradeCode
+    "__PRIMARY_SHORTCUT_NAME__" = $appDisplayName
+    "__PRIMARY_SHORTCUT_ARGUMENTS__" = $primaryShortcutArguments
+    "__REGISTER_SHORTCUT_NAME__" = $registerShortcutName
+    "__REGISTER_SHORTCUT_ARGUMENTS__" = $registerShortcutArguments
 }
 foreach ($token in $replacements.Keys) {
     $projectTemplate = $projectTemplate.Replace($token, $replacements[$token])
@@ -160,7 +231,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{978C614F-708E-4E1A-B201-565925725DBA}") = "SmartLabAgentInstaller", "SmartLabAgentInstaller.vdproj", "$projectGuid"
+Project("{978C614F-708E-4E1A-B201-565925725DBA}") = "$installerProjectName", "$installerProjectName.vdproj", "$projectGuid"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -300,27 +371,47 @@ try {
 
     $desktopShortcutDefinitions = @(
         @{
-            Name = 'Smart Lab Agent'
-            FileName = 'SmartLabDevice.exe'
-            Arguments = ''
-            Component = 'SmartLabDesktopAgentShortcut'
-            ComponentId = '{C41B79CE-2E28-41BD-B743-7607AB300021}'
-            RegistryKeyPath = 'SmartLabDesktopAgentShortcutKeyPath'
-            RegistryValue = 'DesktopAgentShortcut'
+            Name = $appDisplayName
+            FileName = $appExeName
+            Arguments = $primaryShortcutArguments
+            Component = 'SmartLabDesktopPrimaryShortcut'
+            ComponentId = $componentIds.Desktop
+            RegistryKeyPath = 'SmartLabDesktopPrimaryShortcutKeyPath'
+            RegistryValue = 'DesktopPrimaryShortcut'
         },
         @{
-            Name = 'Register This Computer'
-            FileName = 'SmartLabDevice.exe'
-            Arguments = '--register'
+            Name = $registerShortcutName
+            FileName = $appExeName
+            Arguments = $registerShortcutArguments
             Component = 'SmartLabDesktopRegisterShortcut'
-            ComponentId = '{C41B79CE-2E28-41BD-B743-7607AB300022}'
+            ComponentId = $componentIds.Register
             RegistryKeyPath = 'SmartLabDesktopRegisterShortcutKeyPath'
             RegistryValue = 'DesktopRegisterShortcut'
         }
     )
 
     if ($desktopShortcutIds.Count -ne $desktopShortcutDefinitions.Count) {
-        throw "The MSI does not contain exactly the two expected Desktop shortcuts."
+        throw "The MSI does not contain exactly the two expected Desktop shortcuts for $Product."
+    }
+
+    $view = $database.OpenView('SELECT `Name`, `Arguments` FROM `Shortcut`')
+    $view.Execute()
+    $registrationShortcutCount = 0
+    while ($record = $view.Fetch()) {
+        $shortcutName = ($record.StringData(1) -split '\|')[-1]
+        if ($shortcutName -ne $registerShortcutName) {
+            continue
+        }
+        $registrationShortcutCount++
+        if ($record.StringData(2) -ne $registerShortcutArguments) {
+            throw "The '$registerShortcutName' shortcut does not use the expected registration arguments."
+        }
+    }
+    $view.Close()
+    [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
+    $view = $null
+    if ($registrationShortcutCount -ne 2) {
+        throw "The MSI must contain Start Menu and Desktop '$registerShortcutName' shortcuts."
     }
 
     $fileKeysByName = @{}
@@ -364,7 +455,7 @@ try {
         $view = $null
 
         $registryValue = $definition.RegistryValue
-        $insertRegistrySql = "INSERT INTO ``Registry`` (``Registry``, ``Root``, ``Key``, ``Name``, ``Value``, ``Component_``) VALUES ('$registryKeyPath', 2, 'Software\Smart Lab\Device Agent', '$registryValue', '1', '$component')"
+        $insertRegistrySql = "INSERT INTO ``Registry`` (``Registry``, ``Root``, ``Key``, ``Name``, ``Value``, ``Component_``) VALUES ('$registryKeyPath', 2, '$registryBasePath', '$registryValue', '1', '$component')"
         $view = $database.OpenView($insertRegistrySql)
         $view.Execute()
         $view.Close()
@@ -409,7 +500,7 @@ try {
         $view = $database.OpenView("SELECT ``Root``, ``Key``, ``Name``, ``Value``, ``Component_`` FROM ``Registry`` WHERE ``Registry`` = '$registryKeyPath'")
         $view.Execute()
         $record = $view.Fetch()
-        if (-not $record -or $record.IntegerData(1) -ne 2 -or $record.StringData(2) -ne 'Software\Smart Lab\Device Agent' -or $record.StringData(3) -ne $registryValue -or $record.StringData(4) -ne '1' -or $record.StringData(5) -ne $component) {
+        if (-not $record -or $record.IntegerData(1) -ne 2 -or $record.StringData(2) -ne $registryBasePath -or $record.StringData(3) -ne $registryValue -or $record.StringData(4) -ne '1' -or $record.StringData(5) -ne $component) {
             throw "The MSI registry key path for Desktop shortcut component '$component' did not pass validation."
         }
         $view.Close()
@@ -435,7 +526,7 @@ try {
     $view.Execute()
     while ($record = $view.Fetch()) {
         $shortcutName = ($record.StringData(1) -split '\|')[-1]
-        if ($shortcutName -eq 'Smart Lab Agent') {
+        if ($shortcutName -eq $appDisplayName) {
             $startMenuDirectories[$record.StringData(2)] = $true
         }
     }
@@ -444,7 +535,7 @@ try {
     $view = $null
 
     if ($startMenuDirectories.Count -ne 1) {
-        throw "The MSI does not contain exactly one Smart Lab Start Menu folder."
+        throw "The MSI does not contain exactly one $Product Start Menu folder."
     }
     $startMenuDirectory = @($startMenuDirectories.Keys)[0]
     if ($startMenuDirectory -notmatch '^[A-Za-z0-9_]+$') {
@@ -453,7 +544,7 @@ try {
 
     $uninstallComponent = 'SmartLabUninstallShortcut'
     $uninstallShortcut = 'SmartLabUninstallShortcut'
-    $uninstallComponentId = '{C41B79CE-2E28-41BD-B743-7607AB300023}'
+    $uninstallComponentId = $componentIds.Uninstall
     $uninstallRegistryKeyPath = 'SmartLabUninstallShortcutKeyPath'
     $insertComponentSql = "INSERT INTO ``Component`` (``Component``, ``ComponentId``, ``Directory_``, ``Attributes``, ``Condition``, ``KeyPath``) VALUES ('$uninstallComponent', '$uninstallComponentId', '$startMenuDirectory', 4, NULL, '$uninstallRegistryKeyPath')"
     $view = $database.OpenView($insertComponentSql)
@@ -462,7 +553,7 @@ try {
     [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
     $view = $null
 
-    $insertRegistrySql = "INSERT INTO ``Registry`` (``Registry``, ``Root``, ``Key``, ``Name``, ``Value``, ``Component_``) VALUES ('$uninstallRegistryKeyPath', 2, 'Software\Smart Lab\Device Agent', 'StartMenuUninstallShortcut', '1', '$uninstallComponent')"
+    $insertRegistrySql = "INSERT INTO ``Registry`` (``Registry``, ``Root``, ``Key``, ``Name``, ``Value``, ``Component_``) VALUES ('$uninstallRegistryKeyPath', 2, '$registryBasePath', 'StartMenuUninstallShortcut', '1', '$uninstallComponent')"
     $view = $database.OpenView($insertRegistrySql)
     $view.Execute()
     $view.Close()
@@ -476,7 +567,8 @@ try {
     [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
     $view = $null
 
-    $insertUninstallShortcutSql = "INSERT INTO ``Shortcut`` (``Shortcut``, ``Directory_``, ``Name``, ``Component_``, ``Target``, ``Arguments``, ``Description``, ``IconIndex``, ``ShowCmd``) VALUES ('$uninstallShortcut', '$startMenuDirectory', 'Uninstall Smart Lab Agent', '$uninstallComponent', '[SystemFolder]msiexec.exe', '/x [ProductCode]', 'Uninstall Smart Lab Device Agent', 0, 1)"
+    $uninstallShortcutName = "Uninstall $productName"
+    $insertUninstallShortcutSql = "INSERT INTO ``Shortcut`` (``Shortcut``, ``Directory_``, ``Name``, ``Component_``, ``Target``, ``Arguments``, ``Description``, ``IconIndex``, ``ShowCmd``) VALUES ('$uninstallShortcut', '$startMenuDirectory', '$uninstallShortcutName', '$uninstallComponent', '[SystemFolder]msiexec.exe', '/x [ProductCode]', 'Uninstall $productName', 0, 1)"
     $view = $database.OpenView($insertUninstallShortcutSql)
     $view.Execute()
     $view.Close()
@@ -506,7 +598,7 @@ try {
     $view = $database.OpenView("SELECT ``Root``, ``Key``, ``Name``, ``Value``, ``Component_`` FROM ``Registry`` WHERE ``Registry`` = '$uninstallRegistryKeyPath'")
     $view.Execute()
     $record = $view.Fetch()
-    if (-not $record -or $record.IntegerData(1) -ne 2 -or $record.StringData(2) -ne 'Software\Smart Lab\Device Agent' -or $record.StringData(3) -ne 'StartMenuUninstallShortcut' -or $record.StringData(4) -ne '1' -or $record.StringData(5) -ne $uninstallComponent) {
+    if (-not $record -or $record.IntegerData(1) -ne 2 -or $record.StringData(2) -ne $registryBasePath -or $record.StringData(3) -ne 'StartMenuUninstallShortcut' -or $record.StringData(4) -ne '1' -or $record.StringData(5) -ne $uninstallComponent) {
         throw "The Start Menu uninstall shortcut registry key path did not pass validation."
     }
     $view.Close()
@@ -568,7 +660,7 @@ try {
 }
 
 $msiBytes = (Get-Item -LiteralPath $msiPath).Length
-if ($msiBytes -ge 50000000) {
+if ($Product -eq "Agent" -and $msiBytes -ge 50000000) {
     throw "MSI exceeds the distribution limit of 50,000,000 bytes ($msiBytes bytes). Inspect the bundled dependencies before distributing it: '$msiPath'."
 }
 Write-Host "MSI created: $msiPath ($msiBytes bytes)"
