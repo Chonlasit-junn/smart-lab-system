@@ -16,7 +16,6 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  ArrowBack,
   Cancel,
   CheckCircle,
   Close,
@@ -260,16 +259,6 @@ export default function VerifyUsers() {
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <IconButton
-              onClick={() => navigate("/admin")}
-              sx={{
-                display: { xs: "inline-flex", md: "none" },
-                color: "#64748b",
-              }}
-              aria-label={t("common.back")}
-            >
-              <ArrowBack />
-            </IconButton>
             <Typography
               variant="h5"
               fontWeight="700"
