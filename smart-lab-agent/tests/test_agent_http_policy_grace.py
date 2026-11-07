@@ -403,7 +403,9 @@ class AgentPolicyTests(unittest.TestCase):
 
         instance._load_cached_policy = Mock(side_effect=load_empty_cache)
 
-        with patch.object(agent, "SESSION_CLEANUP_ENABLED", False):
+        with patch.object(agent, "SESSION_CLEANUP_ENABLED", False), patch.object(
+            agent.SmartLabAgent, "_start_window_visibility_monitor",
+        ):
             agent.SmartLabAgent.start_monitoring(instance, 12, None)
 
         instance._use_fallback_policy.assert_not_called()
@@ -718,6 +720,41 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertIsNotNone(reopened)
         self.assertTrue(reopened[6])
         self.assertIsNone(same_open_episode)
+
+    def test_window_event_catches_reopen_between_ticks_during_grace(self):
+        instance = self.make_agent()
+        instance.seen_process_ids = {123}
+        instance.seen_visible_process_ids = {123}
+        now = agent.datetime.now()
+        instance.violation_state.register_detection(now)
+        instance.violation_state.grant_grace(now)
+        instance.violation_grace_context = {
+            **self.warning_context(instance),
+            "process_id": 123,
+            "process_window_visible": True,
+        }
+        instance._violation_is_still_present = Mock(return_value=True)
+        instance._handle_violation_detection = Mock()
+        monitor = Mock()
+        monitor.consume_shown_process_ids.return_value = {123}
+        instance.window_visibility_monitor = monitor
+        process = SimpleNamespace(
+            info={"pid": 123, "name": "blocked.exe"},
+            exe=Mock(return_value=r"C:\blocked.exe"),
+        )
+
+        with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
+            agent, "_visible_window_process_ids", return_value={123},
+        ), patch.object(
+            agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"},
+        ):
+            agent.SmartLabAgent.track_usage(instance)
+
+        instance._violation_is_still_present.assert_not_called()
+        instance._handle_violation_detection.assert_called_once()
+        context = instance._handle_violation_detection.call_args.args[0]
+        self.assertEqual(context["process_id"], 123)
+        monitor.prune.assert_called_once_with({123})
 
     def test_visible_process_warning_ends_when_its_window_closes(self):
         instance = self.make_agent()

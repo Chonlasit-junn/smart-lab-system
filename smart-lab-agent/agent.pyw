@@ -27,6 +27,7 @@ from agent_violation import (
     ViolationState,
 )
 from agent_cleanup import SessionCleanupManager
+from agent_window_events import WindowVisibilityMonitor
 from qt_runtime import prepare_qt_dll_search_path
 
 
@@ -801,6 +802,7 @@ class SmartLabAgent:
         self.policy_token = None
         self.seen_process_ids = set()
         self.seen_visible_process_ids = set()
+        self.window_visibility_monitor = None
         self.violation_reported = False
         self.violation_state = ViolationState()
         self.violation_grace_context = None
@@ -1055,6 +1057,7 @@ class SmartLabAgent:
         if self.policy_source is None:
             # Keep local protection active while the first server request runs.
             self._use_fallback_policy()
+        self._start_window_visibility_monitor()
         self.refresh_policy()
         self.monitor_timer.start(5000)
         self.heartbeat_timer.start(30000)
@@ -1365,8 +1368,38 @@ class SmartLabAgent:
         # perform the request on the UI thread.
         self._pending_fallback_violations.append(payload)
 
-    def _find_new_process_match(self):
+    def _start_window_visibility_monitor(self):
+        self._stop_window_visibility_monitor()
+        try:
+            self.window_visibility_monitor = WindowVisibilityMonitor(
+                ignored_process_id=os.getpid(),
+            )
+        except Exception as exc:
+            self.window_visibility_monitor = None
+            print(f"ติดตามการเปิดหน้าต่างแบบ event ไม่สำเร็จ ใช้การตรวจตามรอบแทน: {exc}")
+
+    def _stop_window_visibility_monitor(self):
+        monitor = getattr(self, "window_visibility_monitor", None)
+        self.window_visibility_monitor = None
+        if monitor is not None:
+            try:
+                monitor.close()
+            except Exception as exc:
+                print(f"หยุดการติดตามหน้าต่างไม่สำเร็จ: {exc}")
+
+    def _consume_shown_process_ids(self):
+        monitor = getattr(self, "window_visibility_monitor", None)
+        if monitor is None:
+            return set()
+        try:
+            return monitor.consume_shown_process_ids()
+        except Exception as exc:
+            print(f"อ่าน event การเปิดหน้าต่างไม่สำเร็จ: {exc}")
+            return set()
+
+    def _find_new_process_match(self, shown_process_ids=None):
         """Inspect newly started processes and re-opened visible apps once."""
+        shown_process_ids = set(shown_process_ids or ())
         current_process_ids = set()
         current_visible_process_ids = _visible_window_process_ids()
         previous_visible_process_ids = getattr(self, "seen_visible_process_ids", set())
@@ -1385,7 +1418,8 @@ class SmartLabAgent:
                     process_id in current_visible_process_ids
                     and process_id not in previous_visible_process_ids
                 )
-                if not newly_started and not newly_visible:
+                shown_again = process_id in shown_process_ids
+                if not newly_started and not newly_visible and not shown_again:
                     continue
 
                 process_name = (proc.info.get("name") or "").strip()
@@ -1413,6 +1447,12 @@ class SmartLabAgent:
 
         self.seen_process_ids = current_process_ids
         self.seen_visible_process_ids = current_visible_process_ids
+        monitor = getattr(self, "window_visibility_monitor", None)
+        if monitor is not None:
+            try:
+                monitor.prune(current_process_ids)
+            except Exception as exc:
+                print(f"ล้างสถานะ event หน้าต่างเก่าไม่สำเร็จ: {exc}")
         return match
 
     def track_usage(self):
@@ -1420,6 +1460,7 @@ class SmartLabAgent:
             if not self.current_session_id or self.violation_dialog_active:
                 return
 
+            shown_process_ids = self._consume_shown_process_ids()
             self._checkpoint_current_activity(_utc_now())
             now = datetime.now()
             if self.violation_state.clear_expired_grace(now):
@@ -1431,13 +1472,18 @@ class SmartLabAgent:
 
             grace_active = self.violation_state.is_grace_active(now)
             if grace_active and self.violation_grace_context:
-                try:
-                    reported_app_open = self._violation_is_still_present(
-                        self.violation_grace_context
-                    )
-                except Exception as exc:
-                    print(f"ตรวจสถานะโปรแกรมระหว่างช่วงให้โอกาสไม่ได้: {exc}")
-                    reported_app_open = True
+                target_process_id = self.violation_grace_context.get("process_id")
+                reopened_during_grace = target_process_id in shown_process_ids
+                if reopened_during_grace:
+                    reported_app_open = False
+                else:
+                    try:
+                        reported_app_open = self._violation_is_still_present(
+                            self.violation_grace_context
+                        )
+                    except Exception as exc:
+                        print(f"ตรวจสถานะโปรแกรมระหว่างช่วงให้โอกาสไม่ได้: {exc}")
+                        reported_app_open = True
                 if not reported_app_open:
                     # End the chance as soon as the reported app/site is closed;
                     # a later launch is a new detection even within five minutes.
@@ -1447,7 +1493,7 @@ class SmartLabAgent:
 
             # ตรวจ Process ใหม่จากข้อมูลที่ฝังอยู่ใน EXE
             if not grace_active:
-                process_match = self._find_new_process_match()
+                process_match = self._find_new_process_match(shown_process_ids)
                 if process_match is not None:
                     (
                         process_name,
@@ -1582,6 +1628,7 @@ class SmartLabAgent:
 
     def stop_and_send_logs(self, session_id, end_reason="logout"):
         self.stop_browser_monitor()
+        self._stop_window_visibility_monitor()
         self.monitor_timer.stop()
         self.heartbeat_timer.stop()
         self.policy_timer.stop()
@@ -1705,6 +1752,7 @@ def run_agent() -> int:
     app.setQuitOnLastWindowClosed(False)
     agent_logic  = SmartLabAgent()
     app.aboutToQuit.connect(agent_logic.stop_browser_monitor)
+    app.aboutToQuit.connect(agent_logic._stop_window_visibility_monitor)
     login_screen = LoginOverlay(agent_logic)
     login_screen.show()
     return app.exec()

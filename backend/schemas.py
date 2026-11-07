@@ -86,7 +86,7 @@ class BookingCreate(BaseModel):
 # user_id มาจาก access token ไม่รับจาก client
 class TicketCreate(BaseModel):
     subject: str = Field(..., min_length=1, max_length=255)
-    message: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1, max_length=5000)
 
 # รูปแบบข้อมูลสำหรับการอัปเดตสถานะโดย Admin
 class TicketUpdateStatus(BaseModel):
