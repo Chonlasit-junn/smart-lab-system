@@ -16,7 +16,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   InputBase,
@@ -47,7 +46,9 @@ import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
+import ResponsiveDataTable from "../components/ResponsiveDataTable";
 import { blacklistFormError, serializeBlacklistForm } from "../utils/blacklistPolicy";
+import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -558,8 +559,8 @@ export default function BlacklistManager() {
                   </Typography>
                 </Box>
 
-                <TableContainer sx={{ overflowX: "auto", maxWidth: "100%" }}>
-                  <Table sx={{ minWidth: 860, tableLayout: "fixed" }}>
+                <ResponsiveDataTable tabIndex={0} aria-label={t("admin.blockedProgramHeading")} sx={{ ...verticalScrollAreaSx, overflowX: "auto", maxWidth: "100%" }}>
+                  <Table stickyHeader sx={{ minWidth: 860, tableLayout: "fixed", "& .MuiTableCell-stickyHeader": { bgcolor: "var(--surface-subtle)" } }}>
                     <colgroup>
                       <col style={{ width: 56 }} />
                       <col style={{ width: "26%" }} />
@@ -753,7 +754,7 @@ export default function BlacklistManager() {
                       )}
                     </TableBody>
                   </Table>
-                </TableContainer>
+                </ResponsiveDataTable>
               </Paper>
             </Box>
           </Fade>

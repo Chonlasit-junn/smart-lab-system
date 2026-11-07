@@ -20,7 +20,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -53,6 +52,7 @@ import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import ResponsiveDataTable from "../components/ResponsiveDataTable";
 import {
   buildTestPointEndpoint,
   canRunTestPointAction,
@@ -911,7 +911,7 @@ export default function AdminPoints() {
                 <CircularProgress aria-label={t("common.loading")} />
               </Box>
             ) : (
-              <TableContainer
+              <ResponsiveDataTable
                 className="admin-points-table-scroll"
                 sx={{
                   maxHeight: { xs: "42vh", md: "45vh" },
@@ -1268,7 +1268,7 @@ export default function AdminPoints() {
                     )}
                   </TableBody>
                 </Table>
-              </TableContainer>
+              </ResponsiveDataTable>
             )}
             {!loading && !loadFailed && (
               <Box

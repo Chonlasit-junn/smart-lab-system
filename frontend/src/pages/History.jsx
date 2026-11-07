@@ -12,7 +12,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Popover,
@@ -42,6 +41,7 @@ import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
 import SupportModal from "./SupportModal";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import ResponsiveDataTable from "../components/ResponsiveDataTable";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -440,7 +440,7 @@ export default function History() {
 
               {pastBookings.length > 0 ? (
                 <>
-                <TableContainer>
+                <ResponsiveDataTable>
                   <Table sx={{ minWidth: 600 }}>
                     <TableHead>
                       <TableRow>
@@ -507,7 +507,7 @@ export default function History() {
                       ))}
                     </TableBody>
                   </Table>
-                </TableContainer>
+                </ResponsiveDataTable>
                 {total > PAGE_SIZE && (
                   <Box sx={{ display: "flex", justifyContent: "center", pt: 3 }}>
                     <Pagination

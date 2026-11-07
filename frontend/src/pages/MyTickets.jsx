@@ -16,7 +16,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -44,6 +43,7 @@ import SupportModal from "./SupportModal";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import ResponsiveDataTable from "../components/ResponsiveDataTable";
 import { getTicketReplyStatus, getTicketReplyStatusPresentation } from "../utils/ticketStatus.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -415,7 +415,7 @@ export default function MyTickets() {
 
               {tickets.length > 0 ? (
                 <>
-                  <TableContainer sx={{ width: "100%", maxWidth: "100%", overflowX: "auto" }}>
+                  <ResponsiveDataTable sx={{ width: "100%", maxWidth: "100%", overflowX: "auto" }}>
                     <Table sx={{ width: "100%", minWidth: 940, tableLayout: "fixed" }}>
                       <colgroup>
                         <col style={{ width: 145 }} />
@@ -600,7 +600,7 @@ export default function MyTickets() {
                         })}
                       </TableBody>
                     </Table>
-                  </TableContainer>
+                  </ResponsiveDataTable>
                   {total > PAGE_SIZE && (
                     <Box sx={{ display: "flex", justifyContent: "center", pt: 3 }}>
                       <Pagination

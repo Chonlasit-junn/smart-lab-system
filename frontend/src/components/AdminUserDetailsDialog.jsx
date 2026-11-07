@@ -16,11 +16,11 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Typography,
 } from "@mui/material";
+import ResponsiveDataTable from "./ResponsiveDataTable";
 import {
   AccessTime,
   Block,
@@ -155,7 +155,7 @@ function UserBookings({ rows, t, locale }) {
   }
 
   return (
-    <TableContainer sx={{ overflowX: "auto" }}>
+    <ResponsiveDataTable sx={{ overflowX: "auto" }}>
       <Table sx={{ minWidth: 760 }}>
         <TableHead>
           <TableRow sx={{ bgcolor: "#f8fafc" }}>
@@ -185,7 +185,7 @@ function UserBookings({ rows, t, locale }) {
           })}
         </TableBody>
       </Table>
-    </TableContainer>
+    </ResponsiveDataTable>
   );
 }
 
@@ -195,7 +195,7 @@ function UserSessions({ rows, t, locale }) {
   }
 
   return (
-    <TableContainer sx={{ overflowX: "auto" }}>
+    <ResponsiveDataTable sx={{ overflowX: "auto" }}>
       <Table sx={{ minWidth: 860 }}>
         <TableHead>
           <TableRow sx={{ bgcolor: "#f8fafc" }}>
@@ -230,7 +230,7 @@ function UserSessions({ rows, t, locale }) {
           })}
         </TableBody>
       </Table>
-    </TableContainer>
+    </ResponsiveDataTable>
   );
 }
 
@@ -240,7 +240,7 @@ function UserProgramUsage({ rows, t, locale }) {
   }
 
   return (
-    <TableContainer sx={{ overflowX: "auto" }}>
+    <ResponsiveDataTable sx={{ overflowX: "auto" }}>
       <Table sx={{ minWidth: 860 }}>
         <TableHead>
           <TableRow sx={{ bgcolor: "#f8fafc" }}>
@@ -272,7 +272,7 @@ function UserProgramUsage({ rows, t, locale }) {
           ))}
         </TableBody>
       </Table>
-    </TableContainer>
+    </ResponsiveDataTable>
   );
 }
 
@@ -282,7 +282,7 @@ function UserViolations({ rows, t, locale }) {
   }
 
   return (
-    <TableContainer sx={{ overflowX: "auto" }}>
+    <ResponsiveDataTable sx={{ overflowX: "auto" }}>
       <Table sx={{ minWidth: 900 }}>
         <TableHead>
           <TableRow sx={{ bgcolor: "#f8fafc" }}>
@@ -309,7 +309,7 @@ function UserViolations({ rows, t, locale }) {
           ))}
         </TableBody>
       </Table>
-    </TableContainer>
+    </ResponsiveDataTable>
   );
 }
 
@@ -320,7 +320,7 @@ function UserPointHistory({ pointLogs, dailyScores, t, locale }) {
         {!pointLogs.length ? (
           <EmptyHistory icon={<History sx={{ fontSize: 52, mb: 1 }} />} title={t("admin.userDetails.noPointsHistory")} description={t("admin.userDetails.noPointsHistoryDescription")} />
         ) : (
-          <TableContainer sx={{ overflowX: "auto" }}>
+          <ResponsiveDataTable sx={{ overflowX: "auto" }}>
             <Table sx={{ minWidth: 640 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: "#f8fafc" }}>
@@ -348,7 +348,7 @@ function UserPointHistory({ pointLogs, dailyScores, t, locale }) {
                 ))}
               </TableBody>
             </Table>
-          </TableContainer>
+          </ResponsiveDataTable>
         )}
       </Box>
       <Paper className="surface-card" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, alignSelf: "start", overflow: "hidden" }}>

@@ -19,7 +19,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -41,6 +40,7 @@ import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import LoadError from "../components/LoadError";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import ResponsiveDataTable from "../components/ResponsiveDataTable";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -207,7 +207,7 @@ export default function AdminDevices() {
 
           {loadFailed && <LoadError onRetry={fetchData} />}
           <Paper className="surface-card data-table-shell" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, overflow: "hidden" }}>
-            <TableContainer
+            <ResponsiveDataTable
               sx={{
                 maxHeight: { xs: "60vh", md: "calc(100vh - 330px)" },
                 minHeight: 280,
@@ -283,7 +283,7 @@ export default function AdminDevices() {
                   ))}
                 </TableBody>
               </Table>
-            </TableContainer>
+            </ResponsiveDataTable>
           </Paper>
         </Box>
       </Box>

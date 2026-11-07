@@ -12,7 +12,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Dialog,
@@ -49,6 +48,7 @@ import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import SupportModal from "./SupportModal";
+import ResponsiveDataTable from "../components/ResponsiveDataTable";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -485,7 +485,7 @@ export default function Reserved() {
 
               {bookings.length > 0 ? (
                 <>
-                <TableContainer>
+                <ResponsiveDataTable>
                   <Table sx={{ minWidth: 600 }}>
                     <TableHead>
                       <TableRow>
@@ -525,7 +525,7 @@ export default function Reserved() {
                         >
                           {t("common.time")}
                         </TableCell>
-                        <TableCell
+                        <TableCell aria-label={t("common.actions")}
                           sx={{ borderBottom: "1px solid #e2e8f0" }}
                         ></TableCell>
                       </TableRow>
@@ -597,7 +597,7 @@ export default function Reserved() {
                       ))}
                     </TableBody>
                   </Table>
-                </TableContainer>
+                </ResponsiveDataTable>
                 {total > PAGE_SIZE && (
                   <Box sx={{ display: "flex", justifyContent: "center", pt: 3 }}>
                     <Pagination

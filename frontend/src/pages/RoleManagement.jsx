@@ -23,7 +23,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -50,6 +49,8 @@ import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
+import ResponsiveDataTable from "../components/ResponsiveDataTable";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -441,8 +442,8 @@ export default function RoleManagement() {
                     {t("admin.roleDisplayNameInfo")}
                   </Typography>
                 </Box>
-                <TableContainer sx={{ overflowX: "auto" }}>
-                  <Table>
+                <ResponsiveDataTable tabIndex={0} aria-label={t("admin.assignRole")} sx={{ ...verticalScrollAreaSx, overflowX: "auto" }}>
+                  <Table stickyHeader sx={{ "& .MuiTableCell-stickyHeader": { bgcolor: "var(--surface-subtle)" } }}>
                     <TableHead>
                       <TableRow sx={{ bgcolor: "#f8fafc" }}>
                         <TableCell sx={{ fontWeight: 700, color: "#64748b" }}>{t("common.role")}</TableCell>
@@ -474,7 +475,7 @@ export default function RoleManagement() {
                       )}
                     </TableBody>
                   </Table>
-                </TableContainer>
+                </ResponsiveDataTable>
               </Paper>
 
               <Paper className="surface-card data-table-shell" elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0", overflow: "hidden" }}>
@@ -497,7 +498,7 @@ export default function RoleManagement() {
                     </FormControl>
                   </Box>
                 </Box>
-                <TableContainer sx={{ overflowX: "auto" }}>
+                <ResponsiveDataTable sx={{ overflowX: "auto" }}>
                   <Table>
                     <TableHead>
                       <TableRow sx={{ bgcolor: "#f8fafc" }}>
@@ -553,7 +554,7 @@ export default function RoleManagement() {
                       )}
                     </TableBody>
                   </Table>
-                </TableContainer>
+                </ResponsiveDataTable>
               </Paper>
             </Box>
           )}
