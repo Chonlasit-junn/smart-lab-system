@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LoadError from "../components/LoadError";
 import {
   Box,
@@ -37,7 +37,8 @@ import AdminNavigation from "../components/AdminNavigation";
 import { useLanguage } from "../context/language-context.js";
 import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
-import NotificationBell from "../components/NotificationBell";
+import { filterAdminReservations } from "../utils/adminSearch";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -64,6 +65,10 @@ export default function Admin() {
   const openUserMenu = Boolean(anchorEl);
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleCloseUserMenu = () => setAnchorEl(null);
+  const handleManageAccount = () => {
+    handleCloseUserMenu();
+    navigate("/profile");
+  };
   const handleLogout = () => {
     handleCloseUserMenu();
     logout();
@@ -80,6 +85,11 @@ export default function Admin() {
     pendingApprovals: 0,
   });
   const [recentReservations, setRecentReservations] = useState([]);
+  const [reservationSearch, setReservationSearch] = useState("");
+  const visibleRecentReservations = useMemo(
+    () => filterAdminReservations(recentReservations, reservationSearch, t("common.locale")),
+    [recentReservations, reservationSearch, t],
+  );
 
   // set tab title once on mount
   useEffect(() => {
@@ -247,12 +257,17 @@ export default function Admin() {
               }}
             >
               <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
-              <InputBase placeholder={t("common.search")} fullWidth />
+              <InputBase
+                placeholder={t("admin.searchReservations")}
+                aria-label={t("admin.searchReservations")}
+                value={reservationSearch}
+                onChange={(event) => setReservationSearch(event.target.value)}
+                fullWidth
+              />
             </Paper>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
-              loadNotifications={false}
             />
             <Divider
               orientation="vertical"
@@ -358,7 +373,7 @@ export default function Admin() {
 
                   <Button
                     variant="outlined"
-                    onClick={handleCloseUserMenu}
+                    onClick={handleManageAccount}
                     sx={{
                       mt: 2,
                       borderRadius: 20,
@@ -525,8 +540,8 @@ export default function Admin() {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {recentReservations.length > 0 ? (
-                            recentReservations.map((row) => {
+                          {visibleRecentReservations.length > 0 ? (
+                            visibleRecentReservations.map((row) => {
                               // user/lab are eager-loaded by the backend — null-check just in case
                               const firstName =
                                 row.user?.first_name || "Unknown";
@@ -600,7 +615,7 @@ export default function Admin() {
                                 sx={{ py: 4, color: "#94a3b8" }}
                               >
                                 <span className="font-baseline-text">
-                                  {t("admin.noRecentReservations")}
+                                  {recentReservations.length > 0 ? t("admin.noMatchingReservations") : t("admin.noRecentReservations")}
                                 </span>
                               </TableCell>
                             </TableRow>

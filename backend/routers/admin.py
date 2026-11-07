@@ -1,3 +1,5 @@
+from datetime import timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -19,6 +21,7 @@ class VerifyAction(BaseModel):
 SYSTEM_ROLE_NAMES = {"admin", "student", "guest"}
 ROLE_PRIORITY = {"admin": 0, "student": 1, "guest": 2}
 DASHBOARD_RECENT_BOOKINGS_LIMIT = 10
+ADMIN_NOTIFICATION_LIMIT = 20
 
 
 class RoleDisplayUpdate(BaseModel):
@@ -84,6 +87,103 @@ def get_dashboard_summary(
             ],
         },
     }
+
+
+def _admin_notification_timestamp(value) -> float:
+    if value is None:
+        return 0
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.timestamp()
+
+
+@router.get("/notifications")
+def get_admin_notifications(
+    _admin: models.User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Return a bounded, read-only feed of Admin work that still needs attention."""
+    pending_guests = (
+        db.query(models.User, models.UserPassport)
+        .join(models.UserPassport, models.User.id == models.UserPassport.user_id)
+        .filter(models.UserPassport.is_active.is_(False))
+        .order_by(models.UserPassport.created_at.desc(), models.UserPassport.id.desc())
+        .limit(ADMIN_NOTIFICATION_LIMIT)
+        .all()
+    )
+    open_tickets = (
+        db.query(models.Ticket, models.User.first_name, models.User.last_name)
+        .outerjoin(models.User, models.User.id == models.Ticket.user_id)
+        .filter(models.Ticket.status.in_(("open", "in_progress")))
+        .order_by(models.Ticket.created_at.desc(), models.Ticket.id.desc())
+        .limit(ADMIN_NOTIFICATION_LIMIT)
+        .all()
+    )
+    latest_pending_request_id = (
+        db.query(models.PointRequest.id)
+        .filter(
+            models.PointRequest.user_id == models.User.id,
+            models.PointRequest.status == "pending",
+        )
+        .order_by(models.PointRequest.created_at.desc(), models.PointRequest.id.desc())
+        .limit(1)
+        .correlate(models.User)
+        .scalar_subquery()
+    )
+    pending_point_requests = (
+        db.query(
+            models.PointRequest,
+            models.User.first_name,
+            models.User.last_name,
+        )
+        .join(models.User, models.User.id == models.PointRequest.user_id)
+        .filter(models.PointRequest.id == latest_pending_request_id)
+        .order_by(models.PointRequest.created_at.desc(), models.PointRequest.id.desc())
+        .limit(ADMIN_NOTIFICATION_LIMIT)
+        .all()
+    )
+
+    notifications = []
+    for user, passport in pending_guests:
+        notifications.append({
+            "id": f"guest-approval:{user.id}",
+            "kind": "guest_approval",
+            "reference_id": user.id,
+            "user_name": f"{user.first_name} {user.last_name}".strip(),
+            "summary": user.email,
+            "created_at": passport.created_at or user.created_at,
+            "path": "/verify-users",
+        })
+
+    for ticket, first_name, last_name in open_tickets:
+        notifications.append({
+            "id": f"ticket:{ticket.id}",
+            "kind": "ticket",
+            "reference_id": ticket.id,
+            "user_name": " ".join(part for part in (first_name, last_name) if part),
+            "summary": ticket.subject,
+            "status": ticket.status,
+            "created_at": ticket.created_at,
+            "path": "/ticket",
+        })
+
+    for request, first_name, last_name in pending_point_requests:
+        notifications.append({
+            "id": f"point-request:{request.id}",
+            "kind": "point_request",
+            "reference_id": request.id,
+            "user_name": " ".join(part for part in (first_name, last_name) if part),
+            "summary": request.user_message,
+            "requested_points": request.requested_points,
+            "created_at": request.created_at,
+            "path": "/admin/points",
+        })
+
+    notifications.sort(
+        key=lambda item: _admin_notification_timestamp(item["created_at"]),
+        reverse=True,
+    )
+    return {"data": notifications[: ADMIN_NOTIFICATION_LIMIT * 3]}
 
 
 @router.post("/maintenance/cleanup-expired")

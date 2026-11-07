@@ -32,7 +32,7 @@ import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
-import NotificationBell from "../components/NotificationBell";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import {
   DEFAULT_POINT_POLICY,
@@ -385,10 +385,9 @@ export default function AdminPointPolicy() {
             {t("admin.policyTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
-              loadNotifications={false}
             />
             <Divider
               orientation="vertical"

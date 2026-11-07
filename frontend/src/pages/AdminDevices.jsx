@@ -38,7 +38,7 @@ import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
-import NotificationBell from "../components/NotificationBell";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import LoadError from "../components/LoadError";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 
@@ -182,10 +182,9 @@ export default function AdminDevices() {
         <Box className="top-header admin-top-header" sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 6, py: 1, bgcolor: "white", borderBottom: "1px solid #e2e8f0" }}>
           <Typography variant="h5" fontWeight="700" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>{t("admin.devicesTitle")}</Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
-              loadNotifications={false}
             />
             <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
             <Box sx={{ textAlign: "right" }}>

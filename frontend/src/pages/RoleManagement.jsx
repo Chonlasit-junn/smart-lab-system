@@ -48,7 +48,7 @@ import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
-import NotificationBell from "../components/NotificationBell";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -319,10 +319,9 @@ export default function RoleManagement() {
             {t("admin.rolesTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
-              loadNotifications={false}
             />
             <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>

@@ -51,7 +51,7 @@ import AdminUserDetailsDialog from "../components/AdminUserDetailsDialog";
 import AdminNavigation from "../components/AdminNavigation";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
-import NotificationBell from "../components/NotificationBell";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import {
   buildTestPointEndpoint,
@@ -538,10 +538,9 @@ export default function AdminPoints() {
             {t("admin.pointsTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="var(--text-muted)"
-              loadNotifications={false}
             />
             <Divider
               orientation="vertical"

@@ -1,7 +1,7 @@
 // ============================================================================
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LoadError from "../components/LoadError";
 import LoadingState from "../components/LoadingState";
 import {
@@ -54,7 +54,7 @@ import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
-import NotificationBell from "../components/NotificationBell";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 
 // นำเข้า MUI DatePicker
@@ -62,6 +62,7 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
+import { filterLabsBySearch } from "../utils/adminSearch";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const TEXT_LIMITS = {
@@ -132,8 +133,10 @@ export default function ManageLabs() {
   // ============================================================================
   const [viewMode, setViewMode] = useState("list");
   const [activeLab, setActiveLab] = useState(null);
+  const [labSearch, setLabSearch] = useState("");
 
   const [labs, setLabs] = useState([]);
+  const visibleLabs = useMemo(() => filterLabsBySearch(labs, labSearch), [labSearch, labs]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
@@ -521,14 +524,17 @@ export default function ManageLabs() {
               <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
               <InputBase
                 placeholder={t("admin.searchLabs")}
+                aria-label={t("admin.searchLabs")}
+                value={labSearch}
+                onChange={(event) => setLabSearch(event.target.value)}
+                disabled={viewMode !== "list"}
                 fullWidth
                 sx={{ fontSize: "15px", fontWeight: "400" }}
               />
             </Paper>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
-              loadNotifications={false}
             />
             <Divider
               orientation="vertical"
@@ -735,8 +741,10 @@ export default function ManageLabs() {
 
                 {loadFailed ? <LoadError onRetry={fetchLabs} /> : loading ? <LoadingState /> : labs.length === 0 ? (
                   <Paper className="surface-card empty-state" sx={{ p: 6, textAlign: "center", minHeight: 280 }}><Typography color="text.secondary">{t("common.noData")}</Typography></Paper>
+                ) : visibleLabs.length === 0 ? (
+                  <Paper className="surface-card empty-state" sx={{ p: 6, textAlign: "center", minHeight: 280 }}><Typography color="text.secondary">{t("admin.noMatchingLabs")}</Typography></Paper>
                 ) : <Grid container spacing={4}>
-                  {labs.map((lab) => (
+                  {visibleLabs.map((lab) => (
                     <Grid
                       item
                       xs={12}

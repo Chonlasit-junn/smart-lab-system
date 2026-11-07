@@ -19,7 +19,7 @@ import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import AdminNavigation from "./AdminNavigation";
 import AdminModeSwitch from "./AdminModeSwitch";
-import NotificationBell from "./NotificationBell";
+import AdminNotificationBell from "./AdminNotificationBell";
 
 export default function AdminShell({ title, children }) {
   const navigate = useNavigate();
@@ -84,10 +84,9 @@ export default function AdminShell({ title, children }) {
           </Box>
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
-              loadNotifications={false}
             />
             <Divider orientation="vertical" flexItem className="admin-header-divider" />
             <Box className="admin-user-summary">

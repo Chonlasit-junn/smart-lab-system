@@ -92,6 +92,48 @@ class AdminDashboardTests(unittest.TestCase):
         self.assertEqual(data["recent_reservations"][0]["lab"]["code"], "LAB01")
         mark_due_no_shows.assert_not_called()
 
+    def test_admin_notifications_include_only_actionable_bounded_work_without_writes(self):
+        created_at = datetime(2026, 9, 25, 12, 0)
+        self.session.add_all([
+            models.Ticket(
+                user_id=self.student.id,
+                subject="Open ticket",
+                message="Please check this issue.",
+                status="open",
+                created_at=created_at,
+            ),
+            models.Ticket(
+                user_id=self.student.id,
+                subject="Closed ticket",
+                message="Already resolved.",
+                status="closed",
+                created_at=created_at + timedelta(minutes=1),
+            ),
+            models.PointRequest(
+                user_id=self.student.id,
+                requested_points=10,
+                status="pending",
+                user_message="Please review my request.",
+                created_at=created_at + timedelta(minutes=2),
+            ),
+        ])
+        self.session.commit()
+
+        result = admin_router.get_admin_notifications(self.admin, self.session)
+        notifications = result["data"]
+        by_kind = {item["kind"]: item for item in notifications}
+
+        self.assertEqual(set(by_kind), {"guest_approval", "ticket", "point_request"})
+        self.assertEqual(by_kind["guest_approval"]["reference_id"], self.pending_guest.id)
+        self.assertEqual(by_kind["guest_approval"]["path"], "/verify-users")
+        self.assertEqual(by_kind["ticket"]["summary"], "Open ticket")
+        self.assertEqual(by_kind["ticket"]["path"], "/ticket")
+        self.assertEqual(by_kind["point_request"]["requested_points"], 10)
+        self.assertEqual(by_kind["point_request"]["path"], "/admin/points")
+        self.assertNotIn("Closed ticket", [item["summary"] for item in notifications])
+        self.assertEqual(self.session.query(models.PointRequest).count(), 1)
+        self.assertEqual(self.session.query(models.Ticket).filter_by(status="closed").count(), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

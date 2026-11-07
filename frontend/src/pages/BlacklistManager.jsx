@@ -44,7 +44,7 @@ import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
-import NotificationBell from "../components/NotificationBell";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import { blacklistFormError, serializeBlacklistForm } from "../utils/blacklistPolicy";
 
@@ -63,6 +63,10 @@ export default function BlacklistManager() {
   const openUserMenu = Boolean(anchorEl);
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleCloseUserMenu = () => setAnchorEl(null);
+  const handleManageAccount = () => {
+    handleCloseUserMenu();
+    navigate("/profile");
+  };
   const handleLogout = () => {
     handleCloseUserMenu();
     logout();
@@ -316,10 +320,9 @@ export default function BlacklistManager() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </Paper>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
-              loadNotifications={false}
             />
             <Divider
               className="admin-header-divider"
@@ -426,7 +429,7 @@ export default function BlacklistManager() {
 
                   <Button
                     variant="outlined"
-                    onClick={handleCloseUserMenu}
+                    onClick={handleManageAccount}
                     sx={{
                       mt: 2,
                       borderRadius: 20,

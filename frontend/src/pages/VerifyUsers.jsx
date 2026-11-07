@@ -35,7 +35,7 @@ import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
-import NotificationBell from "../components/NotificationBell";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import { isPendingUser } from "./verifyUsersUtils";
 
@@ -300,10 +300,9 @@ export default function VerifyUsers() {
                 inputProps={{ "aria-label": t("admin.searchPendingUsers") }}
               />
             </Paper>
-            <NotificationBell
+            <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
-              loadNotifications={false}
             />
             <Divider
               orientation="vertical"
