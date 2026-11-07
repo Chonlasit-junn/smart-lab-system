@@ -239,11 +239,12 @@ export default function Admin() {
           <Typography
             variant="h5"
             fontWeight="700"
+            className="admin-page-heading"
             sx={{ color: "#1e293b", letterSpacing: "-1px" }}
           >
             {t("admin.dashboard")}
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Box className="admin-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Paper
               className="admin-search-control"
               elevation={0}
@@ -275,7 +276,7 @@ export default function Admin() {
               sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box sx={{ textAlign: "right" }}>
+              <Box className="admin-user-summary" sx={{ textAlign: "right" }}>
                 <Typography
                   variant="subtitle2"
                   fontWeight="700"
@@ -442,14 +443,14 @@ export default function Admin() {
           ) : empty ? <Typography sx={{ py: 8, textAlign: "center" }} color="text.secondary">{t("common.noData")}</Typography> : (
             <>
               {/* Summary cards link to the matching Admin pages. */}
-              <Grid container spacing={4} sx={{ mb: 6 }}>
+              <Grid container spacing={4} className="admin-dashboard-stats" sx={{ mb: 6 }}>
                 {STATS_DATA.map((s, idx) => (
                   <Grid item xs={12} sm={6} md={3} key={idx}>
                     <Paper
                       component={RouterLink}
                       to={s.path}
                       aria-label={`${s.label}: ${s.v}`}
-                      className="surface-card"
+                      className="surface-card admin-dashboard-stat-card"
                       elevation={0}
                       sx={{
                         p: 4,
@@ -470,6 +471,7 @@ export default function Admin() {
                       }}
                     >
                       <Avatar
+                        className="admin-dashboard-stat-icon"
                         sx={{
                           bgcolor: s.c,
                           width: 64,

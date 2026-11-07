@@ -124,7 +124,7 @@ export default function TicketManager() {
   return (
     <AdminShell title={t('admin.ticketTitle')}>
       {/* ตารางแสดงข้อมูล */}
-      <Paper className="admin-table-paper surface-card data-table-shell" elevation={0} sx={{ p: 4 }}>
+      <Paper className="admin-table-paper surface-card data-table-shell admin-ticket-list" elevation={0} sx={{ p: 4 }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress aria-label={t("common.loading")} />
@@ -132,7 +132,7 @@ export default function TicketManager() {
         ) : (
           <>
           {loadError && <LoadError onRetry={fetchTickets} />}
-          <TableContainer sx={{ width: '100%', maxWidth: '100%', overflowX: 'auto' }}>
+          <TableContainer className="admin-ticket-table-desktop" sx={{ width: '100%', maxWidth: '100%', overflowX: 'auto' }}>
             <Table sx={{ width: '100%', minWidth: 900, tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: 72 }} />
@@ -214,8 +214,47 @@ export default function TicketManager() {
               </TableBody>
             </Table>
           </TableContainer>
+          <Box className="admin-ticket-mobile-list">
+            {tickets.length > 0 ? tickets.map((ticket) => {
+              const status = getStatusPresentation(ticket);
+              return (
+                <Paper key={ticket.id} className="admin-ticket-mobile-card" variant="outlined">
+                  <Box className="admin-ticket-mobile-card-top">
+                    <Typography variant="caption" color="text.secondary">
+                      {t('admin.ticketId')} #{ticket.id}
+                    </Typography>
+                    <Chip label={status.label} color={status.color} size="small" />
+                  </Box>
+                  <Typography className="admin-ticket-mobile-reporter" variant="subtitle2">
+                    {ticket.user_name || t('common.unknownName')}
+                  </Typography>
+                  <Typography className="admin-ticket-mobile-subject" variant="body2">
+                    {ticket.subject || '—'}
+                  </Typography>
+                  <Box className="admin-ticket-mobile-card-bottom">
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDateTime(ticket.created_at, t('common.locale'), { fallback: '-', includeSeconds: true })}
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<Visibility />}
+                      onClick={() => openTicketDetails(ticket)}
+                      sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+                    >
+                      {t('admin.viewDetails')}
+                    </Button>
+                  </Box>
+                </Paper>
+              );
+            }) : !loadError ? (
+              <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+                {t('admin.noTickets')}
+              </Typography>
+            ) : null}
+          </Box>
           {total > PAGE_SIZE && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
+            <Box className="admin-ticket-pagination" sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
               <Pagination
                 count={Math.max(1, Math.ceil(total / PAGE_SIZE))}
                 page={page}
@@ -229,6 +268,7 @@ export default function TicketManager() {
       </Paper>
 
       <Dialog
+        className="ticket-details-dialog"
         open={Boolean(selectedTicket)}
         onClose={() => setSelectedTicket(null)}
         fullWidth
@@ -237,7 +277,7 @@ export default function TicketManager() {
         <DialogTitle sx={{ fontWeight: '600', overflowWrap: 'break-word' }}>
           {t('admin.viewDetails')}
         </DialogTitle>
-        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2, minHeight: 0, overflowY: 'auto' }}>
           {selectedTicket && (
             <>
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
@@ -282,9 +322,7 @@ export default function TicketManager() {
                   sx={{
                     mt: 0.75,
                     p: 2,
-                    maxHeight: 'min(42vh, 360px)',
-                    overflowY: 'auto',
-                    overflowWrap: 'break-word',
+                    overflowWrap: 'anywhere',
                     whiteSpace: 'pre-wrap',
                     bgcolor: 'var(--surface-subtle)',
                   }}
@@ -316,7 +354,7 @@ export default function TicketManager() {
                           <Typography variant="caption" color="text.secondary">
                             {formatDateTime(reply.created_at, t('common.locale'), { fallback: '-', includeSeconds: true })}
                           </Typography>
-                          <Typography sx={{ mt: 0.75, whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>
+                          <Typography sx={{ mt: 0.75, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                             {reply.message}
                           </Typography>
                         </Paper>

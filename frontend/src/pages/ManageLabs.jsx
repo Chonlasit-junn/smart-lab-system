@@ -56,6 +56,7 @@ import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminModeSwitch from "../components/AdminModeSwitch";
+import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
 
 // นำเข้า MUI DatePicker
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -504,11 +505,12 @@ export default function ManageLabs() {
           <Typography
             variant="h5"
             fontWeight="700"
+            className="admin-page-heading"
             sx={{ color: "#1e293b", letterSpacing: "-1px" }}
           >
             {viewMode === "list" ? t("admin.manageLabsTitle") : t("common.details")}
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Box className="admin-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Paper
               className="admin-search-control"
               elevation={0}
@@ -542,7 +544,7 @@ export default function ManageLabs() {
               sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box sx={{ textAlign: "right" }}>
+              <Box className="admin-user-summary" sx={{ textAlign: "right" }}>
                 <Typography
                   variant="subtitle2"
                   fontWeight="700"
@@ -705,7 +707,7 @@ export default function ManageLabs() {
             <Fade in={viewMode === "list"} timeout={400}>
               <Box>
                 <Box
-                  className="page-header"
+                  className="page-header manage-labs-list-header"
                   sx={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -926,6 +928,7 @@ export default function ManageLabs() {
                   >
                     <Paper
                       elevation={0}
+                      className="manage-lab-summary-card"
                       sx={{
                         borderRadius: 6,
                         overflow: "hidden",
@@ -934,7 +937,7 @@ export default function ManageLabs() {
                         boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
                       }}
                     >
-                      <Box
+                      <Box className="manage-lab-summary-image"
                         sx={{
                           height: "220px",
                           bgcolor: "#f8fafc",
@@ -1032,6 +1035,7 @@ export default function ManageLabs() {
                       {/* Section 1: Edit Lab Data */}
                       <Paper
                         elevation={0}
+                        className="manage-lab-edit-card"
                         sx={{
                           p: 5,
                           borderRadius: 6,
@@ -1175,6 +1179,7 @@ export default function ManageLabs() {
                         </Grid>
 
                         <Box
+                          className="manage-lab-edit-actions"
                           sx={{
                             mt: 4,
                             display: "flex",
@@ -1221,6 +1226,7 @@ export default function ManageLabs() {
                       {/* Section 2: Enable/Disable Access */}
                       <Paper
                         elevation={0}
+                        className="manage-lab-status-card"
                         sx={{
                           p: 4,
                           borderRadius: 6,
@@ -1286,6 +1292,7 @@ export default function ManageLabs() {
                       {/* Section 3: Class Schedules Table */}
                       <Paper
                         elevation={0}
+                        className="manage-lab-schedule-card"
                         sx={{
                           p: 5,
                           borderRadius: 6,
@@ -1295,6 +1302,7 @@ export default function ManageLabs() {
                         }}
                       >
                         <Box
+                          className="manage-lab-schedule-header"
                           sx={{
                             display: "flex",
                             justifyContent: "space-between",
@@ -1338,9 +1346,11 @@ export default function ManageLabs() {
                         </Box>
 
                         <TableContainer
-                          sx={{ borderRadius: 4, border: "1px solid #e2e8f0" }}
+                          tabIndex={0}
+                          aria-label={t("admin.classSchedules")}
+                          sx={{ ...verticalScrollAreaSx, overflowX: "auto", borderRadius: 4, border: "1px solid #e2e8f0" }}
                         >
-                          <Table>
+                          <Table className="manage-lab-schedule-table" stickyHeader sx={{ "& .MuiTableCell-stickyHeader": { bgcolor: "var(--surface-subtle)" } }}>
                             <TableHead>
                               <TableRow sx={{ bgcolor: "#f8fafc" }}>
                                 {[
@@ -1397,6 +1407,7 @@ export default function ManageLabs() {
                                     }}
                                   >
                                     <TableCell
+                                      data-label={t("admin.dayOfWeek")}
                                       sx={{
                                         fontWeight: "600",
                                         color: "#334155",
@@ -1405,6 +1416,7 @@ export default function ManageLabs() {
                                       {getDayLabel(sch.day_of_week, t)}
                                     </TableCell>
                                     <TableCell
+                                      data-label={t("admin.timeSlot")}
                                       sx={{
                                         color: "#64748b",
                                         fontWeight: "500",
@@ -1413,6 +1425,7 @@ export default function ManageLabs() {
                                       {getSlotDisplayLabel(sch.start_time)}
                                     </TableCell>
                                     <TableCell
+                                      data-label={t("admin.course")}
                                       sx={{
                                         fontWeight: "600",
                                         color: "#334155",
@@ -1421,6 +1434,7 @@ export default function ManageLabs() {
                                       {sch.course_code}
                                     </TableCell>
                                     <TableCell
+                                      data-label={t("admin.instructor")}
                                       sx={{
                                         color: "#64748b",
                                         fontWeight: "400",
@@ -1429,6 +1443,7 @@ export default function ManageLabs() {
                                       {sch.instructor_name}
                                     </TableCell>
                                     <TableCell
+                                      data-label={t("admin.term")}
                                       sx={{
                                         color: "#64748b",
                                         fontWeight: "400",
@@ -1436,7 +1451,7 @@ export default function ManageLabs() {
                                     >
                                       {sch.semester}/{sch.academic_year}
                                     </TableCell>
-                                    <TableCell align="right">
+                                    <TableCell data-label={t("admin.action")} align="right">
                                       <IconButton
                                         size="small"
                                         sx={{

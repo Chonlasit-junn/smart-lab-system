@@ -687,6 +687,10 @@ option,
   color: var(--text-dark);
 }
 
+.admin-ticket-mobile-list {
+  display: none;
+}
+
 .admin-points-table-scroll {
   scrollbar-color: var(--text-muted) var(--surface-subtle);
   scrollbar-width: thin;
@@ -1735,7 +1739,283 @@ textarea:focus-visible,
     min-width: 0;
     font-size: 1.15rem !important;
     line-height: 1.25 !important;
+    overflow: hidden;
+    overflow-wrap: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-header-actions {
+    display: contents !important;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header .admin-search-control {
+    display: flex !important;
+    order: 3;
+    flex: 1 0 100%;
+    width: 100% !important;
+    height: 40px !important;
+    margin: 0;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header > .admin-page-heading {
+    flex: 1 1 auto;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-header-actions {
+    gap: 8px !important;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header .admin-notification-button {
+    order: 2;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-header-actions > .MuiBox-root {
+    order: 2;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header .admin-user-summary,
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header .MuiDivider-root {
+    display: none !important;
+  }
+
+  .admin-dashboard-stats.MuiGrid-container {
+    --Grid-rowSpacing: 16px !important;
+    --Grid-columnSpacing: 16px !important;
+    margin-bottom: 24px !important;
+  }
+
+  .admin-dashboard-stat-card {
+    gap: 16px !important;
+    padding: 16px !important;
+    border-radius: 20px !important;
+  }
+
+  .admin-dashboard-stat-icon {
+    width: 56px !important;
+    height: 56px !important;
+    flex: 0 0 56px;
+  }
+
+  .manage-labs-list-header {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 12px !important;
+  }
+
+  .manage-labs-list-header > .MuiTypography-root {
+    font-size: 1.1rem;
+  }
+
+  .manage-labs-list-header > .MuiButton-root {
+    min-height: 48px;
+    width: 100%;
+  }
+
+  .manage-lab-summary-card,
+  .manage-lab-edit-card,
+  .manage-lab-status-card,
+  .manage-lab-schedule-card {
+    border-radius: 20px !important;
+  }
+
+  .manage-lab-summary-image {
+    height: 150px !important;
+  }
+
+  .manage-lab-summary-card > .MuiBox-root:not(.manage-lab-summary-image) {
+    padding: 20px !important;
+  }
+
+  .manage-lab-summary-card h3 {
+    font-size: 2rem;
     overflow-wrap: anywhere;
+  }
+
+  .manage-lab-edit-card,
+  .manage-lab-schedule-card {
+    padding: 20px !important;
+  }
+
+  .manage-lab-edit-actions {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .manage-lab-edit-actions > .MuiButton-root {
+    min-height: 48px;
+    width: 100%;
+  }
+
+  .manage-lab-status-card {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px !important;
+  }
+
+  .manage-lab-status-card > .MuiButton-root {
+    min-height: 48px;
+    width: 100%;
+  }
+
+  .manage-lab-schedule-header {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px !important;
+  }
+
+  .manage-lab-schedule-header > .MuiButton-root {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .manage-lab-schedule-card .MuiTableContainer-root {
+    overflow-x: hidden !important;
+  }
+
+  .manage-lab-schedule-table {
+    display: block !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .manage-lab-schedule-table .MuiTableHead-root {
+    display: none !important;
+  }
+
+  .manage-lab-schedule-table .MuiTableBody-root {
+    display: flex !important;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .manage-lab-schedule-table .MuiTableRow-root {
+    display: flex !important;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    background: var(--surface-subtle);
+  }
+
+  .manage-lab-schedule-table .MuiTableCell-root {
+    display: flex !important;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    border-bottom: 0 !important;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .manage-lab-schedule-table .MuiTableCell-root::before {
+    content: attr(data-label);
+    flex: 0 0 38%;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .manage-lab-schedule-table .MuiTableCell-root[colspan] {
+    display: block !important;
+    text-align: center;
+  }
+
+  .manage-lab-schedule-table .MuiTableCell-root[colspan]::before {
+    content: none;
+  }
+
+  .admin-ticket-list {
+    padding: 12px !important;
+  }
+
+  .admin-ticket-table-desktop {
+    display: none;
+  }
+
+  .admin-ticket-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .admin-ticket-mobile-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: 14px;
+    border-radius: 16px !important;
+    background: var(--surface-subtle) !important;
+  }
+
+  .admin-ticket-mobile-card-top,
+  .admin-ticket-mobile-card-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .admin-ticket-mobile-card-top .MuiTypography-root,
+  .admin-ticket-mobile-card-bottom .MuiTypography-root {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-ticket-mobile-reporter {
+    overflow-wrap: anywhere;
+    font-weight: 700 !important;
+  }
+
+  .admin-ticket-mobile-subject {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .admin-ticket-mobile-card-bottom .MuiButton-root {
+    flex: 0 0 auto;
+  }
+
+  .admin-ticket-pagination .MuiPagination-ul {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .ticket-details-dialog .MuiDialog-paper {
+    display: flex;
+    flex-direction: column;
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    margin: 12px !important;
+  }
+
+  .ticket-details-dialog .MuiDialogTitle-root,
+  .ticket-details-dialog .MuiDialogActions-root {
+    flex: 0 0 auto;
+  }
+
+  .ticket-details-dialog .MuiDialogContent-root {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .ticket-details-dialog .MuiDialogActions-root {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
 
   .global-display-preferences {
