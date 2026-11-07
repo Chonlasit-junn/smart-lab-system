@@ -691,6 +691,15 @@ option,
   display: none;
 }
 
+.admin-dashboard-reservations-mobile {
+  display: none;
+}
+
+.admin-mobile-search-toggle,
+.admin-mobile-search-close {
+  display: none;
+}
+
 .admin-points-table-scroll {
   scrollbar-color: var(--text-muted) var(--surface-subtle);
   scrollbar-width: thin;
@@ -1785,6 +1794,111 @@ textarea:focus-visible,
   .app-layout.admin-layout:not(.admin-shell) .admin-top-header .admin-user-summary,
   .app-layout.admin-layout:not(.admin-shell) .admin-top-header .MuiDivider-root {
     display: none !important;
+  }
+
+  .admin-dashboard-header {
+    position: relative;
+    flex-wrap: nowrap !important;
+    row-gap: 0 !important;
+  }
+
+  .admin-dashboard-header .admin-mobile-search-toggle {
+    display: inline-flex !important;
+    order: 2;
+    padding: 6px;
+  }
+
+  .admin-dashboard-header:not(.mobile-search-open) .admin-search-control {
+    display: none !important;
+  }
+
+  .admin-dashboard-header.mobile-search-open .admin-search-control {
+    display: flex !important;
+    position: absolute;
+    inset: 8px 96px 8px 56px;
+    z-index: 1002;
+    order: initial;
+    flex: 0 0 auto;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 44px !important;
+    padding: 4px 8px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25) !important;
+  }
+
+  .admin-dashboard-header.mobile-search-open .admin-mobile-search-close {
+    display: inline-flex !important;
+    flex: 0 0 auto;
+  }
+
+  .admin-dashboard-reservations-paper {
+    padding: 16px !important;
+  }
+
+  .admin-dashboard-reservations-title {
+    margin-bottom: 16px !important;
+    font-size: 1.1rem !important;
+  }
+
+  .admin-dashboard-reservations-table {
+    display: none !important;
+  }
+
+  .admin-dashboard-reservations-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .admin-reservation-mobile-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    padding: 12px;
+    border-radius: 14px !important;
+    background: var(--surface-subtle) !important;
+  }
+
+  .admin-reservation-mobile-card-top,
+  .admin-reservation-mobile-user {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .admin-reservation-mobile-card-top {
+    justify-content: space-between;
+  }
+
+  .admin-reservation-mobile-user .MuiTypography-root {
+    overflow-wrap: anywhere;
+  }
+
+  .admin-reservation-mobile-lab {
+    flex: 0 0 auto;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--brand-soft);
+    color: var(--brand-color);
+    font-weight: 700;
+  }
+
+  .admin-reservation-mobile-meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-light);
+  }
+
+  .admin-reservation-mobile-meta > div {
+    min-width: 0;
+  }
+
+  .admin-reservation-mobile-meta .MuiTypography-root {
+    overflow-wrap: anywhere;
   }
 
   .admin-dashboard-stats.MuiGrid-container {

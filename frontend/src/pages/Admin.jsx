@@ -86,6 +86,8 @@ export default function Admin() {
   });
   const [recentReservations, setRecentReservations] = useState([]);
   const [reservationSearch, setReservationSearch] = useState("");
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const reservationSearchInputRef = useRef(null);
   const visibleRecentReservations = useMemo(
     () => filterAdminReservations(recentReservations, reservationSearch, t("common.locale")),
     [recentReservations, reservationSearch, t],
@@ -95,6 +97,10 @@ export default function Admin() {
   useEffect(() => {
     document.title = `${t("admin.dashboard")} | Smart Lab Admin`;
   }, [t]);
+
+  useEffect(() => {
+    if (isMobileSearchOpen) reservationSearchInputRef.current?.focus();
+  }, [isMobileSearchOpen]);
 
   const fetchDashboardData = useCallback(async () => {
     dashboardControllerRef.current?.abort();
@@ -224,7 +230,7 @@ export default function Admin() {
       >
         {/* top header */}
         <Box
-          className="top-header admin-top-header"
+          className={`top-header admin-top-header admin-dashboard-header${isMobileSearchOpen ? " mobile-search-open" : ""}`}
           sx={{
             display: "flex",
             alignItems: "center",
@@ -245,7 +251,18 @@ export default function Admin() {
             {t("admin.dashboard")}
           </Typography>
           <Box className="admin-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <IconButton
+              className="admin-mobile-search-toggle"
+              aria-label={t("admin.searchReservations")}
+              aria-expanded={isMobileSearchOpen}
+              aria-controls="admin-reservation-search"
+              onClick={() => setIsMobileSearchOpen((open) => !open)}
+              size="small"
+            >
+              {isMobileSearchOpen ? <Close /> : <Search />}
+            </IconButton>
             <Paper
+              id="admin-reservation-search"
               className="admin-search-control"
               elevation={0}
               sx={{
@@ -259,12 +276,24 @@ export default function Admin() {
             >
               <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
               <InputBase
+                inputRef={reservationSearchInputRef}
                 placeholder={t("admin.searchReservations")}
                 aria-label={t("admin.searchReservations")}
                 value={reservationSearch}
                 onChange={(event) => setReservationSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setIsMobileSearchOpen(false);
+                }}
                 fullWidth
               />
+              <IconButton
+                className="admin-mobile-search-close"
+                aria-label={t("common.close")}
+                onClick={() => setIsMobileSearchOpen(false)}
+                size="small"
+              >
+                <Close fontSize="small" />
+              </IconButton>
             </Paper>
             <AdminNotificationBell
               className="admin-notification-button"
@@ -505,7 +534,7 @@ export default function Admin() {
               <Grid container spacing={5}>
                 <Grid item xs={12}>
                   <Paper
-                    className="surface-card data-table-shell"
+                    className="surface-card data-table-shell admin-dashboard-reservations-paper"
                     elevation={0}
                     sx={{
                       p: 5,
@@ -517,12 +546,13 @@ export default function Admin() {
                     <Typography
                       variant="h5"
                       fontWeight="700"
+                      className="admin-dashboard-reservations-title"
                       color="#1e293b"
                       sx={{ mb: 4 }}
                     >
                       {t("admin.recentReservations")}
                     </Typography>
-                    <TableContainer>
+                    <TableContainer className="admin-dashboard-reservations-table">
                       <Table>
                         <TableHead>
                           <TableRow sx={{ bgcolor: "#f8fafc" }}>
@@ -625,6 +655,62 @@ export default function Admin() {
                         </TableBody>
                       </Table>
                     </TableContainer>
+                    <Box className="admin-dashboard-reservations-mobile">
+                      {visibleRecentReservations.length > 0 ? (
+                        visibleRecentReservations.map((row) => {
+                          const firstName = row.user?.first_name || "Unknown";
+                          const lastName = row.user?.last_name || "";
+                          const userName = `${firstName} ${lastName}`.trim();
+                          const labCode = row.lab?.code || "-";
+
+                          return (
+                            <Paper
+                              key={row.id}
+                              className="admin-reservation-mobile-card"
+                              variant="outlined"
+                            >
+                              <Box className="admin-reservation-mobile-card-top">
+                                <Box className="admin-reservation-mobile-user">
+                                  <Avatar sx={{ bgcolor: stringToColor(userName), width: 36, height: 36 }}>
+                                    {userName.charAt(0)}
+                                  </Avatar>
+                                  <Typography variant="subtitle2" fontWeight="700">
+                                    {userName}
+                                  </Typography>
+                                </Box>
+                                <Typography className="admin-reservation-mobile-lab" variant="caption">
+                                  {labCode}
+                                </Typography>
+                              </Box>
+                              <Box className="admin-reservation-mobile-meta">
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {t("common.date")}
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight="600">
+                                    {formatDate(row.booking_date, t("common.locale"), { fallback: "-" })}
+                                  </Typography>
+                                </Box>
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {t("common.time")}
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight="600">
+                                    {row.start_time || "-"}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            </Paper>
+                          );
+                        })
+                      ) : (
+                        <Typography color="text.secondary" sx={{ py: 3, textAlign: "center" }}>
+                          {recentReservations.length > 0
+                            ? t("admin.noMatchingReservations")
+                            : t("admin.noRecentReservations")}
+                        </Typography>
+                      )}
+                    </Box>
                   </Paper>
                 </Grid>
               </Grid>
