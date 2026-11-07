@@ -695,8 +695,7 @@ option,
   display: none;
 }
 
-.admin-mobile-search-toggle,
-.admin-mobile-search-close {
+.admin-mobile-search-toggle {
   display: none;
 }
 
@@ -1802,32 +1801,76 @@ textarea:focus-visible,
     row-gap: 0 !important;
   }
 
-  .admin-dashboard-header .admin-mobile-search-toggle {
-    display: inline-flex !important;
-    order: 2;
-    padding: 6px;
-  }
-
-  .admin-dashboard-header:not(.mobile-search-open) .admin-search-control {
-    display: none !important;
-  }
-
-  .admin-dashboard-header.mobile-search-open .admin-search-control {
+  .app-layout.admin-layout:not(.admin-shell) .admin-dashboard-header .admin-header-actions {
     display: flex !important;
-    position: absolute;
-    inset: 8px 96px 8px 56px;
-    z-index: 1002;
-    order: initial;
     flex: 0 0 auto;
-    width: auto !important;
+    gap: 8px !important;
+  }
+
+  .admin-dashboard-header .admin-dashboard-search {
+    position: relative;
+    z-index: 1002;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    overflow: visible;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-dashboard-header .admin-dashboard-search .admin-search-control {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    z-index: 1;
+    display: flex !important;
+    flex: 0 0 0 !important;
+    width: 0 !important;
     min-width: 0 !important;
-    height: 44px !important;
-    padding: 4px 8px;
+    height: 40px !important;
+    margin: 0;
+    padding: 4px 44px 4px 12px;
+    overflow: hidden;
+    box-sizing: border-box;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+    visibility: hidden;
+    transition:
+      width 240ms ease,
+      opacity 160ms ease,
+      visibility 0s linear 240ms;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-dashboard-header.mobile-search-open .admin-dashboard-search .admin-search-control {
+    flex-basis: min(220px, calc(100vw - 190px)) !important;
+    width: min(220px, calc(100vw - 190px)) !important;
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+    transition:
+      width 240ms ease,
+      opacity 160ms ease,
+      visibility 0s;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25) !important;
   }
 
-  .admin-dashboard-header.mobile-search-open .admin-mobile-search-close {
+  .admin-dashboard-header .admin-mobile-search-toggle {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    z-index: 2;
     display: inline-flex !important;
+    width: 40px;
+    height: 40px;
+    padding: 6px;
+    transform: translateY(-50%);
+  }
+
+  .admin-dashboard-header .admin-dashboard-search .admin-search-control .MuiInputBase-root {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .admin-dashboard-header .admin-dashboard-search .admin-search-control .MuiSvgIcon-root {
     flex: 0 0 auto;
   }
 

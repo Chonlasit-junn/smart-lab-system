@@ -251,50 +251,44 @@ export default function Admin() {
             {t("admin.dashboard")}
           </Typography>
           <Box className="admin-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton
-              className="admin-mobile-search-toggle"
-              aria-label={t("admin.searchReservations")}
-              aria-expanded={isMobileSearchOpen}
-              aria-controls="admin-reservation-search"
-              onClick={() => setIsMobileSearchOpen((open) => !open)}
-              size="small"
-            >
-              {isMobileSearchOpen ? <Close /> : <Search />}
-            </IconButton>
-            <Paper
-              id="admin-reservation-search"
-              className="admin-search-control"
-              elevation={0}
-              sx={{
-                px: 2,
-                py: 0.5,
-                display: "flex",
-                alignItems: "center",
-                width: 400,
-                height: 44,
-              }}
-            >
-              <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
-              <InputBase
-                inputRef={reservationSearchInputRef}
-                placeholder={t("admin.searchReservations")}
-                aria-label={t("admin.searchReservations")}
-                value={reservationSearch}
-                onChange={(event) => setReservationSearch(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") setIsMobileSearchOpen(false);
+            <Box className={`admin-dashboard-search${isMobileSearchOpen ? " is-open" : ""}`}>
+              <Paper
+                id="admin-reservation-search"
+                className="admin-search-control"
+                elevation={0}
+                sx={{
+                  px: 2,
+                  py: 0.5,
+                  display: "flex",
+                  alignItems: "center",
+                  width: 400,
+                  height: 44,
                 }}
-                fullWidth
-              />
+              >
+                <Search sx={{ color: "var(--text-muted)", mr: 1.5 }} />
+                <InputBase
+                  inputRef={reservationSearchInputRef}
+                  placeholder={t("admin.searchReservations")}
+                  aria-label={t("admin.searchReservations")}
+                  value={reservationSearch}
+                  onChange={(event) => setReservationSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsMobileSearchOpen(false);
+                  }}
+                  fullWidth
+                />
+              </Paper>
               <IconButton
-                className="admin-mobile-search-close"
-                aria-label={t("common.close")}
-                onClick={() => setIsMobileSearchOpen(false)}
+                className="admin-mobile-search-toggle"
+                aria-label={isMobileSearchOpen ? t("common.close") : t("admin.searchReservations")}
+                aria-expanded={isMobileSearchOpen}
+                aria-controls="admin-reservation-search"
+                onClick={() => setIsMobileSearchOpen((open) => !open)}
                 size="small"
               >
-                <Close fontSize="small" />
+                {isMobileSearchOpen ? <Close /> : <Search />}
               </IconButton>
-            </Paper>
+            </Box>
             <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
