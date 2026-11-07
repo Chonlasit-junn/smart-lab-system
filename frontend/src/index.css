@@ -1933,6 +1933,31 @@ textarea:focus-visible,
     gap: 8px;
   }
 
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header.admin-devices-top-header {
+    flex-wrap: nowrap !important;
+    min-height: 72px;
+    height: 72px;
+    padding: 0 12px 0 56px !important;
+  }
+
+  .admin-devices-top-header .admin-devices-header-title {
+    display: none !important;
+  }
+
+  .admin-devices-top-header .admin-devices-header-actions {
+    display: flex !important;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px !important;
+    margin-left: auto;
+  }
+
+  .admin-devices-top-header .admin-devices-header-summary,
+  .admin-devices-top-header .admin-devices-header-divider {
+    display: none !important;
+  }
+
   .admin-top-header > :first-child {
     min-width: 0;
     flex: 1 1 auto;

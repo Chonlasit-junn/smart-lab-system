@@ -179,15 +179,15 @@ export default function AdminDevices() {
       </Box>
 
       <Box className="main-area admin-main-area" sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden" }}>
-        <Box className="top-header admin-top-header" sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 6, py: 1, bgcolor: "white", borderBottom: "1px solid #e2e8f0" }}>
-          <Typography variant="h5" fontWeight="700" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>{t("admin.devicesTitle")}</Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Box className="top-header admin-top-header admin-devices-top-header" sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 6, py: 1, bgcolor: "white", borderBottom: "1px solid #e2e8f0" }}>
+          <Typography className="admin-devices-header-title" variant="h5" fontWeight="700" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>{t("admin.devicesTitle")}</Typography>
+          <Box className="admin-devices-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <AdminNotificationBell
               className="admin-notification-button"
               iconColor="#64748b"
             />
-            <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
-            <Box sx={{ textAlign: "right" }}>
+            <Divider className="admin-header-divider admin-devices-header-divider" orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
+            <Box className="admin-user-summary admin-devices-header-summary" sx={{ textAlign: "right" }}>
               <Typography variant="subtitle2" fontWeight="700" color="#1e293b">{currentUser?.name || "Admin"}</Typography>
               <Typography variant="caption" fontWeight="500" color="#94a3b8">{currentUser?.role || "Admin"}</Typography>
             </Box>
