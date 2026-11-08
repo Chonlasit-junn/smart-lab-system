@@ -1833,6 +1833,22 @@ textarea:focus-visible,
     overscroll-behavior: auto;
   }
 
+  .admin-devices-content {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .admin-device-list-shell {
+    overflow: visible !important;
+  }
+
+  .admin-device-list.MuiTableContainer-root {
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
   .responsive-data-table .MuiTable-root {
     display: block !important;
     width: 100% !important;
@@ -1938,6 +1954,20 @@ textarea:focus-visible,
     min-height: 72px;
     height: 72px;
     padding: 0 12px 0 56px !important;
+  }
+
+  .app-layout.admin-layout:not(.admin-shell) .admin-top-header.admin-points-top-header {
+    flex-wrap: nowrap !important;
+    row-gap: 0 !important;
+    min-height: 72px;
+    height: 72px;
+    padding: 0 12px 0 56px !important;
+  }
+
+  .admin-points-top-header .admin-page-heading {
+    flex: 1 1 0;
+    max-width: 100%;
+    font-size: clamp(0.95rem, 4vw, 1.15rem) !important;
   }
 
   .admin-devices-top-header .admin-devices-header-title {
@@ -2490,5 +2520,55 @@ textarea:focus-visible,
   .login-page .login-title {
     font-size: 1.45rem;
     margin-bottom: 0.75rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .login-wrapper.login-page {
+    width: 100%;
+    height: auto;
+    min-height: 100svh;
+    padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+    align-items: center;
+    justify-content: center;
+  }
+
+  .login-page .login-container {
+    width: min(100%, 440px);
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  }
+
+  .login-page .login-banner {
+    min-height: clamp(104px, 16svh, 132px);
+    padding: 18px 20px;
+  }
+
+  .login-page .login-banner-title {
+    max-width: 17ch;
+    font-size: clamp(1.5rem, 6vw, 1.8rem);
+    line-height: 1.16;
+  }
+
+  .login-page .login-form-section {
+    flex: 0 0 auto;
+    min-height: 0;
+    justify-content: flex-start;
+    padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .login-page .login-form-content {
+    width: 100%;
+    max-width: none;
+    margin: 0 auto;
+    padding: 0;
+  }
+
+  .login-page .login-title {
+    margin-bottom: 1rem;
   }
 }

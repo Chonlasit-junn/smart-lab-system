@@ -517,7 +517,7 @@ export default function AdminPoints() {
         }}
       >
         <Box
-          className="top-header admin-top-header"
+          className="top-header admin-top-header admin-points-top-header"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -531,13 +531,14 @@ export default function AdminPoints() {
           }}
         >
           <Typography
+            className="admin-page-heading"
             variant="h5"
             fontWeight="700"
             sx={{ color: "var(--text-dark)", letterSpacing: "-1px" }}
           >
             {t("admin.pointsTitle")}
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Box className="admin-header-actions admin-points-header-actions" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <AdminNotificationBell
               className="admin-notification-button"
               iconColor="var(--text-muted)"

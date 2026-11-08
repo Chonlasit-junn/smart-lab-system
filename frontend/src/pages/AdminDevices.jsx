@@ -197,7 +197,7 @@ export default function AdminDevices() {
           </Box>
         </Box>
 
-        <Box className="content-area admin-content-area page-content" sx={{ p: { xs: 2, md: 5 }, flex: 1 }}>
+        <Box className="content-area admin-content-area page-content admin-devices-content" sx={{ p: { xs: 2, md: 5 }, flex: 1 }}>
           <Box className="page-header" sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" }, gap: 2, mb: 3, flexDirection: { xs: "column", md: "row" } }}>
             <Box>
               <Typography variant="h4" fontWeight="700" color="#0f172a">{t("admin.deviceHeading")}</Typography>
@@ -206,8 +206,9 @@ export default function AdminDevices() {
           </Box>
 
           {loadFailed && <LoadError onRetry={fetchData} />}
-          <Paper className="surface-card data-table-shell" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, overflow: "hidden" }}>
+          <Paper className="surface-card data-table-shell admin-device-list-shell" elevation={0} sx={{ border: "1px solid #e2e8f0", borderRadius: 3, overflow: "hidden" }}>
             <ResponsiveDataTable
+              className="admin-device-list"
               sx={{
                 maxHeight: { xs: "60vh", md: "calc(100vh - 330px)" },
                 minHeight: 280,
