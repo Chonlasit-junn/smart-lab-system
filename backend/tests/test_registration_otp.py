@@ -80,7 +80,7 @@ class RegistrationOTPTests(unittest.TestCase):
     def row(self, email=None):
         return self.db.get(models.RegistrationOTP, email or self.email, populate_existing=True)
 
-    def register(self, code, email=None, password="test-pass", image_size=(10, 10)):
+    def register(self, code, email=None, password="Test-pass1", image_size=(10, 10)):
         image = io.BytesIO()
         Image.new("RGB", image_size).save(image, format="JPEG")
         return asyncio.run(auth.register(
@@ -146,7 +146,7 @@ class RegistrationOTPTests(unittest.TestCase):
                 image = io.BytesIO()
                 Image.new("RGB", (100, 100)).save(image, "JPEG")
                 task = asyncio.create_task(client.post("/register", data={
-                    "email": self.email, "otp": code, "password": "test-password", "first_name": "Test",
+                    "email": self.email, "otp": code, "password": "Test-password1", "first_name": "Test",
                     "last_name": "Worker", "phone": "0812345678",
                 }, files={"face_image": ("face.jpg", image.getvalue(), "image/jpeg")}))
                 try:
@@ -211,7 +211,8 @@ class RegistrationOTPTests(unittest.TestCase):
 
     def test_invalid_registration_password_does_not_spend_otp_or_process_face(self):
         _, code = self.issue()
-        for password in ["short", " " * 8, "x" * 73, "ก" * 25, "😀" * 4]:
+        for password in ["short", " " * 8, "x" * 73, "ก" * 25, "😀" * 4, "password1",
+                         "Password", "Password 1", "Password1ก"]:
             with self.subTest(length=len(password)), self.assertRaises(HTTPException) as caught:
                 self.register(code, password=password)
             self.assertEqual(caught.exception.status_code, 422)
@@ -220,10 +221,10 @@ class RegistrationOTPTests(unittest.TestCase):
         auth.get_deepface.assert_not_called()
         self.assertEqual(self.db.query(models.User).count(), 0)
         self.assertEqual(list(Path(self.temp.name).iterdir()), [])
-        self.register(code, password="valid-new-password")
+        self.register(code, password="Valid-new-password1")
 
-    def test_valid_multibyte_password_is_not_trimmed_or_truncated(self):
-        for index, password in enumerate(["x" * 72, "ก" * 24, "😀" * 8, " padded password "]):
+    def test_valid_passwords_allow_optional_symbols_and_exactly_72_characters(self):
+        for index, password in enumerate(["Password1", "Password1!", "A1" + "x" * 70]):
             email = f"password{index}@example.com"
             _, code = self.issue(email)
             self.register(code, email=email, password=password)
@@ -240,7 +241,7 @@ class RegistrationOTPTests(unittest.TestCase):
                     "password": "short", "first_name": "Test", "last_name": "Policy"},
                     files={"face_image": ("invalid.jpg", b"not-an-image", "image/jpeg")})
                 self.assertEqual(result.status_code, 422)
-                self.assertEqual(result.json()["detail"], "Password must be 8 or more characters and at most 72 UTF-8 bytes.")
+                self.assertEqual(result.json()["detail"], auth.PASSWORD_POLICY_ERROR)
         asyncio.run(flow())
         self.assertIsNone(self.row().consumed_at)
         auth.get_deepface.assert_not_called()
@@ -508,7 +509,7 @@ class RegistrationOTPTests(unittest.TestCase):
                 Image.new("RGB", (10, 10)).save(image, format="JPEG")
                 registered = await client.post(
                     "/register",
-                    data={"email": self.email, "otp": code, "password": "synthetic",
+                    data={"email": self.email, "otp": code, "password": "Synthetic1",
                           "first_name": "API", "last_name": "Test", "phone": "0000000000"},
                     files={"face_image": ("face.jpg", image.getvalue(), "image/jpeg")},
                 )

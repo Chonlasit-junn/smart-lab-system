@@ -19,7 +19,14 @@ export function otpErrorMessage(error, translations, fallback) {
     'Face recognition is unavailable. Please try again later.': 'faceServiceUnavailable',
   };
   if (Object.hasOwn(faceErrors, detail)) return translations[faceErrors[detail]] || fallback;
-  if (detail === 'Password must be 8 or more characters and at most 72 UTF-8 bytes.') return translations.passwordInvalid;
+  if (Array.isArray(detail) && detail.some(item => item?.loc?.includes('new_password'))) {
+    return translations.passwordInvalid || fallback;
+  }
+  if ([
+    'Password must be 8 or more characters and at most 72 UTF-8 bytes.',
+    'Password must be at least 8 characters, include an uppercase letter, and at most 72 UTF-8 bytes.',
+    'Password must be 8-72 printable ASCII characters, include an uppercase letter and a number; symbols are optional and spaces are not allowed.',
+  ].includes(detail)) return translations.passwordInvalid || fallback;
   const key = Object.hasOwn(errorKeys, detail) ? errorKeys[detail] : null;
   return key ? translations[key] : typeof detail === 'string' ? detail : fallback;
 }

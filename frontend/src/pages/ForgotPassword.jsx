@@ -5,8 +5,10 @@ import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../context/language-context.js';
+import PasswordRequirements from '../components/PasswordRequirements.jsx';
+import { loginLocales } from '../utils/locales.js';
 import { otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil } from '../utils/registrationOtp';
-import { passwordResetError, passwordResetLocales } from '../utils/passwordReset';
+import { isValidPasswordReset, passwordResetError, passwordResetLocales } from '../utils/passwordReset';
 import { translateLocaleMessage } from '../utils/locales';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -14,6 +16,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 export default function ForgotPassword() {
   const { language } = useLanguage();
   const t = passwordResetLocales[language] || passwordResetLocales.th;
+  const loginText = loginLocales[language] || loginLocales.th;
   const previousLanguage = useRef(language);
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState('');
@@ -38,7 +41,7 @@ export default function ForgotPassword() {
     previousLanguage.current = language;
   }, [language]);
   useEffect(() => {
-    if (step === 4 || (step === 1 && deadlines.resendAt === 0)) return undefined;
+    if (step === 3 || step === 4 || (step === 1 && deadlines.resendAt === 0)) return undefined;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [step, deadlines.resendAt]);
@@ -47,6 +50,7 @@ export default function ForgotPassword() {
 
   const expiresIn = secondsUntil(deadlines.expiresAt, now);
   const resendIn = secondsUntil(deadlines.resendAt, now);
+  const passwordIsValid = isValidPasswordReset(password);
   const counter = (text, seconds) => text.replace('{seconds}', String(seconds));
 
   const run = async (action) => {
@@ -66,6 +70,8 @@ export default function ForgotPassword() {
       if (requiresNewOtp(failure)) {
         setStep(2);
         setOtp('');
+        setPassword('');
+        setConfirmation('');
         setDeadlines(previous => ({ ...previous, expiresAt: 0 }));
       }
     } finally {
@@ -92,7 +98,7 @@ export default function ForgotPassword() {
     event.preventDefault();
     if (step === 1) return request();
     if (!/^[0-9]{6}$/.test(otp)) return setError(t.errOtpReq);
-    if (expiresIn === 0) return setError(t.otpExpired);
+    if (step === 2 && secondsUntil(deadlines.expiresAt, Date.now()) === 0) return setError(t.otpExpired);
     if (step === 3) {
       const validation = passwordResetError(password, confirmation, t);
       if (validation) return setError(validation);
@@ -112,12 +118,13 @@ export default function ForgotPassword() {
   };
 
   return (
-    <Box className="login-wrapper" sx={{ height: '100dvh', '& .login-banner': { display: { xs: 'none', md: 'flex' } },
-      '& .login-form-section': { pb: { xs: '110px', md: '2rem' }, minHeight: 0 } }}>
+    <Box className="login-wrapper login-page forgot-password-page">
       <div className="login-container">
-        <div className="login-banner"><h1 className="login-banner-title">Smart Lab</h1></div>
+        <div className="login-banner">
+          <h1 className="login-banner-title" style={{ whiteSpace: 'pre-line' }}>{loginText.bannerHeadline}</h1>
+        </div>
         <div ref={panel} className="login-form-section" style={{ justifyContent: 'flex-start' }}>
-          <form className="login-form-content" onSubmit={submit} style={{ marginBlock: 'auto', flexShrink: 0 }}>
+          <form className="login-form-content" onSubmit={submit}>
             <h2 className="login-title">{t.title}</h2>
             {step === 4 ? <Alert severity="success" sx={{ my: 2 }}>{t.success}</Alert> : <>
               <p className="login-subtitle">{step === 1 ? t.intro : t.notice}</p>
@@ -130,7 +137,8 @@ export default function ForgotPassword() {
               {step === 3 && <>
                 <TextField fullWidth required name="new_password" label={t.newPassword} value={password} disabled={busy}
                   type={showPassword ? 'text' : 'password'} autoComplete="new-password"
-                  helperText={t.passwordHint} onChange={event => setPassword(event.target.value)} sx={{ mb: 2 }}
+                  helperText={<PasswordRequirements value={password} translations={t} />}
+                  onChange={event => { setPassword(event.target.value); setError(''); }} sx={{ mb: 2 }}
                   slotProps={{ input: { endAdornment: <InputAdornment position="end">
                     <IconButton type="button" aria-label={showPassword ? t.hidePassword : t.showPassword}
                       onClick={() => setShowPassword(value => !value)}>
@@ -138,15 +146,15 @@ export default function ForgotPassword() {
                     </IconButton></InputAdornment> } }} />
                 <TextField fullWidth required name="confirm_password" label={t.confirmPassword} value={confirmation} disabled={busy}
                   type={showPassword ? 'text' : 'password'} autoComplete="new-password"
-                  onChange={event => setConfirmation(event.target.value)} sx={{ mb: 2 }} />
+                  onChange={event => { setConfirmation(event.target.value); setError(''); }} sx={{ mb: 2 }} />
               </>}
-              {step > 1 && <p role="status" className="login-subtitle">
+              {step === 2 && <p role="status" className="login-subtitle">
                 {expiresIn > 0 ? counter(t.otpExpiresIn, expiresIn) : t.otpExpired}
               </p>}
-              <Button fullWidth type="submit" variant="contained" disabled={busy || (step > 1 && expiresIn === 0) || (step === 1 && resendIn > 0)} sx={{ mb: 2 }}>
+              <Button fullWidth type="submit" variant="contained" disabled={busy || (step === 2 && expiresIn === 0) || (step === 1 && resendIn > 0) || (step === 3 && !passwordIsValid)} sx={{ mb: 2 }}>
                 {busy ? <CircularProgress size={22} color="inherit" /> : step === 1 ? t.reqOtpBtn : step === 2 ? t.verifyBtn : t.reset}
               </Button>
-              {step > 1 && <Button fullWidth type="button" disabled={busy || resendIn > 0} onClick={request} sx={{ mb: 1 }}>
+              {step === 2 && <Button fullWidth type="button" disabled={busy || resendIn > 0} onClick={request} sx={{ mb: 1 }}>
                 {resendIn > 0 ? counter(t.otpResendWait, resendIn) : t.otpResend}
               </Button>}
               {step > 1 && <Button fullWidth type="button" disabled={busy} onClick={() => {

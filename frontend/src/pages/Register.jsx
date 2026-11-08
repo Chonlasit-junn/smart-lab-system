@@ -15,6 +15,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AppRegistrationIcon from '@mui/icons-material/AppRegistration';
+import PasswordRequirements from '../components/PasswordRequirements.jsx';
 import { registerLocales, translateLocaleMessage } from '../utils/locales';
 import { BU_FACULTIES } from '../utils/buFaculties';
 import { isValidNewPassword } from '../utils/passwordPolicy';
@@ -439,7 +440,8 @@ export default function Register() {
         <TextField
           fullWidth label={t.password} name="password" type={showPassword ? 'text' : 'password'}
           variant="outlined" value={formData.password} onChange={handleChange}
-          sx={{ mb: 3.5, ...inputSx }} helperText={t.passwordHint} autoComplete="new-password"
+          sx={{ mb: 3.5, ...inputSx }} helperText={<PasswordRequirements value={formData.password} translations={t} />}
+          autoComplete="new-password"
           InputProps={{
             endAdornment: (
               <InputAdornment position="end">

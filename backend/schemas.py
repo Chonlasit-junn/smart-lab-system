@@ -25,7 +25,7 @@ class PasswordReset(OTPVerify):
 
     @field_validator("new_password")
     @classmethod
-    def validate_password_bytes(cls, value):
+    def validate_password_policy(cls, value):
         return validate_new_password(value)
 
 class Token(BaseModel):

@@ -257,7 +257,7 @@ class PasswordResetTests(unittest.TestCase):
             reset._verify(self.db, "absent@example.com", code)
 
     def test_password_limits_are_validated_before_hashing(self):
-        for value in ["short", " " * 8, "x" * 73, "ก" * 25]:
+        for value in ["short", " " * 8, "x" * 73, "ก" * 25, "lowercase1", "Password", "Password 1"]:
             with self.subTest(value_length=len(value)), self.assertRaises(ValidationError):
                 schemas.PasswordReset(email=self.email, otp="123456", new_password=value)
 
