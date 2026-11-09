@@ -300,6 +300,22 @@ def _require_user_access(
         raise HTTPException(status_code=403, detail="You cannot view another user's points.")
 
 
+def _is_pending_guest(user_id: int, db: Session) -> bool:
+    passport = db.query(models.UserPassport).filter(
+        models.UserPassport.user_id == user_id,
+    ).first()
+    role_names = {
+        role_name
+        for (role_name,) in db.query(models.Role.name).join(
+            models.UserRole,
+            models.UserRole.role_id == models.Role.id,
+        ).filter(models.UserRole.user_id == user_id).all()
+    }
+    return bool(
+        passport is None or not passport.is_active
+    ) and ("guest" in role_names or not role_names)
+
+
 def get_or_create_points(user_id: int, db: Session) -> models.UserPoints:
     """ดึงบัญชีคะแนนและสร้างด้วย 100 คะแนนเมื่อเป็น user legacy"""
     record = db.query(models.UserPoints).filter(
@@ -453,6 +469,11 @@ def apply_point_event(
 
     if not db.query(models.User.id).filter(models.User.id == user_id).first():
         raise ValueError(f"User {user_id} not found")
+    if _is_pending_guest(user_id, db):
+        raise HTTPException(
+            status_code=409,
+            detail="Guest account must be approved before earning points.",
+        )
 
     record = get_or_create_points(user_id, db)
     # A concurrent request may have inserted the same event while this call
@@ -534,6 +555,9 @@ def ensure_daily_bonus(
     policy: Optional[models.PointPolicy] = None,
 ) -> dict:
     """Grant one +1 daily bonus the first time the user is processed that day."""
+    if _is_pending_guest(user_id, db):
+        return {"skipped": True, "reason": "guest_pending_approval"}
+
     if _get_pending_point_request(user_id, db):
         # Keep a zero-point account stable while Admin is deciding on the
         # user's recovery request; otherwise the daily bonus could make the
@@ -603,7 +627,33 @@ def ensure_daily_bonuses_for_users(
         ).all()
     }
 
+    role_names_by_user: dict[int, set[str]] = {}
+    role_rows = db.query(
+        models.UserRole.user_id,
+        models.Role.name,
+    ).join(
+        models.Role,
+        models.Role.id == models.UserRole.role_id,
+    ).filter(models.UserRole.user_id.in_(unique_user_ids)).all()
+    for user_id, role_name in role_rows:
+        role_names_by_user.setdefault(user_id, set()).add(role_name)
+    passport_active_by_user = {
+        user_id: is_active
+        for user_id, is_active in db.query(
+            models.UserPassport.user_id,
+            models.UserPassport.is_active,
+        ).filter(models.UserPassport.user_id.in_(unique_user_ids)).all()
+    }
+    pending_guest_ids = {
+        user_id
+        for user_id in unique_user_ids
+        if ("guest" in role_names_by_user.get(user_id, set()) or not role_names_by_user.get(user_id))
+        and not passport_active_by_user.get(user_id, False)
+    }
+
     for user_id in unique_user_ids:
+        if user_id in pending_guest_ids:
+            continue
         record = point_rows.get(user_id)
         if record is None:
             record = get_or_create_points(user_id, db)
@@ -684,6 +734,9 @@ def mark_due_no_shows(
     for booking in candidates:
         booking.status = "no_show"
         booking.no_show_at = now_naive
+        if _is_pending_guest(booking.user_id, db):
+            changed_count += 1
+            continue
         apply_point_event(
             booking.user_id,
             "no_show",
@@ -705,6 +758,20 @@ def mark_due_no_shows(
 
 def get_booking_restriction(user_id: int, db: Session) -> dict:
     policy = get_or_create_point_policy(db)
+    denial = account_denial(db, user_id)
+    if _is_pending_guest(user_id, db):
+        return {
+            "points": 0,
+            "booking_allowed": False,
+            "booking_block_code": denial[0] if denial else "guest_approval_required",
+            "booking_block_reason": denial[1] if denial else "Your account is pending admin approval.",
+            "is_banned": False,
+            "ban_until": None,
+            "warning_level": _warning_level(0, policy),
+            "points_warning_threshold": _policy_value(policy, "warning_threshold"),
+            "point_request_amount": _policy_value(policy, "point_request_amount"),
+        }
+
     ensure_daily_bonus(user_id, db, policy=policy)
     record = get_or_create_points(user_id, db)
     points = _clamp_score(record.points)
@@ -712,7 +779,6 @@ def get_booking_restriction(user_id: int, db: Session) -> dict:
         record.points = points
     ban_until = is_user_banned(user_id, db)
     reasons = []
-    denial = account_denial(db, user_id)
     if denial:
         reasons.append(denial[1])
     if ban_until:
@@ -744,15 +810,16 @@ def _points_response(user_id: int, db: Session) -> dict:
     today = _business_today()
     latest_request = _get_latest_point_request(user_id, db)
     pending_request = latest_request and latest_request.status == "pending"
+    pending_guest = _is_pending_guest(user_id, db)
     return {
         "user_id": user_id,
         **restriction,
-        "daily_score": _get_daily_score(user_id, today, db),
+        "daily_score": 0 if pending_guest else _get_daily_score(user_id, today, db),
         "daily_score_date": today,
         "points_warning_threshold": restriction["points_warning_threshold"],
         "point_request_amount": restriction["point_request_amount"],
         "point_request": _serialize_point_request(latest_request) if latest_request else None,
-        "can_request_points": restriction["points"] == 0 and not pending_request,
+        "can_request_points": restriction["points"] == 0 and not pending_request and not pending_guest,
     }
 
 
@@ -859,6 +926,8 @@ def get_my_point_logs(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if _is_pending_guest(current_user.id, db):
+        return {"data": [], "has_more": False, "next_cursor": None}
     ensure_daily_bonus(current_user.id, db)
     result = _logs_response(
         current_user.id,
@@ -894,6 +963,8 @@ def get_my_daily_scores(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if _is_pending_guest(current_user.id, db):
+        return {"data": [], "has_more": False, "next_cursor": None}
     ensure_daily_bonus(current_user.id, db)
     query = db.query(models.UserDailyScore).filter(
         models.UserDailyScore.user_id == current_user.id,
@@ -975,11 +1046,23 @@ def get_all_user_points(
         else_=raw_points,
     )
     raw_daily_score = func.coalesce(models.UserDailyScore.score, MAX_POINTS)
-    daily_score_expr = case(
+    clamped_daily_score_expr = case(
         (raw_daily_score < 0, 0),
         (raw_daily_score > MAX_POINTS, MAX_POINTS),
         else_=raw_daily_score,
     )
+    pending_guest = and_(
+        or_(
+            models.User.roles.any(models.Role.name == "guest"),
+            ~models.User.roles.any(),
+        ),
+        or_(
+            models.UserPassport.user_id.is_(None),
+            models.UserPassport.is_active.is_(False),
+        ),
+    )
+    points_expr = case((pending_guest, 0), else_=points_expr)
+    daily_score_expr = case((pending_guest, 0), else_=clamped_daily_score_expr)
     active_bans = db.query(
         models.BanRecord.user_id.label("user_id"),
         func.max(models.BanRecord.ban_until).label("ban_until"),
@@ -993,10 +1076,12 @@ def get_all_user_points(
         func.coalesce(func.avg(points_expr), 0),
         func.coalesce(func.sum(case((points_expr <= warning_threshold, 1), else_=0)), 0),
         func.coalesce(func.sum(case((active_bans.c.ban_until.is_not(None), 1), else_=0)), 0),
-        func.coalesce(func.sum(case((active_bans.c.ban_until.is_(None), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((and_(active_bans.c.ban_until.is_(None), ~pending_guest), 1), else_=0)), 0),
         func.coalesce(func.sum(case((points_expr == 0, 1), else_=0)), 0),
     ).select_from(models.User).outerjoin(
         models.UserPoints, models.UserPoints.user_id == models.User.id,
+    ).outerjoin(
+        models.UserPassport, models.UserPassport.user_id == models.User.id,
     ).outerjoin(
         active_bans, active_bans.c.user_id == models.User.id,
     ).filter(not_admin).one()
@@ -1007,7 +1092,7 @@ def get_all_user_points(
     elif filter_value == "banned":
         page_filters.append(active_bans.c.ban_until.is_not(None))
     elif filter_value == "allowed":
-        page_filters.append(active_bans.c.ban_until.is_(None))
+        page_filters.append(and_(active_bans.c.ban_until.is_(None), ~pending_guest))
 
     normalized_search = (search_value or "").strip()
     if normalized_search:
@@ -1027,6 +1112,8 @@ def get_all_user_points(
     total = db.query(func.count(models.User.id)).select_from(models.User).outerjoin(
         models.UserPoints, models.UserPoints.user_id == models.User.id,
     ).outerjoin(
+        models.UserPassport, models.UserPassport.user_id == models.User.id,
+    ).outerjoin(
         active_bans, active_bans.c.user_id == models.User.id,
     ).filter(*page_filters).scalar() or 0
     page_query = db.query(
@@ -1035,8 +1122,11 @@ def get_all_user_points(
         daily_score_expr.label("daily_score"),
         active_bans.c.ban_until,
         models.UserPoints.updated_at,
+        pending_guest.label("pending_guest"),
     ).select_from(models.User).outerjoin(
         models.UserPoints, models.UserPoints.user_id == models.User.id,
+    ).outerjoin(
+        models.UserPassport, models.UserPassport.user_id == models.User.id,
     ).outerjoin(
         models.UserDailyScore,
         and_(
@@ -1085,7 +1175,7 @@ def get_all_user_points(
     }
 
     paged_result = []
-    for user, points, daily_score, ban_until, updated_at in page_rows:
+    for user, points, daily_score, ban_until, updated_at, pending_guest_value in page_rows:
         request_row = pending_by_user.get(user.id)
         paged_result.append({
             "user_id": user.id,
@@ -1097,7 +1187,7 @@ def get_all_user_points(
             "points": int(points),
             "daily_score": int(daily_score),
             "daily_score_date": today,
-            "booking_allowed": ban_until is None,
+            "booking_allowed": ban_until is None and not pending_guest_value,
             "is_banned": ban_until is not None,
             "ban_until": ban_until,
             "warning_level": _warning_level(int(points), policy),
@@ -1141,6 +1231,8 @@ def create_point_request(
     """Let a user at zero points ask Admin for a one-time +10 grant."""
     if is_admin_user(current_user.id, db):
         raise HTTPException(status_code=403, detail="Admins do not need to request points.")
+    if _is_pending_guest(current_user.id, db):
+        raise HTTPException(status_code=403, detail="Guest account must be approved before requesting points.")
 
     mark_due_no_shows(db)
     record = get_or_create_points(current_user.id, db)
@@ -1256,6 +1348,8 @@ def test_deduct_user_points(
     target_user = _get_user_or_404(user_id, db)
     if is_admin_user(target_user.id, db):
         raise HTTPException(status_code=404, detail="User not found.")
+    if _is_pending_guest(target_user.id, db):
+        raise HTTPException(status_code=409, detail="Approve the Guest account before adjusting points.")
 
     mark_due_no_shows(db)
     point_result = apply_point_event(
@@ -1285,6 +1379,8 @@ def reset_test_user_points(
     target_user = _get_user_or_404(user_id, db)
     if is_admin_user(target_user.id, db):
         raise HTTPException(status_code=404, detail="User not found.")
+    if _is_pending_guest(target_user.id, db):
+        raise HTTPException(status_code=409, detail="Approve the Guest account before adjusting points.")
 
     points_record = get_or_create_points(target_user.id, db)
     latest_log = db.query(models.PointLog).filter(
@@ -1363,6 +1459,8 @@ def approve_point_request(
         }
     if request.status != "pending":
         raise HTTPException(status_code=409, detail="This point request is no longer pending.")
+    if _is_pending_guest(request.user_id, db):
+        raise HTTPException(status_code=409, detail="Approve the Guest account before approving a point request.")
 
     points_record = get_or_create_points(request.user_id, db)
     if _clamp_score(points_record.points) != 0:
@@ -1476,7 +1574,9 @@ def get_admin_user_details(
     if role == "admin":
         raise HTTPException(status_code=404, detail="User not found.")
 
-    ensure_daily_bonus(user.id, db)
+    pending_guest = _is_pending_guest(user.id, db)
+    if not pending_guest:
+        ensure_daily_bonus(user.id, db)
 
     student = db.query(models.Student).filter(
         models.Student.user_id == user.id,
@@ -1485,8 +1585,8 @@ def get_admin_user_details(
         models.UserPassport.user_id == user.id,
     ).first()
     account_active = student.is_active if role == "student" and student else True
-    if role == "guest" and passport:
-        account_active = passport.is_active
+    if role == "guest":
+        account_active = bool(passport and passport.is_active)
 
     profile = {
         "id": user.id,
@@ -1507,9 +1607,9 @@ def get_admin_user_details(
     points_record = db.query(models.UserPoints).filter(
         models.UserPoints.user_id == user.id,
     ).first()
-    points = _clamp_score(points_record.points if points_record else MAX_POINTS)
+    points = 0 if pending_guest else _clamp_score(points_record.points if points_record else MAX_POINTS)
     today = _business_today()
-    daily_score = _get_daily_score(user.id, today, db)
+    daily_score = 0 if pending_guest else _get_daily_score(user.id, today, db)
     ban_until = is_user_banned(user.id, db)
     latest_request = _get_latest_point_request(user.id, db)
     policy = get_or_create_point_policy(db)
@@ -1519,7 +1619,7 @@ def get_admin_user_details(
         "daily_score_date": today,
         "points_warning_threshold": _policy_value(policy, "warning_threshold"),
         "point_request_amount": _policy_value(policy, "point_request_amount"),
-        "booking_allowed": ban_until is None,
+        "booking_allowed": ban_until is None and not pending_guest,
         "is_banned": ban_until is not None,
         "ban_until": ban_until,
         "warning_level": _warning_level(points, policy),

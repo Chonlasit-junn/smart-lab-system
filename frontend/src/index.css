@@ -1535,6 +1535,48 @@ textarea:focus-visible,
     min-height: 0 !important;
   }
 
+  /* Long user pages use document scrolling on small screens. Nested
+   * viewport-sized scrollers can become unreachable as browser chrome changes
+   * the visible height. */
+  .user-scroll-page-layout {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .user-scroll-page-layout .main-area {
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .user-scroll-page-layout .content-area {
+    flex: 1 0 auto;
+    min-height: calc(100vh - 72px);
+    min-height: calc(100dvh - 72px);
+    overflow: visible;
+    overscroll-behavior-y: auto;
+  }
+
+  .admin-point-policy-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    margin: 0 -12px;
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border-light);
+    background: var(--bg-color);
+    box-shadow: 0 -8px 18px rgba(15, 23, 42, 0.08);
+  }
+
+  .admin-point-policy-actions .MuiButton-root {
+    width: 100%;
+    min-height: 48px;
+  }
+
   /* Dashboard Sidebar */
   .sidebar {
     position: fixed;

@@ -736,6 +736,7 @@ export default function AdminPointPolicy() {
               </Paper>
 
               <Box
+                className="admin-point-policy-actions"
                 sx={{
                   display: "flex",
                   justifyContent: "flex-end",

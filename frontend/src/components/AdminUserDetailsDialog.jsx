@@ -19,6 +19,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
 import ResponsiveDataTable from "./ResponsiveDataTable";
 import {
@@ -107,19 +108,7 @@ const getPointReason = (reason, t) => ({
 }[reason] || reason || t("admin.userDetails.pointAdjustment"));
 
 const historyPanelScrollSx = {
-  maxHeight: "min(60vh, 520px)",
-  overflowY: "auto",
-  overflowX: "hidden",
-  overscrollBehavior: "contain",
-  scrollbarColor: "var(--text-muted) var(--surface-subtle)",
-  scrollbarWidth: "thin",
-  "&::-webkit-scrollbar": { width: 10 },
-  "&::-webkit-scrollbar-track": { backgroundColor: "var(--surface-subtle)" },
-  "&::-webkit-scrollbar-thumb": {
-    backgroundColor: "var(--text-muted)",
-    border: "2px solid var(--surface-subtle)",
-    borderRadius: 999,
-  },
+  minWidth: 0,
 };
 
 function EmptyHistory({ icon, title, description }) {
@@ -391,6 +380,7 @@ export default function AdminUserDetailsDialog({
   onTabChange,
 }) {
   const { t } = useLanguage();
+  const isMobile = useMediaQuery("(max-width:600px)");
   const locale = t("common.locale");
   const profile = detail?.profile || selectedUser || {};
   const points = detail?.points || {};
@@ -413,13 +403,25 @@ export default function AdminUserDetailsDialog({
     <Dialog
       open={open}
       onClose={onClose}
+      fullScreen={isMobile}
       fullWidth
       maxWidth="xl"
       scroll="paper"
       className="admin-user-details-dialog"
-      PaperProps={{ sx: { borderRadius: { xs: 0, sm: 4 }, minHeight: { sm: "min(760px, calc(100vh - 32px))" }, maxHeight: "calc(100vh - 16px)" } }}
+      sx={{ zIndex: 1500 }}
+      PaperProps={{
+        sx: {
+          display: "flex",
+          flexDirection: "column",
+          height: isMobile ? "100dvh" : "auto",
+          minHeight: isMobile ? 0 : "min(760px, calc(100dvh - 64px))",
+          maxHeight: isMobile ? "100dvh" : "calc(100dvh - 64px)",
+          margin: isMobile ? 0 : undefined,
+          borderRadius: isMobile ? 0 : 4,
+        },
+      }}
     >
-      <DialogTitle sx={{ p: { xs: 2.5, md: 4 }, pb: 2 }}>
+      <DialogTitle sx={{ p: { xs: "max(16px, env(safe-area-inset-top)) 20px 16px", md: 4 }, pb: 2, flex: "0 0 auto" }}>
         <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2, minWidth: 0 }}>
             <Avatar src={profileImage || undefined} sx={{ bgcolor: stringToColor(profileName), width: 64, height: 64, fontSize: 22, fontWeight: "700", flexShrink: 0 }}>
@@ -444,7 +446,20 @@ export default function AdminUserDetailsDialog({
         </Box>
       </DialogTitle>
 
-      <DialogContent className="page-content" dividers sx={{ p: { xs: 2.5, md: 4 }, bgcolor: "#fcfdfe" }}>
+      <DialogContent
+        className="page-content"
+        dividers
+        sx={{
+          p: { xs: 2, md: 4 },
+          bgcolor: "#fcfdfe",
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehaviorY: "contain",
+          pb: isMobile ? "calc(16px + env(safe-area-inset-bottom))" : undefined,
+        }}
+      >
         {error && <LoadError onRetry={onRetry} />}
 
         {loading && !detail ? (

@@ -528,7 +528,8 @@ export default function VerifyUsers() {
                           width: "100%",
                           maxWidth: 300,
                           justifySelf: { xs: "center", sm: "start" },
-                          height: 380,
+                          height: { xs: "auto", md: 380 },
+                          minHeight: { xs: 0, md: 380 },
                           display: "flex",
                           flexDirection: "column",
                           borderRadius: 5,
@@ -578,8 +579,8 @@ export default function VerifyUsers() {
                         <Box
                           sx={{
                             p: 2,
-                            flex: 1,
-                            minHeight: 0,
+                            flex: { xs: "1 0 auto", md: 1 },
+                            minHeight: { xs: "max-content", md: 0 },
                             display: "flex",
                             flexDirection: "column",
                           }}
@@ -664,7 +665,16 @@ export default function VerifyUsers() {
 
                           <Divider sx={{ mb: 2, mt: "auto" }} />
 
-                          <Box sx={{ display: "flex", gap: 1 }}>
+                          <Box
+                            sx={{
+                              display: "grid",
+                              gridTemplateColumns: {
+                                xs: "minmax(0, 1fr)",
+                                md: "repeat(2, minmax(0, 1fr))",
+                              },
+                              gap: 1,
+                            }}
+                          >
                             <Button
                               fullWidth
                               variant="outlined"
@@ -676,6 +686,10 @@ export default function VerifyUsers() {
                                 borderRadius: 3,
                                 fontWeight: "600",
                                 textTransform: "none",
+                                minWidth: 0,
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minHeight: 44,
                               }}
                             >
                               {t("admin.reject")}
@@ -692,6 +706,10 @@ export default function VerifyUsers() {
                                 fontWeight: "600",
                                 textTransform: "none",
                                 boxShadow: "none",
+                                minWidth: 0,
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                minHeight: 44,
                               }}
                             >
                               {isProcessing ? t("admin.saving") : t("admin.approve")}

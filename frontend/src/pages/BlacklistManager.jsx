@@ -53,6 +53,8 @@ import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
 const API_URL = import.meta.env.VITE_API_URL;
 
 const EMPTY_FORM = { app_name: "", description: "", match_type: "process_name", match_value: "" };
+const MAX_BLACKLIST_NAME_LENGTH = 100;
+const MAX_BLACKLIST_DESCRIPTION_LENGTH = 500;
 
 export default function BlacklistManager() {
   const navigate = useNavigate();
@@ -88,6 +90,15 @@ export default function BlacklistManager() {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const savePendingRef = useRef(false);
+
+  const handleLimitedTextChange = (field, limit, value) => {
+    setFormData((current) => {
+      const currentLength = String(current[field] || "").length;
+      if (value.length > limit && value.length >= currentLength) return current;
+      return { ...current, [field]: value };
+    });
+    setFormError("");
+  };
 
   // --- API ---
   const fetchBlacklist = useCallback(async () => {
@@ -815,10 +826,13 @@ export default function BlacklistManager() {
             fullWidth
             size="small"
             value={formData.app_name}
-            onChange={(e) => {
-              setFormData({ ...formData, app_name: e.target.value });
-              setFormError("");
-            }}
+            onChange={(e) => handleLimitedTextChange(
+              "app_name",
+              MAX_BLACKLIST_NAME_LENGTH,
+              e.target.value,
+            )}
+            helperText={`${formData.app_name.length} / ${MAX_BLACKLIST_NAME_LENGTH}`}
+            slotProps={{ htmlInput: { maxLength: MAX_BLACKLIST_NAME_LENGTH } }}
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           <TextField
@@ -842,9 +856,13 @@ export default function BlacklistManager() {
             rows={3}
             size="small"
             value={formData.description}
-            onChange={(e) =>
-              setFormData({ ...formData, description: e.target.value })
-            }
+            onChange={(e) => handleLimitedTextChange(
+              "description",
+              MAX_BLACKLIST_DESCRIPTION_LENGTH,
+              e.target.value,
+            )}
+            helperText={`${formData.description.length} / ${MAX_BLACKLIST_DESCRIPTION_LENGTH}`}
+            slotProps={{ htmlInput: { maxLength: MAX_BLACKLIST_DESCRIPTION_LENGTH } }}
             placeholder={t("admin.blockedProgramPlaceholder")}
             sx={{ "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />

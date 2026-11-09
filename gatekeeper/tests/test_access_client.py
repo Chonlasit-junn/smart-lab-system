@@ -90,6 +90,31 @@ class AccessClientTests(unittest.TestCase):
                 self.assertFalse(accepted)
                 self.assertEqual(detail, DENIAL_MESSAGES[code])
 
+    def test_denied_booking_shows_the_matched_account_name(self):
+        accepted, detail, _client = self.verify(response(403, {
+            "detail": {
+                "code": "booking_required",
+                "matched_user_name": "  Scan\n Student  ",
+            },
+        }))
+        self.assertFalse(accepted)
+        self.assertIn("ตรวจพบเป็นบัญชี: Scan Student", detail)
+
+    def test_backend_timeout_is_distinct_and_never_grants_access(self):
+        client = Mock()
+        client.post.side_effect = requests.Timeout()
+        accepted, detail = verify_scan(
+            "https://backend.example", self.registration, self.frame, 0.90, client=client,
+        )
+        self.assertFalse(accepted)
+        self.assertEqual(detail.code, "backend_timeout")
+        self.assertIn("ตอบกลับช้า", detail)
+        self.assertEqual(
+            client.post.call_args.kwargs["timeout"],
+            (30, 120),
+        )
+        self.assertEqual(denial_title(detail), "SYSTEM UNAVAILABLE")
+
     def test_local_liveness_failure_is_reported_without_sending_a_photo(self):
         client = Mock()
         client.post.return_value = response(403, {
@@ -120,11 +145,12 @@ class AccessClientTests(unittest.TestCase):
 
     def test_network_failure_denies_access_and_reports_missing_history(self):
         client = Mock()
-        client.post.side_effect = requests.Timeout()
+        client.post.side_effect = requests.ConnectionError()
         accepted, detail = verify_scan(
             "https://backend.example", self.registration, self.frame, 0.90, client=client,
         )
         self.assertFalse(accepted)
+        self.assertEqual(detail.code, "connection_failed")
         self.assertIn("ยืนยันการบันทึกประวัติไม่ได้", detail)
 
     def test_malformed_response_cannot_grant_access(self):

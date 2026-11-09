@@ -387,6 +387,15 @@ def verify_user(
         raise HTTPException(status_code=404, detail="User not found.")
 
     if payload.action == "approve":
+        point_record = db.query(models.UserPoints).filter(
+            models.UserPoints.user_id == user_id,
+        ).with_for_update().first()
+        if point_record is None:
+            db.add(models.UserPoints(user_id=user_id, points=100))
+        elif point_record.points == 0 and not db.query(models.PointLog.id).filter(
+            models.PointLog.user_id == user_id,
+        ).first():
+            point_record.points = 100
         passport.is_active = True
         db.commit()
         return {"message": "User approved successfully."}

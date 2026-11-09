@@ -180,10 +180,12 @@ async def register(
         else:
             new_user.profile_pic = profile_url
 
-        db.add(models.UserPoints(user_id=new_user.id, points=100))
-
         domain = normalized_email.split("@")[-1]
         role_name = "student" if domain == "bumail.net" else "guest"
+        db.add(models.UserPoints(
+            user_id=new_user.id,
+            points=100 if role_name == "student" else 0,
+        ))
         role = db.query(models.Role).filter(models.Role.name == role_name).first()
 
         if domain == "bumail.net":

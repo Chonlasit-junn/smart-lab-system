@@ -6,6 +6,9 @@ import threading
 
 from device_registration import GATEKEEPER_DEVICE_PREFIX, RegistrationError, normalize_api_url
 
+SCAN_CONNECT_TIMEOUT_SECONDS = 30
+SCAN_READ_TIMEOUT_SECONDS = 120
+
 
 DENIAL_MESSAGES = {
     "face_service_busy": "ระบบตรวจใบหน้ากำลังให้บริการ กรุณาลองใหม่สักครู่",
@@ -42,7 +45,10 @@ class ScanDetail(str):
 
 def denial_title(detail):
     code = getattr(detail, "code", "")
-    if code in {"face_service_busy", "face_service_unavailable", "scan_history_unavailable", "connection_failed"}:
+    if code in {
+        "face_service_busy", "face_service_unavailable", "scan_history_unavailable",
+        "connection_failed", "backend_timeout",
+    }:
         return "SYSTEM UNAVAILABLE"
     if code in {"liveness_no_motion", "liveness_insufficient_samples", "liveness_face_changed",
                 "face_not_detected", "face_too_small", "face_not_recognized"}:
@@ -101,7 +107,10 @@ def verify_scan(
     }
     if liveness_reason:
         data["liveness_reason"] = liveness_reason
-    request = {"data": data, "timeout": 15}
+    request = {
+        "data": data,
+        "timeout": (SCAN_CONNECT_TIMEOUT_SECONDS, SCAN_READ_TIMEOUT_SECONDS),
+    }
     if liveness_passed:
         if frame is None:
             return False, DENIAL_MESSAGES["invalid_face_image"]
@@ -115,6 +124,13 @@ def verify_scan(
 
     try:
         response = client.post(f"{backend_url}/gatekeeper/identify", **request)
+    except requests.ConnectTimeout:
+        return False, ScanDetail("เชื่อมต่อ Backend ไม่ได้ — ยืนยันการบันทึกประวัติไม่ได้", "connection_failed")
+    except requests.Timeout:
+        return False, ScanDetail(
+            "Backend ตอบกลับช้า จึงยังยืนยันผลการสแกนไม่ได้ กรุณาลองอีกครั้ง",
+            "backend_timeout",
+        )
     except requests.RequestException:
         return False, ScanDetail("เชื่อมต่อ Backend ไม่ได้ — ยืนยันการบันทึกประวัติไม่ได้", "connection_failed")
     try:
@@ -141,7 +157,12 @@ def verify_scan(
     detail = payload.get("detail")
     if isinstance(detail, dict):
         code = detail.get("code")
-        return False, ScanDetail(DENIAL_MESSAGES.get(code, "ระบบไม่อนุญาตให้เข้าห้อง กรุณาติดต่อผู้ดูแล"), code)
+        message = DENIAL_MESSAGES.get(code, "ระบบไม่อนุญาตให้เข้าห้อง กรุณาติดต่อผู้ดูแล")
+        matched_user_name = detail.get("matched_user_name")
+        if isinstance(matched_user_name, str) and matched_user_name.strip():
+            safe_name = " ".join(matched_user_name.split())[:80]
+            message = f"{message} · ตรวจพบเป็นบัญชี: {safe_name}"
+        return False, ScanDetail(message, code)
     if isinstance(detail, str) and detail.strip():
         return False, detail[:250]
     return False, "ระบบไม่อนุญาตให้เข้าห้อง กรุณาติดต่อผู้ดูแล"

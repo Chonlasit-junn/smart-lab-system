@@ -261,7 +261,7 @@ class RegistrationOTPTests(unittest.TestCase):
         self.assertIn("successful", self.register(code)["message"])
         user = self.db.query(models.User).filter_by(email=self.email).one()
         self.assertFalse(self.db.query(models.UserPassport).filter_by(user_id=user.id).one().is_active)
-        self.assertEqual(self.db.get(models.UserPoints, user.id).points, 100)
+        self.assertEqual(self.db.get(models.UserPoints, user.id).points, 0)
         self.assertEqual(user.roles[0].name, "guest")
         with self.assertRaises(HTTPException) as error:
             otp.verify_otp(self.db, self.email, code)

@@ -159,7 +159,10 @@ class GatekeeperAccessTests(unittest.TestCase):
                 self.assert_denied(self.identify(), "booking_required")
         self.db.delete(self.booking)
         self.db.commit()
-        self.assert_denied(self.identify(), "booking_required")
+        response = self.identify()
+        row = self.assert_denied(response, "booking_required")
+        self.assertEqual(row.user_id, self.user.id)
+        self.assertEqual(response.json()["detail"]["matched_user_name"], "Scan Student")
 
     def test_inactive_lab_denial_is_audited_before_running_face_inference(self):
         self.lab.status = "maintenance"

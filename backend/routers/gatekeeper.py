@@ -190,13 +190,18 @@ def _save_scan(
         }) from None
 
 
-def _deny_scan(db, lab, device_id, *, code, message, status_code=403, **evidence):
+def _deny_scan(
+    db, lab, device_id, *, code, message, status_code=403, matched_user_name=None, **evidence,
+):
     scan_id = _save_scan(
         db, lab, device_id, decision="denied", reason_code=code, **evidence,
     )
-    raise HTTPException(status_code=status_code, detail={
+    detail = {
         "code": code, "message": message, "scan_id": scan_id,
-    })
+    }
+    if isinstance(matched_user_name, str) and matched_user_name.strip():
+        detail["matched_user_name"] = " ".join(matched_user_name.split())[:128]
+    raise HTTPException(status_code=status_code, detail=detail)
 
 
 def _account_entry_denial(db, user_id):
@@ -352,9 +357,15 @@ def identify_face(
         )
 
     evidence.update(user_id=best_user.id, face_distance=best_distance)
+    matched_user_name = " ".join(
+        part for part in (best_user.first_name, best_user.last_name) if part
+    ).strip()
     denial = _account_entry_denial(db, best_user.id)
     if denial is not None:
-        _deny_scan(db, lab, device_id, code=denial[0], message=denial[1], **evidence)
+        _deny_scan(
+            db, lab, device_id, code=denial[0], message=denial[1],
+            matched_user_name=matched_user_name, **evidence,
+        )
 
     # Evaluate after face inference, using Bangkok's date/time and an exclusive
     # slot end. Scanning does not check in or consume the Agent's reservation.
@@ -364,7 +375,7 @@ def identify_face(
     if booking is None:
         _deny_scan(
             db, lab, device_id, code="booking_required", message="No current booking for this Lab.",
-            scanned_at=decision_time, **evidence,
+            matched_user_name=matched_user_name, scanned_at=decision_time, **evidence,
         )
 
     booking_id, lab_id = booking.id, lab.id

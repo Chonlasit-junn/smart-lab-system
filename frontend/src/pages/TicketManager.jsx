@@ -18,6 +18,7 @@ import {
 } from '../utils/ticketStatus.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
+const MAX_TICKET_REPLY_LENGTH = 5000;
 
 export default function TicketManager() {
   const PAGE_SIZE = 20;
@@ -372,12 +373,15 @@ export default function TicketManager() {
                 <TextField
                   label={t('admin.replyMessage')}
                   value={replyMessage}
-                  onChange={(event) => setReplyMessage(event.target.value)}
+                  onChange={(event) =>
+                    setReplyMessage(event.target.value.slice(0, MAX_TICKET_REPLY_LENGTH))
+                  }
                   multiline
                   minRows={3}
                   maxRows={8}
                   fullWidth
-                  inputProps={{ maxLength: 5000 }}
+                  helperText={`${replyMessage.length} / ${MAX_TICKET_REPLY_LENGTH}`}
+                  slotProps={{ htmlInput: { maxLength: MAX_TICKET_REPLY_LENGTH } }}
                 />
                 <TextField
                   select

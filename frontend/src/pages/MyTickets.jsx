@@ -143,7 +143,7 @@ export default function MyTickets() {
   };
 
   return (
-    <div className="app-layout">
+    <div className="app-layout user-scroll-page-layout">
       {isSidebarOpen && (
         <div
           className="sidebar-overlay"
