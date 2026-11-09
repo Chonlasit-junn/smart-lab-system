@@ -18,6 +18,8 @@ class WindowVisibilityTracker:
 
     def __init__(self):
         self._windows_by_pid = {}
+        self._hidden_windows_by_pid = {}
+        self._pending_reopen_process_ids = set()
         self._shown_process_ids = set()
         self._lock = threading.Lock()
 
@@ -42,20 +44,46 @@ class WindowVisibilityTracker:
                     return
                 process_id = int(process_id)
                 windows = self._windows_by_pid.setdefault(process_id, set())
-                was_hidden = not windows
+                hidden_windows = self._hidden_windows_by_pid.setdefault(process_id, set())
+                was_hidden = hwnd in hidden_windows
+                had_destroyed_window = process_id in self._pending_reopen_process_ids
+                was_first_visible_window = not windows
+                hidden_windows.discard(hwnd)
+                if not hidden_windows:
+                    self._hidden_windows_by_pid.pop(process_id, None)
                 windows.add(hwnd)
-                if was_hidden:
+                if was_hidden or had_destroyed_window or was_first_visible_window:
                     self._shown_process_ids.add(process_id)
+                self._pending_reopen_process_ids.discard(process_id)
             elif event_id in (EVENT_OBJECT_HIDE, EVENT_OBJECT_DESTROY):
-                process_ids = [
+                process_ids = {
                     pid for pid, windows in self._windows_by_pid.items() if hwnd in windows
-                ]
+                }
+                process_ids.update(
+                    pid for pid, windows in self._hidden_windows_by_pid.items() if hwnd in windows
+                )
+                if process_id:
+                    process_ids.add(int(process_id))
                 for target_pid in process_ids:
-                    windows = self._windows_by_pid.get(target_pid)
+                    windows = self._windows_by_pid.get(target_pid, set())
+                    hidden_windows = self._hidden_windows_by_pid.get(target_pid, set())
+                    was_tracked = hwnd in windows or hwnd in hidden_windows
+                    windows.discard(hwnd)
+                    hidden_windows.discard(hwnd)
                     if windows:
-                        windows.discard(hwnd)
-                        if not windows:
-                            self._windows_by_pid.pop(target_pid, None)
+                        self._windows_by_pid[target_pid] = windows
+                    else:
+                        self._windows_by_pid.pop(target_pid, None)
+
+                    if event_id == EVENT_OBJECT_HIDE and was_tracked:
+                        self._hidden_windows_by_pid.setdefault(target_pid, set()).add(hwnd)
+                    elif event_id == EVENT_OBJECT_DESTROY:
+                        if hidden_windows:
+                            self._hidden_windows_by_pid[target_pid] = hidden_windows
+                        else:
+                            self._hidden_windows_by_pid.pop(target_pid, None)
+                        if was_tracked:
+                            self._pending_reopen_process_ids.add(target_pid)
 
     def consume_shown_process_ids(self):
         with self._lock:
@@ -71,6 +99,12 @@ class WindowVisibilityTracker:
                 for process_id, windows in self._windows_by_pid.items()
                 if process_id in running_process_ids
             }
+            self._hidden_windows_by_pid = {
+                process_id: windows
+                for process_id, windows in self._hidden_windows_by_pid.items()
+                if process_id in running_process_ids
+            }
+            self._pending_reopen_process_ids.intersection_update(running_process_ids)
             self._shown_process_ids.intersection_update(running_process_ids)
 
 

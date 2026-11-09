@@ -11,7 +11,7 @@ import requests
 from agent_qa import start_session_headers
 import pygetwindow as gw
 from datetime import datetime, timezone
-from agent_device import load_device_registration
+from agent_device import get_agent_data_dir, load_device_registration
 from agent_outbox import AgentOutbox
 from program_identity import program_usage_name, read_executable_identity
 from browser_url import BrowserURLMonitor
@@ -22,6 +22,7 @@ from agent_policy import (
     normalize_rules,
 )
 from agent_violation import (
+    DEFAULT_GRACE_SECONDS,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_WARNING_SECONDS,
     ViolationState,
@@ -35,6 +36,20 @@ def _utc_now():
     """Return an aware UTC timestamp for events sent to the Backend."""
 
     return datetime.now(timezone.utc)
+
+
+def _append_monitor_error_log(error_type):
+    """Persist a small, local-only diagnostic without recording app or user data."""
+    try:
+        log_path = get_agent_data_dir() / "monitor-errors.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if log_path.exists() and log_path.stat().st_size > 64 * 1024:
+            log_path.write_text("", encoding="utf-8")
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(f"{_utc_now().isoformat(timespec='seconds')} {error_type}\n")
+    except OSError:
+        # Diagnostics must never interrupt monitoring or session shutdown.
+        pass
 
 
 prepare_qt_dll_search_path()
@@ -105,14 +120,14 @@ def _window_process_id(window):
     return process_id.value or None
 
 
-def _visible_window_process_ids():
-    """Return PIDs that currently own a visible top-level Windows window."""
+def _visible_window_handles_by_pid():
+    """Return visible top-level HWNDs grouped by their owning process."""
     user32 = getattr(getattr(ctypes, "windll", None), "user32", None)
     callback_factory = getattr(ctypes, "WINFUNCTYPE", None)
     if user32 is None or callback_factory is None:
-        return set()
+        return {}
 
-    process_ids = set()
+    windows_by_pid = {}
     try:
         is_window_visible = user32.IsWindowVisible
         is_window_visible.argtypes = [ctypes.c_void_p]
@@ -129,7 +144,8 @@ def _visible_window_process_ids():
             process_id = ctypes.c_ulong()
             get_window_process_id(hwnd, ctypes.byref(process_id))
             if process_id.value:
-                process_ids.add(process_id.value)
+                handle = hwnd.value if hasattr(hwnd, "value") else hwnd
+                windows_by_pid.setdefault(process_id.value, set()).add(int(handle))
             return True
 
         callback = callback_type(collect_visible_process)
@@ -137,8 +153,13 @@ def _visible_window_process_ids():
         enum_windows.restype = ctypes.c_int
         enum_windows(callback, None)
     except (AttributeError, OSError, TypeError, ValueError):
-        return set()
-    return process_ids
+        return {}
+    return windows_by_pid
+
+
+def _visible_window_process_ids():
+    """Return PIDs that currently own a visible top-level Windows window."""
+    return set(_visible_window_handles_by_pid())
 
 
 def _is_agent_window(window, process_id=None):
@@ -240,11 +261,13 @@ class ViolationDialog(QDialog):
         max_attempts=DEFAULT_MAX_ATTEMPTS,
         allow_grace=False,
         warning_seconds=DEFAULT_WARNING_SECONDS,
+        grace_seconds=DEFAULT_GRACE_SECONDS,
         parent=None,
     ):
         super().__init__(parent)
         self.allow_grace = bool(allow_grace)
         self.left = max(1, int(warning_seconds))
+        self.grace_minutes = (max(1, int(grace_seconds)) + 59) // 60
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -254,7 +277,7 @@ class ViolationDialog(QDialog):
             QDialog { background-color: #fef2f2; border: 3px solid #ef4444; border-radius: 15px; }
             QLabel  { border: none; }
         """)
-        self.setFixedSize(600, 330 if self.allow_grace else 260)
+        self.setFixedSize(600, 380 if self.allow_grace else 260)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
@@ -288,6 +311,7 @@ class ViolationDialog(QDialog):
         self.countdown_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         self.countdown_lbl.setStyleSheet("color: #ef4444; margin-top: 20px;")
         self.countdown_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.countdown_lbl.setWordWrap(True)
 
         layout.addWidget(title)
         layout.addWidget(reason_lbl)
@@ -295,9 +319,7 @@ class ViolationDialog(QDialog):
         layout.addWidget(self.countdown_lbl)
 
         if self.allow_grace:
-            self.countdown_lbl.setText(
-                f"กรุณาปิดโปรแกรม/เว็บไซต์ หรือขอโอกาสภายใน {self.left} วินาที"
-            )
+            self._update_countdown_text()
             chance_btn = QPushButton("ขอโอกาส")
             chance_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             chance_btn.setStyleSheet("""
@@ -327,9 +349,7 @@ class ViolationDialog(QDialog):
     def _tick(self):
         self.left -= 1
         if self.allow_grace:
-            self.countdown_lbl.setText(
-                f"กรุณาปิดโปรแกรม หรือกดขอโอกาสภายใน {self.left} วินาที"
-            )
+            self._update_countdown_text()
         else:
             self.countdown_lbl.setText(f"ระบบจะปิด Session ใน {self.left} วินาที...")
         if self.left <= 0:
@@ -338,6 +358,12 @@ class ViolationDialog(QDialog):
                 self.reject()
             else:
                 self.accept()
+
+    def _update_countdown_text(self):
+        self.countdown_lbl.setText(
+            f"หากขอโอกาส จะมีเวลา {self.grace_minutes} นาทีเพื่อปิดโปรแกรม/เว็บไซต์ "
+            f"หากยังเปิดอยู่ระบบจะแจ้งเตือนอีกครั้ง\nเลือกภายใน {self.left} วินาที"
+        )
 
 
 # ── SessionInfoBar ────────────────────────────────────────────────────────────
@@ -356,13 +382,14 @@ class SessionInfoBar(QWidget):
             Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(340, 140)
-
-        screen = QApplication.primaryScreen().geometry()
-        self.move(screen.width() - 360, 40)
+        self._expanded = False
+        self._compact_size = (56, 56)
+        self._expanded_size = (340, 150)
+        self.setFixedSize(*self._compact_size)
+        self._position_on_screen()
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setContentsMargins(4, 4, 4, 4)
 
         self.container = QFrame()
         self.container.setStyleSheet("""
@@ -380,17 +407,40 @@ class SessionInfoBar(QWidget):
         self.container.setGraphicsEffect(shadow)
 
         inner = QVBoxLayout(self.container)
-        inner.setContentsMargins(20, 15, 20, 15)
-        inner.setSpacing(8)
+        inner.setContentsMargins(6, 6, 6, 6)
+        inner.setSpacing(6)
+
+        header = QHBoxLayout()
+        header.setSpacing(8)
+        self.status_label = QLabel("●  กำลังตรวจสอบ")
+        self.status_label.setStyleSheet(
+            "color: #22c55e; font-family: 'Segoe UI'; font-size: 12px; font-weight: bold; border: none; background: transparent;"
+        )
+        self.status_label.hide()
+        header.addWidget(self.status_label, 1)
+
+        self.toggle_btn = QPushButton("⌄")
+        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.toggle_btn.setFixedSize(28, 28)
+        self.toggle_btn.setToolTip("เปิดรายละเอียด Session")
+        self.toggle_btn.setStyleSheet(
+            "QPushButton { color: #cbd5e1; background: rgba(255,255,255,18); "
+            "border: none; border-radius: 8px; font-size: 16px; font-weight: bold; }"
+            "QPushButton:hover { background: rgba(255,255,255,35); }"
+        )
+        self.toggle_btn.clicked.connect(self._toggle_expanded)
+        header.addWidget(self.toggle_btn)
+        inner.addLayout(header)
+
+        self.details_widget = QWidget()
+        details = QVBoxLayout(self.details_widget)
+        details.setContentsMargins(0, 0, 0, 0)
+        details.setSpacing(6)
 
         self.user_label = QLabel(f"👤  {self.email}")
+        self.user_label.setWordWrap(True)
         self.user_label.setStyleSheet(
-            "color: #cbd5e1; font-family: 'Segoe UI'; font-size: 13px; border: none; background: transparent;"
-        )
-
-        self.status_label = QLabel("●  กำลังตรวจสอบการใช้งาน")
-        self.status_label.setStyleSheet(
-            "color: #22c55e; font-family: 'Segoe UI'; font-size: 15px; font-weight: bold; border: none; background: transparent;"
+            "color: #cbd5e1; font-family: 'Segoe UI'; font-size: 12px; border: none; background: transparent;"
         )
 
         self.logout_btn = QPushButton("จบการทำงาน")
@@ -406,10 +456,29 @@ class SessionInfoBar(QWidget):
         """)
         self.logout_btn.clicked.connect(self._confirm_logout)
 
-        inner.addWidget(self.user_label)
-        inner.addWidget(self.status_label)
-        inner.addWidget(self.logout_btn)
+        details.addWidget(self.user_label)
+        details.addWidget(self.logout_btn)
+        self.details_widget.hide()
+        inner.addWidget(self.details_widget)
         outer.addWidget(self.container)
+
+    def _position_on_screen(self):
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        geometry = screen.availableGeometry()
+        self.move(geometry.x() + geometry.width() - self.width() - 12, geometry.y() + 12)
+
+    def _toggle_expanded(self):
+        self._expanded = not self._expanded
+        self.details_widget.setVisible(self._expanded)
+        self.status_label.setVisible(self._expanded)
+        self.toggle_btn.setText("⌃" if self._expanded else "⌄")
+        self.toggle_btn.setToolTip(
+            "ซ่อนรายละเอียด Session" if self._expanded else "เปิดรายละเอียด Session"
+        )
+        self.setFixedSize(*(self._expanded_size if self._expanded else self._compact_size))
+        self._position_on_screen()
 
     def _confirm_logout(self):
         # ใช้ QDialog() ไม่มี parent — Tool window เป็น parent ไม่ได้ dialog จะไม่รับ event
@@ -546,6 +615,7 @@ class LoginOverlay(QWidget):
             "color: #dc2626; background-color: #fee2e2; padding: 10px; border-radius: 8px; margin-top: 15px;"
         )
         self.error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.error_label.setWordWrap(True)
         self.error_label.hide()
         cl.addWidget(self.error_label)
 
@@ -802,7 +872,10 @@ class SmartLabAgent:
         self.policy_token = None
         self.seen_process_ids = set()
         self.seen_visible_process_ids = set()
+        self.seen_visible_window_handles_by_pid = {}
+        self.pending_window_reopen_process_ids = set()
         self.window_visibility_monitor = None
+        self._last_track_usage_error = None
         self.violation_reported = False
         self.violation_state = ViolationState()
         self.violation_grace_context = None
@@ -1038,6 +1111,8 @@ class SmartLabAgent:
         self.policy_token = None
         self.seen_process_ids.clear()
         self.seen_visible_process_ids.clear()
+        self.seen_visible_window_handles_by_pid = _visible_window_handles_by_pid()
+        self.pending_window_reopen_process_ids = set()
         self.violation_reported = False
         self.violation_state.reset()
         self.violation_grace_context = None
@@ -1242,6 +1317,7 @@ class SmartLabAgent:
                 max_attempts=self.violation_state.max_attempts,
                 allow_grace=True,
                 warning_seconds=DEFAULT_WARNING_SECONDS,
+                grace_seconds=self.violation_state.grace_seconds,
             )
             chance_requested = dialog.exec() == QDialog.DialogCode.Accepted
         except Exception as exc:
@@ -1395,14 +1471,35 @@ class SmartLabAgent:
             return monitor.consume_shown_process_ids()
         except Exception as exc:
             print(f"อ่าน event การเปิดหน้าต่างไม่สำเร็จ: {exc}")
+            self._stop_window_visibility_monitor()
             return set()
 
     def _find_new_process_match(self, shown_process_ids=None):
         """Inspect newly started processes and re-opened visible apps once."""
         shown_process_ids = set(shown_process_ids or ())
         current_process_ids = set()
-        current_visible_process_ids = _visible_window_process_ids()
+        current_visible_window_handles_by_pid = _visible_window_handles_by_pid()
+        current_visible_process_ids = set(current_visible_window_handles_by_pid)
         previous_visible_process_ids = getattr(self, "seen_visible_process_ids", set())
+        previous_visible_window_handles_by_pid = getattr(
+            self, "seen_visible_window_handles_by_pid", {}
+        )
+        pending_reopens = set(getattr(self, "pending_window_reopen_process_ids", set()))
+        added_window_process_ids = set()
+        for process_id in (
+            set(previous_visible_window_handles_by_pid)
+            | set(current_visible_window_handles_by_pid)
+        ):
+            previous_handles = previous_visible_window_handles_by_pid.get(process_id, set())
+            current_handles = current_visible_window_handles_by_pid.get(process_id, set())
+            if previous_handles - current_handles:
+                pending_reopens.add(process_id)
+            if current_handles - previous_handles:
+                added_window_process_ids.add(process_id)
+
+        reopened_window_process_ids = pending_reopens & added_window_process_ids
+        pending_reopens.difference_update(added_window_process_ids)
+        self.seen_visible_window_handles_by_pid = current_visible_window_handles_by_pid
         match = None
 
         for proc in psutil.process_iter(["pid", "name"]):
@@ -1418,8 +1515,9 @@ class SmartLabAgent:
                     process_id in current_visible_process_ids
                     and process_id not in previous_visible_process_ids
                 )
+                reopened_window = process_id in reopened_window_process_ids
                 shown_again = process_id in shown_process_ids
-                if not newly_started and not newly_visible and not shown_again:
+                if not newly_started and not newly_visible and not reopened_window and not shown_again:
                     continue
 
                 process_name = (proc.info.get("name") or "").strip()
@@ -1447,6 +1545,8 @@ class SmartLabAgent:
 
         self.seen_process_ids = current_process_ids
         self.seen_visible_process_ids = current_visible_process_ids
+        pending_reopens.intersection_update(current_process_ids)
+        self.pending_window_reopen_process_ids = pending_reopens
         monitor = getattr(self, "window_visibility_monitor", None)
         if monitor is not None:
             try:
@@ -1548,9 +1648,15 @@ class SmartLabAgent:
             active_win = gw.getActiveWindow()
             app_name = _usage_name_for_window(active_win) if active_win else None
             self._track_active_activity(app_name, _utc_now())
+            self._last_track_usage_error = None
 
-        except Exception:
-            pass
+        except Exception as exc:
+            error_type = type(exc).__name__
+            now = time.monotonic()
+            last_error = getattr(self, "_last_track_usage_error", None)
+            if last_error is None or last_error[0] != error_type or now - last_error[1] >= 60:
+                _append_monitor_error_log(error_type)
+                self._last_track_usage_error = (error_type, now)
 
     def _cleanup_session(self):
         cleanup = self.session_cleanup
@@ -1730,6 +1836,8 @@ class SmartLabAgent:
         self.policy_token = None
         self.seen_process_ids.clear()
         self.seen_visible_process_ids.clear()
+        self.seen_visible_window_handles_by_pid = {}
+        self.pending_window_reopen_process_ids = set()
         self.violation_state.reset()
         self.violation_grace_context = None
         self.violation_dialog_active = False

@@ -682,7 +682,7 @@ class AgentTelemetryTests(unittest.TestCase):
                 process = SimpleNamespace(info={"pid": 123, "name": observed},
                                           exe=Mock(return_value=r"C:\apps\program.exe"))
                 with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
-                    agent, "_visible_window_process_ids", return_value=set(),
+                    agent, "_visible_window_handles_by_pid", return_value={},
                 ), patch.object(
                     agent, "read_executable_identity", return_value={"original_filename": original},
                 ):
@@ -699,7 +699,7 @@ class AgentTelemetryTests(unittest.TestCase):
             exe=Mock(return_value=r"C:\blocked.exe"),
         )
         with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
-            agent, "_visible_window_process_ids", return_value=set(),
+            agent, "_visible_window_handles_by_pid", return_value={},
         ), patch.object(
             agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"},
         ):
@@ -710,7 +710,7 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertIsNone(closed_but_resident)
 
         with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
-            agent, "_visible_window_process_ids", return_value={123},
+            agent, "_visible_window_handles_by_pid", return_value={123: {100}},
         ), patch.object(
             agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"},
         ):
@@ -720,6 +720,33 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertIsNotNone(reopened)
         self.assertTrue(reopened[6])
         self.assertIsNone(same_open_episode)
+
+    def test_polling_fallback_detects_recreated_window_with_other_window_still_visible(self):
+        instance = self.make_agent()
+        instance.seen_process_ids = {123}
+        instance.seen_visible_process_ids = {123}
+        instance.seen_visible_window_handles_by_pid = {123: {100, 101}}
+        instance.pending_window_reopen_process_ids = set()
+        instance.window_visibility_monitor = None
+        process = SimpleNamespace(
+            info={"pid": 123, "name": "blocked.exe"},
+            exe=Mock(return_value=r"C:\blocked.exe"),
+        )
+
+        with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
+            agent, "_visible_window_handles_by_pid", side_effect=[
+                {123: {101}},
+                {123: {101, 200}},
+            ],
+        ), patch.object(
+            agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"},
+        ):
+            closed_window = instance._find_new_process_match()
+            reopened_window = instance._find_new_process_match()
+
+        self.assertIsNone(closed_window)
+        self.assertIsNotNone(reopened_window)
+        self.assertEqual(reopened_window[5], 123)
 
     def test_window_event_catches_reopen_between_ticks_during_grace(self):
         instance = self.make_agent()
@@ -744,7 +771,7 @@ class AgentTelemetryTests(unittest.TestCase):
         )
 
         with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
-            agent, "_visible_window_process_ids", return_value={123},
+            agent, "_visible_window_handles_by_pid", return_value={123: {100}},
         ), patch.object(
             agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"},
         ):
@@ -1136,6 +1163,68 @@ class AgentTelemetryTests(unittest.TestCase):
         payload = instance._queue_outbox.call_args.kwargs["payload"]
         self.assertEqual(payload["detected_at"], "2026-10-22T10:00:00+00:00")
         self.assertEqual(payload["policy_token"], "original-receipt")
+
+
+class AgentUiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = agent.QApplication.instance() or agent.QApplication([])
+
+    def test_session_end_button_is_hidden_until_info_bar_expands(self):
+        bar = agent.SessionInfoBar("qa@example.com", None, 12)
+        bar.show()
+        self.app.processEvents()
+
+        self.assertEqual(bar.size().width(), bar._compact_size[0])
+        self.assertFalse(bar.logout_btn.isVisible())
+        self.assertEqual(bar.toggle_btn.text(), "⌄")
+
+        bar.toggle_btn.click()
+        self.app.processEvents()
+        self.assertTrue(bar.logout_btn.isVisible())
+        self.assertEqual(bar.size().width(), bar._expanded_size[0])
+
+        bar.toggle_btn.click()
+        self.app.processEvents()
+        self.assertFalse(bar.logout_btn.isVisible())
+        bar.close()
+
+    def test_login_error_label_wraps_long_messages(self):
+        overlay = agent.LoginOverlay(SimpleNamespace(set_ui_references=Mock()))
+        overlay.focus_timer.stop()
+
+        self.assertTrue(overlay.error_label.wordWrap())
+        overlay.close()
+
+    def test_violation_prompt_explains_the_grace_period_and_repeat_warning(self):
+        dialog = agent.ViolationDialog(
+            "Blocked App",
+            attempt=1,
+            max_attempts=3,
+            allow_grace=True,
+            warning_seconds=15,
+            grace_seconds=300,
+        )
+        dialog.timer.stop()
+
+        self.assertIn("5 นาที", dialog.countdown_lbl.text())
+        self.assertIn("แจ้งเตือนอีกครั้ง", dialog.countdown_lbl.text())
+        dialog.close()
+
+    def test_monitor_diagnostic_log_is_local_small_and_contains_no_raw_error(self):
+        with tempfile.TemporaryDirectory() as temp_dir, patch.object(
+            agent, "get_agent_data_dir", return_value=Path(temp_dir),
+        ):
+            agent._append_monitor_error_log("RuntimeError")
+            log_path = Path(temp_dir) / "monitor-errors.log"
+
+            self.assertTrue(log_path.exists())
+            content = log_path.read_text(encoding="utf-8")
+            size = log_path.stat().st_size
+
+        self.assertIn("RuntimeError", content)
+        self.assertNotIn("password", content.casefold())
+        self.assertLess(size, 1024)
 
 
 if __name__ == "__main__":

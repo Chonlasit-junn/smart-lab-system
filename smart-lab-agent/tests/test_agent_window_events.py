@@ -19,7 +19,7 @@ class WindowVisibilityTrackerTests(unittest.TestCase):
         self.assertEqual(tracker.consume_shown_process_ids(), {42})
         self.assertEqual(tracker.consume_shown_process_ids(), set())
 
-    def test_other_visible_window_prevents_false_reopen(self):
+    def test_hidden_window_reopen_is_detected_even_if_another_window_remains_visible(self):
         tracker = WindowVisibilityTracker()
         tracker.seed_visible_window(100, 42)
         tracker.seed_visible_window(101, 42)
@@ -27,7 +27,17 @@ class WindowVisibilityTrackerTests(unittest.TestCase):
         tracker.handle_event(EVENT_OBJECT_HIDE, 100, 42)
         tracker.handle_event(EVENT_OBJECT_SHOW, 100, 42)
 
-        self.assertEqual(tracker.consume_shown_process_ids(), set())
+        self.assertEqual(tracker.consume_shown_process_ids(), {42})
+
+    def test_destroyed_window_reopen_is_detected_even_if_another_window_remains_visible(self):
+        tracker = WindowVisibilityTracker()
+        tracker.seed_visible_window(100, 42)
+        tracker.seed_visible_window(101, 42)
+
+        tracker.handle_event(EVENT_OBJECT_DESTROY, 100, 42)
+        tracker.handle_event(EVENT_OBJECT_SHOW, 200, 42)
+
+        self.assertEqual(tracker.consume_shown_process_ids(), {42})
 
     def test_destroyed_last_window_then_new_window_counts_as_reopen(self):
         tracker = WindowVisibilityTracker()

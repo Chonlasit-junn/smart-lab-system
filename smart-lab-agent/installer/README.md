@@ -118,7 +118,7 @@ flow. The Gatekeeper MSI installs separately under `Smart Lab\Face Scanner`.
 
 ```powershell
 # Current Agent source, QA-only booking-time bypass
-.\smart-lab-agent\installer\build_msi.ps1 -Product Agent -Version 1.1.11 -QaNoBookingTime
+.\smart-lab-agent\installer\build_msi.ps1 -Product Agent -Version 1.1.13 -QaNoBookingTime
 
 # Standalone face scanner
 .\smart-lab-agent\installer\build_msi.ps1 -Product Gatekeeper -Version 1.0.0
@@ -135,6 +135,8 @@ regular Agent does not replace that Agent's saved device credential. The bypass 
 only the booking time-window check and still requires a same-day reserved or
 attended booking, an authenticated matching user, a registered active Lab device,
 an active Lab, Guest approval, and no active ban. Keep this flag off in production.
+The QA Agent writes monitor exception timestamps and exception types only to
+`%LOCALAPPDATA%\SmartLabAgentQA\SmartLabAgent\monitor-errors.log`.
 
 Gatekeeper registers a distinct `gatekeeper-…` device against its selected Lab
 and stores its credential in the current Windows user's LocalAppData. Migration
