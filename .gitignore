@@ -10,6 +10,10 @@ smart-lab-agent/dist_*/
 build/
 .npm/
 
+# --- Installers and compiled applications (keep out of Git) ---
+*.exe
+*.msi
+
 # --- Python / Backend / Gatekeeper / Agent ---
 __pycache__/
 *.py[cod]
