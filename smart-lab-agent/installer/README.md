@@ -117,8 +117,8 @@ the bundled FP32 model, camera startup improvements, and the scanner registratio
 flow. The Gatekeeper MSI installs separately under `Smart Lab\Face Scanner`.
 
 ```powershell
-# Current Agent source, QA-only booking-time bypass
-.\smart-lab-agent\installer\build_msi.ps1 -Product Agent -Version 1.1.13 -QaNoBookingTime
+# Isolated QA Agent; booking and access checks remain enabled
+.\smart-lab-agent\installer\build_msi.ps1 -Product Agent -Version 1.1.14 -QaAgent
 
 # Standalone face scanner
 .\smart-lab-agent\installer\build_msi.ps1 -Product Gatekeeper -Version 1.0.0
@@ -127,14 +127,13 @@ flow. The Gatekeeper MSI installs separately under `Smart Lab\Face Scanner`.
 The QA installer provides a **Register QA Agent** shortcut. It launches the
 registration wizard in the same isolated QA data directory used by the QA Agent,
 so the device credential saved after registration is visible to that Agent. The
-Agent QA shortcut sends `X-SmartLab-QA-No-Booking-Time: 1` only when it starts
-the app. Registration state and outbox data are kept separately under
+QA Agent uses a separate local data directory from the regular Agent.
+Registration state and outbox data are kept separately under
 `%LOCALAPPDATA%\SmartLabAgentQA\SmartLabAgent`, so installing it beside a
-regular Agent does not replace that Agent's saved device credential. The bypass is honored only if the QA Backend also has
-`SMART_LAB_AGENT_QA_NO_BOOKING_TIME=1`; it remains disabled otherwise. It skips
-only the booking time-window check and still requires a same-day reserved or
-attended booking, an authenticated matching user, a registered active Lab device,
-an active Lab, Guest approval, and no active ban. Keep this flag off in production.
+regular Agent does not replace that Agent's saved device credential. QA sessions
+must meet the same booking time-window, user approval, active Lab, registered
+device, and ban checks as regular sessions. The QA build does not bypass booking
+time or other access policies.
 The QA Agent writes monitor exception timestamps and exception types only to
 `%LOCALAPPDATA%\SmartLabAgentQA\SmartLabAgent\monitor-errors.log`.
 

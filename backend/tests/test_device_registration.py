@@ -382,7 +382,7 @@ class DeviceRegistrationTests(unittest.TestCase):
         self.assertEqual(access_log.lab_device_id, device.id)
         self.assertEqual(access_log.booking_id, booking.id)
 
-    def test_qa_booking_time_bypass_requires_both_backend_flag_and_client_header(self):
+    def test_start_session_enforces_booking_window_even_if_legacy_qa_flag_is_set(self):
         registration = devices.register_device_as_admin(
             devices.AdminDeviceRegister(
                 lab_id=self.lab.id,
@@ -407,7 +407,7 @@ class DeviceRegistrationTests(unittest.TestCase):
             booking_date=date(2026, 9, 22),
             start_time=time(10, 0),
             end_time=time(12, 0),
-            purpose="QA time bypass",
+            purpose="Booking window enforcement",
             total_participants=1,
             status="reserved",
         )
@@ -415,58 +415,30 @@ class DeviceRegistrationTests(unittest.TestCase):
         self.session.commit()
 
         with (
+            patch.dict(os.environ, {"SMART_LAB_AGENT_QA_NO_BOOKING_TIME": "1"}),
             patch.object(agent, "lab_now_naive", return_value=datetime(2026, 9, 22, 9, 0)),
             patch.object(agent, "mark_due_no_shows", return_value=0),
             patch.object(agent, "_cleanup_stale_sessions", return_value=0),
         ):
-            with patch.dict(os.environ, {agent.QA_BOOKING_TIME_BYPASS_ENV: "0"}):
-                with self.assertRaises(HTTPException) as disabled:
-                    agent.start_session(
-                        email=student.email,
-                        device="LAB-PC-QA",
-                        device_mac="15:22:33:44:55:66",
-                        device_id=registration["device_id"],
-                        device_token=registration["device_token"],
-                        agent_version="qa",
-                        qa_no_booking_time="1",
-                        current_user=student,
-                        db=self.session,
-                    )
-            self.assertEqual(disabled.exception.status_code, 403)
-
-            with patch.dict(os.environ, {agent.QA_BOOKING_TIME_BYPASS_ENV: "1"}):
-                with self.assertRaises(HTTPException) as missing_header:
-                    agent.start_session(
-                        email=student.email,
-                        device="LAB-PC-QA",
-                        device_mac="15:22:33:44:55:66",
-                        device_id=registration["device_id"],
-                        device_token=registration["device_token"],
-                        agent_version="qa",
-                        current_user=student,
-                        db=self.session,
-                    )
-                self.assertEqual(missing_header.exception.status_code, 403)
-
-                result = agent.start_session(
+            with self.assertRaises(HTTPException) as raised:
+                agent.start_session(
                     email=student.email,
                     device="LAB-PC-QA",
                     device_mac="15:22:33:44:55:66",
                     device_id=registration["device_id"],
                     device_token=registration["device_token"],
                     agent_version="qa",
-                    client_session_id="qa-session-time-bypass",
-                    qa_no_booking_time="1",
                     current_user=student,
                     db=self.session,
                 )
 
-        access_log = self.session.get(models.LabAccessLog, result["session_id"])
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertIn("booking", raised.exception.detail.lower())
         self.session.refresh(booking)
-        self.assertEqual(access_log.booking_id, booking.id)
-        self.assertEqual(booking.status, "attended")
+        self.assertEqual(booking.status, "reserved")
+        self.assertEqual(self.session.query(models.LabAccessLog).count(), 0)
 
-    def test_qa_booking_time_bypass_does_not_allow_missing_same_day_booking(self):
+    def test_start_session_rejects_missing_booking_even_if_legacy_qa_flag_is_set(self):
         registration = devices.register_device_as_admin(
             devices.AdminDeviceRegister(
                 lab_id=self.lab.id,
@@ -487,7 +459,7 @@ class DeviceRegistrationTests(unittest.TestCase):
         self.session.commit()
 
         with (
-            patch.dict(os.environ, {agent.QA_BOOKING_TIME_BYPASS_ENV: "1"}),
+            patch.dict(os.environ, {"SMART_LAB_AGENT_QA_NO_BOOKING_TIME": "1"}),
             patch.object(agent, "lab_now_naive", return_value=datetime(2026, 9, 22, 9, 0)),
             patch.object(agent, "mark_due_no_shows", return_value=0),
             patch.object(agent, "_cleanup_stale_sessions", return_value=0),
@@ -500,7 +472,6 @@ class DeviceRegistrationTests(unittest.TestCase):
                     device_id=registration["device_id"],
                     device_token=registration["device_token"],
                     agent_version="qa",
-                    qa_no_booking_time="1",
                     current_user=student,
                     db=self.session,
                 )

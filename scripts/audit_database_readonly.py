@@ -1,6 +1,6 @@
 """Read-only PostgreSQL audit. Outputs metadata and counts, never row contents.
 
-Run from the repository root with backend/venv/Scripts/python.exe -B.
+Run from the repository root with backend/.venv/Scripts/python.exe -B.
 Does not import the application, create tables, run migrations or write reports.
 """
 

@@ -739,6 +739,9 @@ export default function AdminPointPolicy() {
                 className="admin-point-policy-actions"
                 sx={{
                   display: "flex",
+                  position: "static",
+                  bottom: "auto",
+                  zIndex: "auto",
                   justifyContent: "flex-end",
                   gap: 1.5,
                   flexWrap: "wrap",

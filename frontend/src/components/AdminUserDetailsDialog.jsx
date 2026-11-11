@@ -416,6 +416,7 @@ export default function AdminUserDetailsDialog({
           height: isMobile ? "100dvh" : "auto",
           minHeight: isMobile ? 0 : "min(760px, calc(100dvh - 64px))",
           maxHeight: isMobile ? "100dvh" : "calc(100dvh - 64px)",
+          overflow: "hidden",
           margin: isMobile ? 0 : undefined,
           borderRadius: isMobile ? 0 : 4,
         },
@@ -446,67 +447,93 @@ export default function AdminUserDetailsDialog({
         </Box>
       </DialogTitle>
 
+      <Box sx={{ flex: "0 0 auto", bgcolor: "#fff", borderBottom: "1px solid #e2e8f0" }}>
+        <Tabs
+          value={tab}
+          onChange={onTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            px: { xs: 1, md: 2 },
+            "& .MuiTab-root": { textTransform: "none", fontWeight: "700", minHeight: 58 },
+          }}
+        >
+          {tabs.map((item) => <Tab key={item.label} label={`${item.label} (${item.count})`} />)}
+        </Tabs>
+      </Box>
+
       <DialogContent
-        className="page-content"
+        className="admin-user-details-dialog-frame"
         dividers
         sx={{
-          p: { xs: 2, md: 4 },
+          p: 0,
           bgcolor: "#fcfdfe",
-          flex: "1 1 auto",
+          flex: "1 1 0%",
+          height: "auto",
           minHeight: 0,
-          overflowY: "auto",
-          WebkitOverflowScrolling: "touch",
-          overscrollBehaviorY: "contain",
-          pb: isMobile ? "calc(16px + env(safe-area-inset-bottom))" : undefined,
+          overflow: "hidden",
         }}
       >
-        {error && <LoadError onRetry={onRetry} />}
+        <Box
+          className="admin-user-details-scroll-area"
+          sx={{
+            p: { xs: 2, md: 4 },
+            height: "100%",
+            boxSizing: "border-box",
+            minHeight: 0,
+            overflowY: "auto",
+            overflowX: "hidden",
+            WebkitOverflowScrolling: "touch",
+            overscrollBehaviorY: "contain",
+            touchAction: "pan-y",
+            pb: isMobile ? "calc(16px + env(safe-area-inset-bottom))" : undefined,
+          }}
+        >
+          {error && <LoadError onRetry={onRetry} />}
 
-        {loading && !detail ? (
-          <Box sx={{ minHeight: 420, display: "flex", justifyContent: "center", alignItems: "center" }}>
-            <CircularProgress aria-label={t("common.loading")} />
-          </Box>
-        ) : detail ? (
-          <>
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) minmax(0, 1fr)" }, gap: 2.5, mb: 3 }}>
-              <Paper className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
-                <Typography variant="subtitle2" fontWeight="700" color="#64748b" sx={{ mb: 2 }}>{t("admin.userDetails.accountDetails")}</Typography>
-                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 2 }}>
-                  <ProfileField label={t("admin.userDetails.studentId")} value={profile.student_id} fallback={t("common.notSpecified")} />
-                  <ProfileField label={t("common.phone")} value={profile.phone} fallback={t("common.notSpecified")} />
-                  <ProfileField label={t("admin.userDetails.faculty")} value={profile.faculty} fallback={t("common.notSpecified")} />
-                  <ProfileField label={t("admin.userDetails.department")} value={profile.department} fallback={t("common.notSpecified")} />
-                  <ProfileField label={t("admin.userDetails.createdAt")} value={formatDateTime(profile.created_at, locale)} fallback={t("common.noData")} />
-                  <ProfileField label={t("admin.lastUpdated")} value={formatDateTime(profile.updated_at, locale)} fallback={t("common.noData")} />
-                </Box>
-              </Paper>
-              <Paper className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
-                <Typography variant="subtitle2" fontWeight="700" color="#64748b" sx={{ mb: 2 }}>{t("admin.userDetails.accountStatusAndUsage")}</Typography>
-                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 2 }}>
-                  <Box><Typography variant="caption" color="#94a3b8">{t("common.points")}</Typography><Typography className="theme-colored" variant="h5" fontWeight="700" color={getScoreColor(pointValue)}>{pointValue}/100</Typography></Box>
-                  <Box><Typography variant="caption" color="#94a3b8">{t("user.todayPoints")}</Typography><Typography className="theme-colored" variant="h5" fontWeight="700" color="#2563eb">{dailyValue}/100</Typography></Box>
-                  <Box><Typography variant="caption" color="#94a3b8">{t("admin.userDetails.bookingAccess")}</Typography><Box sx={{ mt: 0.6 }}><Chip icon={points.booking_allowed ? <CheckCircle /> : <Block />} label={points.booking_allowed ? t("admin.bookingAllowed") : t("admin.bookingBanned")} size="small" sx={{ bgcolor: points.booking_allowed ? "#ecfdf5" : "#fef2f2", color: points.booking_allowed ? "#047857" : "#b91c1c", fontWeight: "700", "& .MuiChip-icon": { color: "inherit" } }} /></Box></Box>
-                  <Box><Typography variant="caption" color="#94a3b8">{t("admin.userDetails.historySummary")}</Typography><Typography variant="body2" color="#334155" fontWeight="600" sx={{ mt: 0.7 }}>{summary.total_sessions || 0} {t("admin.userDetails.sessions")} · {summary.total_bookings || 0} {t("admin.userDetails.bookings")}</Typography></Box>
+          {loading && !detail ? (
+            <Box sx={{ minHeight: 420, display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <CircularProgress aria-label={t("common.loading")} />
+            </Box>
+          ) : detail ? (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5, minHeight: "max-content" }}>
+              <Box sx={{ order: { xs: 2, md: 1 }, display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) minmax(0, 1fr)" }, gap: 2.5, flexShrink: 0 }}>
+                <Paper className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
+                  <Typography variant="subtitle2" fontWeight="700" color="#64748b" sx={{ mb: 2 }}>{t("admin.userDetails.accountDetails")}</Typography>
+                  <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 2 }}>
+                    <ProfileField label={t("admin.userDetails.studentId")} value={profile.student_id} fallback={t("common.notSpecified")} />
+                    <ProfileField label={t("common.phone")} value={profile.phone} fallback={t("common.notSpecified")} />
+                    <ProfileField label={t("admin.userDetails.faculty")} value={profile.faculty} fallback={t("common.notSpecified")} />
+                    <ProfileField label={t("admin.userDetails.department")} value={profile.department} fallback={t("common.notSpecified")} />
+                    <ProfileField label={t("admin.userDetails.createdAt")} value={formatDateTime(profile.created_at, locale)} fallback={t("common.noData")} />
+                    <ProfileField label={t("admin.lastUpdated")} value={formatDateTime(profile.updated_at, locale)} fallback={t("common.noData")} />
+                  </Box>
+                </Paper>
+                <Paper className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
+                  <Typography variant="subtitle2" fontWeight="700" color="#64748b" sx={{ mb: 2 }}>{t("admin.userDetails.accountStatusAndUsage")}</Typography>
+                  <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 2 }}>
+                    <Box><Typography variant="caption" color="#94a3b8">{t("common.points")}</Typography><Typography className="theme-colored" variant="h5" fontWeight="700" color={getScoreColor(pointValue)}>{pointValue}/100</Typography></Box>
+                    <Box><Typography variant="caption" color="#94a3b8">{t("user.todayPoints")}</Typography><Typography className="theme-colored" variant="h5" fontWeight="700" color="#2563eb">{dailyValue}/100</Typography></Box>
+                    <Box><Typography variant="caption" color="#94a3b8">{t("admin.userDetails.bookingAccess")}</Typography><Box sx={{ mt: 0.6 }}><Chip icon={points.booking_allowed ? <CheckCircle /> : <Block />} label={points.booking_allowed ? t("admin.bookingAllowed") : t("admin.bookingBanned")} size="small" sx={{ bgcolor: points.booking_allowed ? "#ecfdf5" : "#fef2f2", color: points.booking_allowed ? "#047857" : "#b91c1c", fontWeight: "700", "& .MuiChip-icon": { color: "inherit" } }} /></Box></Box>
+                    <Box><Typography variant="caption" color="#94a3b8">{t("admin.userDetails.historySummary")}</Typography><Typography variant="body2" color="#334155" fontWeight="600" sx={{ mt: 0.7 }}>{summary.total_sessions || 0} {t("admin.userDetails.sessions")} · {summary.total_bookings || 0} {t("admin.userDetails.bookings")}</Typography></Box>
+                  </Box>
+                </Paper>
+              </Box>
+
+              <Paper className="surface-card data-table-shell" elevation={0} sx={{ order: { xs: 1, md: 2 }, flexShrink: 0, borderRadius: 3, border: "1px solid #e2e8f0", overflow: "hidden", bgcolor: "white" }}>
+                <Box sx={{ p: { xs: 0, md: 1 } }}>
+                  <Box sx={historyPanelScrollSx}>
+                    {tab === 0 && <UserBookings rows={detail.bookings || []} t={t} locale={locale} />}
+                    {tab === 1 && <UserSessions rows={detail.sessions || []} t={t} locale={locale} />}
+                    {tab === 2 && <UserProgramUsage rows={detail.program_usage || []} t={t} locale={locale} />}
+                    {tab === 3 && <UserPointHistory pointLogs={detail.point_history || []} dailyScores={detail.daily_scores || []} t={t} locale={locale} />}
+                    {tab === 4 && <UserViolations rows={detail.violations || []} t={t} locale={locale} />}
+                  </Box>
                 </Box>
               </Paper>
             </Box>
-
-            <Paper className="surface-card data-table-shell" elevation={0} sx={{ borderRadius: 3, border: "1px solid #e2e8f0", overflow: "hidden", bgcolor: "white" }}>
-              <Tabs value={tab} onChange={onTabChange} variant="scrollable" scrollButtons="auto" sx={{ px: { xs: 1, md: 2 }, borderBottom: "1px solid #e2e8f0", "& .MuiTab-root": { textTransform: "none", fontWeight: "700", minHeight: 58 } }}>
-                {tabs.map((item) => <Tab key={item.label} label={`${item.label} (${item.count})`} />)}
-              </Tabs>
-              <Box sx={{ p: { xs: 0, md: 1 } }}>
-                <Box sx={historyPanelScrollSx}>
-                  {tab === 0 && <UserBookings rows={detail.bookings || []} t={t} locale={locale} />}
-                  {tab === 1 && <UserSessions rows={detail.sessions || []} t={t} locale={locale} />}
-                  {tab === 2 && <UserProgramUsage rows={detail.program_usage || []} t={t} locale={locale} />}
-                  {tab === 3 && <UserPointHistory pointLogs={detail.point_history || []} dailyScores={detail.daily_scores || []} t={t} locale={locale} />}
-                  {tab === 4 && <UserViolations rows={detail.violations || []} t={t} locale={locale} />}
-                </Box>
-              </Box>
-            </Paper>
-          </>
-        ) : null}
+          ) : null}
+        </Box>
       </DialogContent>
     </Dialog>
   );

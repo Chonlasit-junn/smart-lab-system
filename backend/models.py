@@ -1,14 +1,19 @@
-from sqlalchemy import BigInteger, CheckConstraint, Column, Float, Integer, String, DateTime, Boolean, ForeignKey, Date, Time, Text
+from sqlalchemy import BigInteger, CheckConstraint, Column, Float, Index, Integer, String, DateTime, Boolean, ForeignKey, Date, Time, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
 
 
+# SQLite integration tests use INTEGER for autoincrementing primary keys;
+# PostgreSQL uses the BIGINT types already present in the deployed schema.
+BIGINT_ID = BigInteger().with_variant(Integer, "sqlite")
+
+
 class UserOTP(Base):
     __tablename__ = "user_otps"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     email = Column(String, index=True, nullable=False)
     otp_code = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -18,7 +23,17 @@ class RegistrationOTP(Base):
     """One current challenge per canonical email; legacy OTP rows are untouched."""
 
     __tablename__ = "registration_otps"
-    __table_args__ = {"info": {"manual_migration": True}}
+    __table_args__ = (
+        CheckConstraint(
+            "failed_attempts BETWEEN 0 AND 5 AND window_attempts BETWEEN 0 AND 5",
+            name="registration_otps_attempts_check",
+        ),
+        CheckConstraint(
+            "email = lower(trim(email)) AND trim(email) <> ''",
+            name="registration_otps_email_check",
+        ),
+        {"info": {"manual_migration": True}},
+    )
 
     email = Column(String, primary_key=True)
     challenge_id = Column(String(32), nullable=True)
@@ -34,7 +49,17 @@ class RegistrationOTP(Base):
 
 class PasswordResetOTP(Base):
     __tablename__ = "password_reset_otps"
-    __table_args__ = {"info": {"manual_migration": True}}
+    __table_args__ = (
+        CheckConstraint(
+            "failed_attempts BETWEEN 0 AND 5 AND window_attempts BETWEEN 0 AND 5",
+            name="password_reset_otps_attempts_check",
+        ),
+        CheckConstraint(
+            "email = lower(trim(email)) AND trim(email) <> ''",
+            name="password_reset_otps_email_check",
+        ),
+        {"info": {"manual_migration": True}},
+    )
 
     email = Column(String, primary_key=True)
     challenge_id = Column(String(32), nullable=True)
@@ -46,7 +71,7 @@ class PasswordResetOTP(Base):
     failed_attempts = Column(Integer, nullable=False, default=0, server_default="0")
     window_attempts = Column(Integer, nullable=False, default=0, server_default="0")
     attempt_window_started_at = Column(DateTime(timezone=True), nullable=True)
-    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     credential_hash = Column(String(64), nullable=True)
 
 
@@ -54,7 +79,11 @@ class OTPIPRateLimit(Base):
     """Hashed client identity and a short-lived OTP request counter."""
 
     __tablename__ = "otp_ip_rate_limits"
-    __table_args__ = {"info": {"manual_migration": True}}
+    __table_args__ = (
+        CheckConstraint("request_count >= 0", name="otp_ip_rate_limits_request_count_check"),
+        CheckConstraint("length(ip_hash) = 64", name="otp_ip_rate_limits_hash_length_check"),
+        {"info": {"manual_migration": True}},
+    )
 
     ip_hash = Column(String(64), primary_key=True)
     window_started_at = Column(DateTime(timezone=True), nullable=False)
@@ -63,8 +92,18 @@ class OTPIPRateLimit(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "email = lower(trim(email)) AND trim(email) <> ''",
+            name="users_email_canonical_check",
+        ),
+        CheckConstraint(
+            "trim(first_name) <> '' AND trim(last_name) <> ''",
+            name="users_names_nonblank_check",
+        ),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(BIGINT_ID, primary_key=True)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
@@ -81,10 +120,11 @@ class User(Base):
 
 class Student(Base):
     __tablename__ = "students"
+    __table_args__ = (Index("idx_students_user_id", "user_id", unique=True),)
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(BIGINT_ID, primary_key=True)
     student_id = Column(String, unique=True, index=True, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id"), nullable=False)
     faculty = Column(String, nullable=True)     # คณะ
     department = Column(String, nullable=True)  # สาขาวิชา
     is_active = Column(Boolean, default=True)
@@ -95,9 +135,10 @@ class Student(Base):
 class UserPassport(Base):
     # guest users only — is_active=False means pending admin approval
     __tablename__ = "user_passport"
+    __table_args__ = (Index("idx_user_passport_user_id", "user_id", unique=True),)
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    id = Column(BIGINT_ID, primary_key=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id"), nullable=False)
     phone = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -107,7 +148,7 @@ class UserPassport(Base):
 class Role(Base):
     __tablename__ = "roles"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(BIGINT_ID, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     display_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -119,14 +160,21 @@ class Role(Base):
 class UserRole(Base):
     __tablename__ = "user_roles"
 
-    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
-    role_id = Column(Integer, ForeignKey("roles.id"), primary_key=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id"), primary_key=True)
+    role_id = Column(BIGINT_ID, ForeignKey("roles.id"), primary_key=True)
 
 
 class Lab(Base):
     __tablename__ = "labs"
+    __table_args__ = (
+        CheckConstraint("capacity IS NULL OR capacity >= 0", name="labs_capacity_nonnegative_check"),
+        CheckConstraint(
+            "status IS NULL OR status IN ('active', 'inactive', 'maintenance')",
+            name="labs_status_check",
+        ),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(BIGINT_ID, primary_key=True)
     name = Column(String, nullable=False)
     code = Column(String, unique=True, index=True, nullable=False)
     capacity = Column(Integer, default=0)
@@ -144,10 +192,16 @@ class LabDevice(Base):
     """A workstation provisioned to one Lab by an administrator."""
 
     __tablename__ = "lab_devices"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'maintenance', 'revoked')",
+            name="lab_devices_status_check",
+        ),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     device_id = Column(String(128), unique=True, index=True, nullable=False)
-    lab_id = Column(Integer, ForeignKey("labs.id"), nullable=False, index=True)
+    lab_id = Column(BIGINT_ID, ForeignKey("labs.id"), nullable=False, index=True)
     device_name = Column(String(255), nullable=False)
     device_mac = Column(String(64), nullable=True)
     status = Column(
@@ -175,20 +229,26 @@ class LabDeviceEnrollment(Base):
 
     __tablename__ = "lab_device_enrollments"
 
-    id = Column(Integer, primary_key=True, index=True)
-    lab_id = Column(Integer, ForeignKey("labs.id"), nullable=False, index=True)
+    id = Column(Integer, primary_key=True)
+    lab_id = Column(BIGINT_ID, ForeignKey("labs.id"), nullable=False, index=True)
     token_hash = Column(String(64), unique=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     used_at = Column(DateTime(timezone=True), nullable=True)
     used_device_id = Column(String(128), nullable=True)
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_by = Column(BIGINT_ID, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class BlacklistedApp(Base):
     __tablename__ = "blacklisted_apps"
+    __table_args__ = (
+        CheckConstraint(
+            "match_type IN ('process_name', 'process_name_or_title', 'exe_path', 'window_title', 'website_domain')",
+            name="blacklisted_apps_match_type_check",
+        ),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     app_name = Column(String, unique=True, nullable=False)
     description = Column(String, nullable=True)
     match_type = Column(
@@ -205,19 +265,80 @@ class BlacklistedApp(Base):
 
 class LabAccessLog(Base):
     __tablename__ = "lab_access_logs"
+    __table_args__ = (
+        CheckConstraint(
+            "session_status IN ('active', 'completed', 'abandoned')",
+            name="lab_access_logs_session_status_check",
+        ),
+        CheckConstraint(
+            "(session_status = 'active' AND exit_time IS NULL) OR "
+            "(session_status IN ('completed', 'abandoned') AND exit_time IS NOT NULL)",
+            name="lab_access_logs_session_time_check",
+        ),
+        CheckConstraint(
+            "exit_time IS NULL OR exit_time >= entry_time",
+            name="lab_access_logs_time_order_check",
+        ),
+        CheckConstraint(
+            "access_type IN ('entry', 'manual')",
+            name="lab_access_logs_access_type_check",
+        ),
+        CheckConstraint(
+            "status IN ('success', 'denied')",
+            name="lab_access_logs_status_check",
+        ),
+        Index(
+            "uq_active_session_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("session_status = 'active' AND exit_time IS NULL"),
+            sqlite_where=text("session_status = 'active' AND exit_time IS NULL"),
+        ),
+        Index(
+            "uq_active_session_per_lab_device",
+            "lab_device_id",
+            unique=True,
+            postgresql_where=text(
+                "lab_device_id IS NOT NULL AND session_status = 'active' AND exit_time IS NULL"
+            ),
+            sqlite_where=text(
+                "lab_device_id IS NOT NULL AND session_status = 'active' AND exit_time IS NULL"
+            ),
+        ),
+        Index(
+            "uq_active_session_per_mac",
+            text("lower(trim(device_mac))"),
+            unique=True,
+            postgresql_where=text(
+                "session_status = 'active' AND exit_time IS NULL "
+                "AND device_mac IS NOT NULL AND trim(device_mac) <> ''"
+            ),
+            sqlite_where=text(
+                "session_status = 'active' AND exit_time IS NULL "
+                "AND device_mac IS NOT NULL AND trim(device_mac) <> ''"
+            ),
+        ),
+        Index(
+            "uq_lab_access_logs_client_session_id",
+            "client_session_id",
+            unique=True,
+            postgresql_where=text("client_session_id IS NOT NULL AND btrim(client_session_id) <> ''"),
+            sqlite_where=text("client_session_id IS NOT NULL AND trim(client_session_id) <> ''"),
+        ),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
-    lab_id = Column(Integer, ForeignKey("labs.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    booking_id = Column(BigInteger, ForeignKey("bookings.id"), nullable=True, index=True)
-    entry_time = Column(DateTime(timezone=True), server_default=func.now())
+    id = Column(BIGINT_ID, primary_key=True)
+    lab_id = Column(BIGINT_ID, ForeignKey("labs.id"), nullable=False)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id"), nullable=False)
+    booking_id = Column(BIGINT_ID, ForeignKey("bookings.id"), nullable=True)
+    entry_time = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     exit_time = Column(DateTime(timezone=True), nullable=True)
     access_type = Column(String, nullable=False)  # entry | manual
     status = Column(String, nullable=False)        # success | denied
-    lab_device_id = Column(Integer, ForeignKey("lab_devices.id"), nullable=True, index=True)
+    lab_device_id = Column(Integer, ForeignKey("lab_devices.id"), nullable=True)
     device_used = Column(String, nullable=True)
     device_mac = Column(String, nullable=True)
-    client_session_id = Column(String, nullable=True, index=True)
+    client_session_id = Column(String, nullable=True)
     session_status = Column(
         Text,
         nullable=False,
@@ -246,13 +367,13 @@ class GatekeeperScanLog(Base):
         {"info": {"manual_migration": True}},
     )
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
-    lab_id = Column(Integer, ForeignKey("labs.id", ondelete="SET NULL"), nullable=True)
+    id = Column(BIGINT_ID, primary_key=True)
+    lab_id = Column(BIGINT_ID, ForeignKey("labs.id", ondelete="SET NULL"), nullable=True)
     lab_code = Column(String, nullable=False)
     # Preserve the authenticated camera's public ID even if it is later removed.
     device_id = Column(String(128), nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    booking_id = Column(BigInteger, ForeignKey("bookings.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    booking_id = Column(BIGINT_ID, ForeignKey("bookings.id", ondelete="SET NULL"), nullable=True)
     decision = Column(String(16), nullable=False)
     reason_code = Column(String(64), nullable=False)
     liveness_score = Column(Float, nullable=True)
@@ -262,14 +383,25 @@ class GatekeeperScanLog(Base):
 
 class ProgramUsageLog(Base):
     __tablename__ = "program_usage_logs"
+    __table_args__ = (
+        CheckConstraint("usage_end_time >= usage_start_time", name="program_usage_logs_time_order_check"),
+        CheckConstraint("duration_seconds >= 0", name="program_usage_logs_duration_nonnegative_check"),
+        Index(
+            "uq_program_usage_logs_event_id",
+            "event_id",
+            unique=True,
+            postgresql_where=text("event_id IS NOT NULL AND btrim(event_id) <> ''"),
+            sqlite_where=text("event_id IS NOT NULL AND trim(event_id) <> ''"),
+        ),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
-    lab_access_log_id = Column(Integer, ForeignKey("lab_access_logs.id"), nullable=False)
+    id = Column(BIGINT_ID, primary_key=True)
+    lab_access_log_id = Column(BIGINT_ID, ForeignKey("lab_access_logs.id"), nullable=False)
     program_name = Column(String, nullable=False)
     usage_start_time = Column(DateTime(timezone=True), nullable=False)
     usage_end_time = Column(DateTime(timezone=True), nullable=False)
     duration_seconds = Column(Integer, nullable=False, default=0)
-    event_id = Column(String, nullable=True, index=True)
+    event_id = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -277,15 +409,24 @@ class UsageViolation(Base):
     """Immutable audit record for a forbidden application detected in a session."""
 
     __tablename__ = "usage_violations"
+    __table_args__ = (
+        Index(
+            "uq_usage_violations_event_id",
+            "event_id",
+            unique=True,
+            postgresql_where=text("event_id IS NOT NULL AND btrim(event_id) <> ''"),
+            sqlite_where=text("event_id IS NOT NULL AND trim(event_id) <> ''"),
+        ),
+    )
 
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(BIGINT_ID, primary_key=True)
     lab_access_log_id = Column(
-        BigInteger,
+        BIGINT_ID,
         ForeignKey("lab_access_logs.id"),
         nullable=False,
     )
     program_usage_log_id = Column(
-        BigInteger,
+        BIGINT_ID,
         ForeignKey("program_usage_logs.id"),
         nullable=True,
     )
@@ -293,7 +434,7 @@ class UsageViolation(Base):
     detected_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     reason = Column(Text, nullable=True)
     action_taken = Column(String, nullable=False, default="logout")
-    event_id = Column(String, nullable=True, index=True)
+    event_id = Column(String, nullable=True)
     process_name = Column(String, nullable=True)
     exe_path = Column(Text, nullable=True)
     window_title = Column(Text, nullable=True)
@@ -304,9 +445,13 @@ class UsageViolation(Base):
 
 class ClassSchedule(Base):
     __tablename__ = "class_schedules"
+    __table_args__ = (
+        CheckConstraint("start_time < end_time", name="class_schedules_time_order_check"),
+        CheckConstraint("valid_from <= valid_until", name="class_schedules_date_order_check"),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
-    lab_id = Column(Integer, ForeignKey("labs.id"), nullable=False)
+    id = Column(BIGINT_ID, primary_key=True)
+    lab_id = Column(BIGINT_ID, ForeignKey("labs.id"), nullable=False)
     course_code = Column(String, index=True, nullable=False)
     course_name = Column(String, nullable=True)
     instructor_name = Column(String, nullable=True)
@@ -325,10 +470,18 @@ class ClassSchedule(Base):
 
 class Booking(Base):
     __tablename__ = "bookings"
+    __table_args__ = (
+        CheckConstraint("total_participants > 0", name="bookings_participants_positive_check"),
+        CheckConstraint("start_time < end_time", name="bookings_time_order_check"),
+        CheckConstraint(
+            "status IN ('reserved', 'attended', 'completed', 'cancelled', 'no_show')",
+            name="bookings_status_check",
+        ),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
-    lab_id = Column(Integer, ForeignKey("labs.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    id = Column(BIGINT_ID, primary_key=True)
+    lab_id = Column(BIGINT_ID, ForeignKey("labs.id"), nullable=False)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id"), nullable=False)
     booking_date = Column(Date, nullable=False)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
@@ -356,8 +509,11 @@ class Booking(Base):
 
 class UserDailyScore(Base):
     __tablename__ = "user_daily_scores"
+    __table_args__ = (
+        CheckConstraint("score BETWEEN 0 AND 100", name="user_daily_scores_range_check"),
+    )
 
-    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id"), primary_key=True)
     score_date = Column(Date, primary_key=True)
     score = Column(Integer, nullable=False, default=100)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -372,8 +528,11 @@ class UserDailyScore(Base):
 
 class UserPoints(Base):
     __tablename__ = "user_points"
+    __table_args__ = (
+        CheckConstraint("points BETWEEN 0 AND 100", name="user_points_range_check"),
+    )
 
-    user_id    = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    user_id    = Column(BIGINT_ID, ForeignKey("users.id"), primary_key=True)
     points     = Column(Integer, default=100, nullable=False)  # เริ่มที่ 100
     updated_at = Column(
         DateTime(timezone=True),
@@ -388,6 +547,26 @@ class PointPolicy(Base):
     """The single Admin-managed configuration for the point system."""
 
     __tablename__ = "point_policies"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="point_policies_singleton_check"),
+        CheckConstraint(
+            "daily_bonus BETWEEN 0 AND 10 AND complete_session BETWEEN 0 AND 20 "
+            "AND no_show BETWEEN -100 AND 0 AND forbidden_app BETWEEN -100 AND 0 "
+            "AND late_cancel BETWEEN -100 AND 0 AND point_request_amount BETWEEN 1 AND 100 "
+            "AND warning_threshold BETWEEN 0 AND 100 "
+            "AND ban_level_1_below BETWEEN 1 AND 100 AND ban_level_1_days BETWEEN 0 AND 365 "
+            "AND ban_level_2_below BETWEEN 1 AND 100 AND ban_level_2_days BETWEEN 0 AND 365 "
+            "AND ban_level_3_below BETWEEN 1 AND 100 AND ban_level_3_days BETWEEN 0 AND 365 "
+            "AND ban_level_4_below BETWEEN 1 AND 100 AND ban_level_4_days BETWEEN 0 AND 365",
+            name="point_policies_value_ranges_check",
+        ),
+        CheckConstraint(
+            "ban_level_1_below < ban_level_2_below "
+            "AND ban_level_2_below < ban_level_3_below "
+            "AND ban_level_3_below < ban_level_4_below",
+            name="point_policies_threshold_order_check",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, default=1)
     daily_bonus = Column(Integer, nullable=False, default=1)
@@ -405,7 +584,7 @@ class PointPolicy(Base):
     ban_level_3_days = Column(Integer, nullable=False, default=5)
     ban_level_4_below = Column(Integer, nullable=False, default=80)
     ban_level_4_days = Column(Integer, nullable=False, default=2)
-    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by = Column(BIGINT_ID, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True),
@@ -416,13 +595,22 @@ class PointPolicy(Base):
 
 class PointLog(Base):
     __tablename__ = "point_logs"
+    __table_args__ = (
+        Index(
+            "uq_point_logs_event_id",
+            "event_id",
+            unique=True,
+            postgresql_where=text("event_id IS NOT NULL AND btrim(event_id) <> ''"),
+            sqlite_where=text("event_id IS NOT NULL AND trim(event_id) <> ''"),
+        ),
+    )
 
-    id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    id         = Column(Integer, primary_key=True)
+    user_id    = Column(BIGINT_ID, ForeignKey("users.id"), nullable=False)
     change     = Column(Integer, nullable=False)   # -5, +1 etc.
     reason     = Column(String, nullable=False)    # point event reason
     note       = Column(String, nullable=True)     # รายละเอียดเพิ่ม เช่น ชื่อโปรแกรมที่โดน detect
-    event_id   = Column(String, nullable=True, index=True)
+    event_id   = Column(String, nullable=True)
     source_type = Column(String, nullable=True)
     source_id = Column(BigInteger, nullable=True)
     points_before = Column(Integer, nullable=True)
@@ -435,9 +623,26 @@ class PointLog(Base):
 
 class PointRequest(Base):
     __tablename__ = "point_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected')",
+            name="point_requests_status_check",
+        ),
+        CheckConstraint(
+            "requested_points BETWEEN 1 AND 100",
+            name="point_requests_amount_check",
+        ),
+        Index(
+            "uq_point_requests_pending_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id"), nullable=False, index=True)
     requested_points = Column(Integer, nullable=False, default=10, server_default="10")
     status = Column(
         String,
@@ -448,7 +653,7 @@ class PointRequest(Base):
     )  # pending | approved | rejected
     user_message = Column(Text, nullable=True)
     admin_note = Column(Text, nullable=True)
-    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_by = Column(BIGINT_ID, ForeignKey("users.id"), nullable=True, index=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
@@ -461,8 +666,8 @@ class PointRequest(Base):
 class BanRecord(Base):
     __tablename__ = "ban_records"
 
-    id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    id         = Column(Integer, primary_key=True)
+    user_id    = Column(BIGINT_ID, ForeignKey("users.id"), nullable=False)
     ban_until  = Column(DateTime(timezone=True), nullable=False)
     reason     = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -471,8 +676,8 @@ class BanRecord(Base):
 class Ticket(Base):
     __tablename__ = "tickets"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(BigInteger, ForeignKey("users.id"), index=True)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id"), index=True)
     subject = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
     status = Column(String(50), default="open") # สถานะเริ่มต้นคือ open
@@ -489,9 +694,9 @@ class TicketReply(Base):
         {"info": {"manual_migration": True}},
     )
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    id = Column(BIGINT_ID, primary_key=True)
     ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True)
-    admin_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    admin_id = Column(BIGINT_ID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     responder_name = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
     status = Column(String(24), nullable=False, default="in_progress", server_default="in_progress")

@@ -214,8 +214,18 @@ class AgentHttpTests(unittest.TestCase):
         outbox = SimpleNamespace(
             pending=Mock(return_value=[{
                 "kind": "usage",
-                "payload": json.dumps({"session_id": 42, "usage_data": "[]"}),
+                "payload": json.dumps({
+                    "session_id": 42,
+                    "usage_data": json.dumps([{
+                        "event_id": "usage-event",
+                        "name": "Editor",
+                        "started_at": "2026-11-11T10:00:00+00:00",
+                        "ended_at": "2026-11-11T10:00:30+00:00",
+                        "duration": 30,
+                    }]),
+                }),
                 "event_id": "usage-event",
+                "session_id": 42,
             }]),
             mark_sent=Mock(),
             mark_failed=Mock(),
@@ -262,8 +272,84 @@ class AgentHttpTests(unittest.TestCase):
             [item["event_id"] for item in summary],
         )
 
+    def test_outbox_combines_adjacent_usage_events_and_keeps_segment_ids(self):
+        segments = [
+            {
+                "event_id": "usage-1",
+                "name": "Editor",
+                "started_at": "2026-11-11T10:00:00+00:00",
+                "ended_at": "2026-11-11T10:00:30+00:00",
+                "duration": 30,
+            },
+            {
+                "event_id": "usage-2",
+                "name": "Editor",
+                "started_at": "2026-11-11T10:00:30+00:00",
+                "ended_at": "2026-11-11T10:01:00+00:00",
+                "duration": 30,
+            }
+        ]
+        outbox = SimpleNamespace(
+            pending=Mock(return_value=[
+                {
+                    "kind": "usage",
+                    "payload": json.dumps({
+                        "session_id": 42,
+                        "usage_data": json.dumps([segments[0]]),
+                    }),
+                    "event_id": "usage-1",
+                    "session_id": 42,
+                },
+                {
+                    "kind": "usage",
+                    "payload": json.dumps({
+                        "session_id": 42,
+                        "usage_data": json.dumps([segments[1]]),
+                    }),
+                    "event_id": "usage-2",
+                    "session_id": 42,
+                },
+            ]),
+            mark_sent=Mock(),
+            mark_failed=Mock(),
+            pending_count=Mock(return_value=0),
+        )
+        instance = SimpleNamespace(
+            outbox=outbox,
+            _outbox_has_pending=True,
+            current_access_token="agent-token",
+        )
+
+        with patch.object(
+            agent, "post_with_retry", return_value=make_response(200, {}),
+        ) as post:
+            sent = agent.SmartLabAgent._flush_outbox_locked(instance)
+
+        self.assertEqual(sent, 2)
+        self.assertEqual(post.call_count, 1)
+        sent_segments = json.loads(post.call_args.kwargs["data"]["usage_data"])
+        self.assertEqual(
+            [segment["event_id"] for segment in sent_segments],
+            ["usage-1", "usage-2"],
+        )
+        self.assertEqual(
+            [call.args[0] for call in outbox.mark_sent.call_args_list],
+            ["usage-1", "usage-2"],
+        )
+
 
 class AgentOutboxRetryTests(unittest.TestCase):
+    def test_empty_outbox_hint_skips_background_retry_task(self):
+        background_tasks = Mock()
+        instance = SimpleNamespace(
+            outbox=object(),
+            _outbox_has_pending=False,
+            background_tasks=background_tasks,
+        )
+
+        self.assertFalse(agent.SmartLabAgent.retry_outbox(instance))
+        background_tasks.submit.assert_not_called()
+
     def test_outbox_retry_runs_through_background_task_runner(self):
         background_tasks = Mock()
         instance = SimpleNamespace(
@@ -363,6 +449,68 @@ class AgentPolicyTests(unittest.TestCase):
         self.assertEqual(instance.policy_version, "version-2")
         self.assertEqual(instance.policy_source, "backend")
         self.assertEqual(instance.seen_process_ids, set())
+
+    def test_process_enumeration_is_deferred_to_background_worker(self):
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.current_session_id = 42
+        instance.policy_rules = [{
+            "app_name": "Blocked",
+            "match_type": "process_name",
+            "match_value": "blocked",
+            "enabled": True,
+        }]
+        instance.seen_process_ids = set()
+        instance.seen_visible_process_ids = set()
+        instance.seen_visible_window_handles_by_pid = {}
+        instance.pending_window_reopen_process_ids = set()
+        instance._process_scan_pending_shown = {}
+        instance._process_scan_generation = 1
+        instance._process_scan_in_flight = False
+        instance.violation_grace_context = None
+        instance.background_tasks = Mock()
+        instance.background_tasks.submit.return_value = True
+
+        with patch.object(agent, "_visible_window_handles_by_pid") as enumerate_windows:
+            status = agent.SmartLabAgent._queue_process_scan(instance, set(), False)
+
+        self.assertEqual(status, "pending")
+        enumerate_windows.assert_not_called()
+        operation = instance.background_tasks.submit.call_args.args[1]
+        with patch.object(agent, "_visible_window_handles_by_pid", return_value={}), patch.object(
+            agent.psutil, "process_iter", return_value=[],
+        ):
+            result = operation()
+        self.assertIsNone(result["scan"]["match"])
+
+    def test_website_only_policy_skips_process_scan(self):
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.current_session_id = 42
+        instance.policy_rules = [{
+            "app_name": "Blocked site",
+            "match_type": "website_domain",
+            "match_value": "example.com",
+            "enabled": True,
+        }]
+        instance.violation_grace_context = None
+        instance._process_scan_pending_shown = {}
+
+        with patch.object(agent, "_visible_window_handles_by_pid") as enumerate_windows:
+            status = agent.SmartLabAgent._queue_process_scan(instance, set(), False)
+
+        self.assertIsNone(status)
+        enumerate_windows.assert_not_called()
+
+    def test_foreground_identity_cache_reuses_same_window_and_process(self):
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance._usage_name_cache = {}
+        window = SimpleNamespace(_hWnd=99)
+        with patch.object(agent, "_window_process_id", return_value=123), patch.object(
+            agent, "_is_agent_window", return_value=False,
+        ), patch.object(agent, "_usage_name_for_window", return_value="notepad.exe") as resolve:
+            self.assertEqual(instance._usage_name_for_active_window(window), "notepad.exe")
+            self.assertEqual(instance._usage_name_for_active_window(window), "notepad.exe")
+
+        resolve.assert_called_once()
 
     def test_empty_backend_policy_is_valid_and_cached(self):
         instance = SimpleNamespace(outbox=Mock())
@@ -518,6 +666,12 @@ class AgentGracePeriodTests(unittest.TestCase):
         )
         instance.violation_grace_context = {"program_name": "Blocked App"}
         matched_rule = {"app_name": "Blocked App", "match_value": "blocked"}
+        instance.policy_rules = [{
+            "app_name": "Blocked App",
+            "match_type": "process_name",
+            "match_value": "blocked",
+            "enabled": True,
+        }]
         instance._find_new_process_match = Mock(
             return_value=("blocked.exe", r"C:\\blocked.exe", matched_rule, "executable_identity",
                           {"original_filename": "blocked.exe"}, 123, False)
@@ -623,7 +777,7 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertEqual(instance.violation_state.attempts, 2)
         self.assertEqual(instance.violation_grace_context.get("process_id"), 456)
         self.assertTrue(instance.violation_state.is_grace_active(agent.datetime.now()))
-        self.assertEqual(process_iter.call_count, 2)
+        self.assertEqual(process_iter.call_count, 1)
         self.assertEqual(read_identity.call_count, 1)
         dialog.exec.assert_called_once()
         get_active_window.assert_not_called()
@@ -785,6 +939,7 @@ class AgentTelemetryTests(unittest.TestCase):
 
     def test_visible_process_warning_ends_when_its_window_closes(self):
         instance = self.make_agent()
+        instance.seen_visible_process_ids = {123}
         process = SimpleNamespace(
             info={"pid": 123, "name": "blocked.exe"},
             exe=Mock(return_value=r"C:\blocked.exe"),
@@ -798,6 +953,7 @@ class AgentTelemetryTests(unittest.TestCase):
             agent.psutil, "process_iter", return_value=[process],
         ):
             self.assertFalse(instance._violation_is_still_present(context))
+        self.assertEqual(instance.seen_visible_process_ids, {123})
 
     def test_inaccessible_process_name_alone_cannot_continue_warning(self):
         instance = self.make_agent()
@@ -985,6 +1141,7 @@ class AgentTelemetryTests(unittest.TestCase):
             ) as (window, _process), patch.object(
                 agent, "_utc_now", return_value=started_at + timedelta(seconds=offset),
             ):
+                window._hWnd += offset
                 window.title = "The same document title"
                 instance.track_usage()
         instance._close_current_activity(started_at + timedelta(seconds=20))
@@ -1176,6 +1333,8 @@ class AgentUiTests(unittest.TestCase):
         self.app.processEvents()
 
         self.assertEqual(bar.size().width(), bar._compact_size[0])
+        self.assertEqual(bar.size().height(), bar._compact_size[1])
+        self.assertEqual(bar.container.size().height(), bar._compact_size[1] - 8)
         self.assertFalse(bar.logout_btn.isVisible())
         self.assertEqual(bar.toggle_btn.text(), "⌄")
 
@@ -1183,10 +1342,23 @@ class AgentUiTests(unittest.TestCase):
         self.app.processEvents()
         self.assertTrue(bar.logout_btn.isVisible())
         self.assertEqual(bar.size().width(), bar._expanded_size[0])
+        self.assertEqual(bar.size().height(), bar._expanded_size[1])
+        self.assertEqual(bar.container.size().height(), bar._expanded_size[1] - 8)
+        self.assertEqual(bar.logout_btn.height(), 40)
 
         bar.toggle_btn.click()
         self.app.processEvents()
         self.assertFalse(bar.logout_btn.isVisible())
+        self.assertEqual(bar.size().width(), bar._compact_size[0])
+        self.assertEqual(bar.size().height(), bar._compact_size[1])
+        self.assertEqual(bar.container.size().height(), bar._compact_size[1] - 8)
+
+        bar.toggle_btn.click()
+        self.app.processEvents()
+        bar.toggle_btn.click()
+        self.app.processEvents()
+        self.assertEqual(bar.size().height(), bar._compact_size[1])
+        self.assertEqual(bar.container.size().height(), bar._compact_size[1] - 8)
         bar.close()
 
     def test_login_error_label_wraps_long_messages(self):

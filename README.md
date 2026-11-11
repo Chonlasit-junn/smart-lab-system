@@ -96,8 +96,18 @@ Invoke-RestMethod http://127.0.0.1:8000/
 10. `backend/migrations/010_database_cleanup.sql`
 11. `backend/migrations/011_lab_device_registration.sql`
 12. `backend/migrations/012_timezone_consistency.sql`
+13. `backend/migrations/013_website_domain_policy.sql`
+14. `backend/migrations/014_registration_otp_security.sql`
+15. `backend/migrations/015_password_reset_otp.sql`
+16. `backend/migrations/016_otp_ip_rate_limit.sql`
+17. `backend/migrations/017_gatekeeper_scan_logs.sql`
+18. `backend/migrations/018_ticket_replies.sql`
+19. `backend/migrations/019_ticket_reply_status.sql`
+20. `backend/migrations/020_schema_integrity_alignment.sql`
 
-Migration ชุดนี้เพิ่มตาราง violation, เพิ่ม device identity, ทำให้ lifecycle ของ Session ชัดเจน, เพิ่ม Heartbeat, รองรับการกู้ Session, ระบบแต้ม, policy/evidence ของ Agent, การลงทะเบียนเครื่องกับ Lab และจัดโครงสร้าง legacy ให้ตรงกับแอป การใช้ `Base.metadata.create_all()` ไม่สามารถเพิ่มหรือลบ column ของตารางเดิมได้ จึงต้องรัน SQL migration แยก
+ก่อน Migration 020 ให้รัน `scripts/audit_database_readonly.py` เพื่อตรวจจำนวนแถวที่ยังขัดกับ constraints; Migration นี้จะหยุดก่อนแก้ schema หากพบข้อมูลที่ต้องจัดการ และจะไม่ลบหรือแก้ข้อมูลเดิมให้อัตโนมัติ
+
+Migration ชุดนี้เพิ่มตาราง violation, device identity, session lifecycle, ระบบแต้มและ policy, OTP, Gatekeeper scan history และ ticket replies พร้อมปรับคีย์และ constraints ให้ตรงกับ Backend การใช้ `Base.metadata.create_all()` ไม่สามารถปรับ schema ของตารางเดิมได้ จึงต้องรัน SQL migration แยก
 
 ### 3. รัน Frontend
 

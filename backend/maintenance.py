@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 import models
@@ -32,8 +33,9 @@ def _delete_expired_batch(
 def cleanup_expired_data(db: Session, *, batch_size=100):
     """Delete at most ``batch_size`` rows per explicitly expiring table.
 
-    Used device enrollments and legacy plaintext UserOTP rows are deliberately
-    retained; neither has a safe expiry contract for this cleanup operation.
+    Used device enrollments are retained for history. Legacy plaintext OTPs are
+    retained for 24 hours after creation to cover the old ten-minute validity
+    window while limiting the lifetime of the stored code.
     """
     if not isinstance(batch_size, int) or not 1 <= batch_size <= MAX_CLEANUP_BATCH_SIZE:
         raise ValueError(f"batch_size must be between 1 and {MAX_CLEANUP_BATCH_SIZE}")
@@ -55,6 +57,16 @@ def cleanup_expired_data(db: Session, *, batch_size=100):
             models.LabDeviceEnrollment.used_at.is_(None),
         ),
     }
+    if inspect(db.get_bind()).has_table("user_otps"):
+        results["legacy_user_otps"] = _delete_expired_batch(
+            db,
+            models.UserOTP,
+            models.UserOTP.created_at,
+            now - timedelta(hours=24),
+            batch_size,
+        )
+    else:
+        results["legacy_user_otps"] = {"deleted": 0, "has_more": False}
     return {
         "batch_size_per_table": batch_size,
         "deleted": {name: result["deleted"] for name, result in results.items()},

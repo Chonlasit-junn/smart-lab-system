@@ -8,9 +8,9 @@ import threading
 import uuid
 import time
 import requests
-from agent_qa import start_session_headers
 import pygetwindow as gw
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from agent_device import get_agent_data_dir, load_device_registration
 from agent_outbox import AgentOutbox
 from program_identity import program_usage_name, read_executable_identity
@@ -185,8 +185,8 @@ def _window_class_name(window):
         return ""
 
 
-def _usage_name_for_window(window):
-    process_id = _window_process_id(window)
+def _usage_name_for_window(window, process_id=None):
+    process_id = process_id or _window_process_id(window)
     if not process_id or _is_agent_window(window, process_id):
         return None
     try:
@@ -392,6 +392,10 @@ class SessionInfoBar(QWidget):
         outer.setContentsMargins(4, 4, 4, 4)
 
         self.container = QFrame()
+        self.container.setFixedSize(
+            self._compact_size[0] - 8,
+            self._compact_size[1] - 8,
+        )
         self.container.setStyleSheet("""
             QFrame {
                 background-color: rgba(15, 23, 42, 230);
@@ -445,6 +449,7 @@ class SessionInfoBar(QWidget):
 
         self.logout_btn = QPushButton("จบการทำงาน")
         self.logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.logout_btn.setFixedHeight(40)
         self.logout_btn.setStyleSheet("""
             QPushButton {
                 background-color: #ef4444; color: white; border-radius: 8px;
@@ -477,7 +482,11 @@ class SessionInfoBar(QWidget):
         self.toggle_btn.setToolTip(
             "ซ่อนรายละเอียด Session" if self._expanded else "เปิดรายละเอียด Session"
         )
-        self.setFixedSize(*(self._expanded_size if self._expanded else self._compact_size))
+        size = self._expanded_size if self._expanded else self._compact_size
+        self.container.setFixedSize(size[0] - 8, size[1] - 8)
+        self.setFixedSize(*size)
+        self.layout().activate()
+        self.container.layout().activate()
         self._position_on_screen()
 
     def _confirm_logout(self):
@@ -734,10 +743,7 @@ class LoginOverlay(QWidget):
         if not isinstance(access_token, str) or not access_token.strip():
             return {"kind": "invalid_credentials"}
         self.agent.current_access_token = access_token
-        session_headers = start_session_headers(
-            access_token,
-            qa_no_booking_time=os.getenv("SMART_LAB_AGENT_QA_NO_BOOKING_TIME") == "1",
-        )
+        session_headers = {"Authorization": f"Bearer {access_token}"}
 
         # Deliver any prior session's durable requests before claiming this device.
         self.agent.flush_outbox(limit=5)
@@ -849,14 +855,17 @@ class SmartLabAgent:
     def __init__(self):
         self.background_tasks = BackgroundTaskRunner(max_threads=3)
         self._outbox_flush_lock = threading.Lock()
+        self._outbox_state_lock = threading.Lock()
         self._pending_fallback_violations = []
         try:
             self.outbox = AgentOutbox()
+            self._outbox_has_pending = bool(self.outbox.pending_count())
             print(f"Agent outbox: {self.outbox.path}")
         except Exception as e:
             # Keep the UI available, but make the degraded delivery mode
             # visible in the log instead of silently losing telemetry.
             self.outbox = None
+            self._outbox_has_pending = False
             print(f"Agent outbox unavailable: {e}")
 
         self.usage_segments = []
@@ -874,6 +883,10 @@ class SmartLabAgent:
         self.seen_visible_process_ids = set()
         self.seen_visible_window_handles_by_pid = {}
         self.pending_window_reopen_process_ids = set()
+        self._process_scan_generation = 0
+        self._process_scan_in_flight = False
+        self._process_scan_pending_shown = {}
+        self._usage_name_cache = {}
         self.window_visibility_monitor = None
         self._last_track_usage_error = None
         self.violation_reported = False
@@ -914,16 +927,36 @@ class SmartLabAgent:
         if self.outbox is None:
             return False
         try:
-            self.outbox.enqueue(
-                kind=kind,
-                payload=payload,
-                session_id=session_id,
-                event_id=event_id,
-            )
+            state_lock = getattr(self, "_outbox_state_lock", None)
+            if state_lock is None:
+                self.outbox.enqueue(
+                    kind=kind,
+                    payload=payload,
+                    session_id=session_id,
+                    event_id=event_id,
+                )
+                self._outbox_has_pending = True
+            else:
+                with state_lock:
+                    self.outbox.enqueue(
+                        kind=kind,
+                        payload=payload,
+                        session_id=session_id,
+                        event_id=event_id,
+                    )
+                    self._outbox_has_pending = True
             return True
         except Exception as e:
             print(f"บันทึกข้อมูลลง local outbox ไม่ได้: {e}")
             return False
+
+    @staticmethod
+    def _has_pending_outbox_hint(instance):
+        state_lock = getattr(instance, "_outbox_state_lock", None)
+        if state_lock is None:
+            return getattr(instance, "_outbox_has_pending", True)
+        with state_lock:
+            return instance._outbox_has_pending
 
     def flush_outbox(self, limit=3):
         """Deliver queued telemetry and keep failed items for a later retry."""
@@ -932,7 +965,7 @@ class SmartLabAgent:
 
     def retry_outbox(self):
         """Retry durable telemetry in the background, including on the login screen."""
-        if self.outbox is None:
+        if self.outbox is None or not SmartLabAgent._has_pending_outbox_hint(self):
             return False
 
         return self.background_tasks.submit(
@@ -947,7 +980,7 @@ class SmartLabAgent:
             print(f"ส่งข้อมูลจาก local outbox ไม่สำเร็จ: {error}")
 
     def _flush_outbox_locked(self, limit=3):
-        if self.outbox is None:
+        if self.outbox is None or not SmartLabAgent._has_pending_outbox_hint(self):
             return 0
 
         endpoints = {
@@ -956,10 +989,81 @@ class SmartLabAgent:
             "end_session": "/agent/end-session",
         }
         sent = 0
-        for item in self.outbox.pending(limit=limit):
+        items = self.outbox.pending(limit=limit)
+
+        def mark_batch_failed(batch, error, retry_after=None):
+            for queued_item in batch:
+                self.outbox.mark_failed(
+                    queued_item["event_id"], error, retry_after,
+                )
+
+        index = 0
+        while index < len(items):
+            item = items[index]
+            if item["kind"] == "usage":
+                batch = [item]
+                batch_session_id = item.get("session_id")
+                next_index = index + 1
+                while (
+                    next_index < len(items)
+                    and items[next_index]["kind"] == "usage"
+                    and items[next_index].get("session_id") == batch_session_id
+                ):
+                    batch.append(items[next_index])
+                    next_index += 1
+
+                try:
+                    first_payload = json.loads(batch[0]["payload"])
+                    usage_segments = []
+                    for queued_item in batch:
+                        queued_payload = json.loads(queued_item["payload"])
+                        if queued_payload.get("session_id") != first_payload.get("session_id"):
+                            raise ValueError("Usage batch contains multiple sessions.")
+                        segments = json.loads(queued_payload.get("usage_data", "[]"))
+                        if not isinstance(segments, list):
+                            raise ValueError("Usage batch payload must contain a list.")
+                        usage_segments.extend(segments)
+
+                    delivery_error = None
+                    retry_after = None
+                    for offset in range(0, len(usage_segments), USAGE_LOG_BATCH_SIZE):
+                        batch_payload = dict(first_payload)
+                        batch_payload["usage_data"] = json.dumps(
+                            usage_segments[offset:offset + USAGE_LOG_BATCH_SIZE],
+                            ensure_ascii=False,
+                        )
+                        response = post_with_retry(
+                            f"{API_URL}{endpoints['usage']}",
+                            data=_with_device_credentials(batch_payload),
+                            headers=_session_auth_headers(self),
+                            retries=1,
+                            timeout=10,
+                        )
+                        if response is not None and 200 <= response.status_code < 300:
+                            continue
+
+                        status = response.status_code if response is not None else "offline"
+                        detail = response_detail(response)
+                        delivery_error = f"{status}: {detail}".strip()
+                        retry_after = 60 if response is not None else None
+                        break
+
+                    if delivery_error is None:
+                        for queued_item in batch:
+                            self.outbox.mark_sent(queued_item["event_id"])
+                        sent += len(batch)
+                    else:
+                        mark_batch_failed(batch, delivery_error, retry_after)
+                except Exception as e:
+                    mark_batch_failed(batch, str(e))
+
+                index = next_index
+                continue
+
             endpoint = endpoints.get(item["kind"])
             if not endpoint:
                 self.outbox.mark_failed(item["event_id"], "Unknown outbox request type.", 300)
+                index += 1
                 continue
 
             try:
@@ -975,6 +1079,7 @@ class SmartLabAgent:
                 if response is not None and 200 <= response.status_code < 300:
                     self.outbox.mark_sent(item["event_id"])
                     sent += 1
+                    index += 1
                     continue
 
                 status = response.status_code if response is not None else "offline"
@@ -986,13 +1091,74 @@ class SmartLabAgent:
                 )
             except Exception as e:
                 self.outbox.mark_failed(item["event_id"], str(e))
+            index += 1
 
         if sent:
             print(f"ส่งข้อมูลจาก local outbox สำเร็จ {sent} รายการ")
+        try:
+            state_lock = getattr(self, "_outbox_state_lock", None)
+            if state_lock is None:
+                self._outbox_has_pending = self.outbox.pending_count() > 0
+            else:
+                with state_lock:
+                    self._outbox_has_pending = self.outbox.pending_count() > 0
+        except Exception:
+            self._outbox_has_pending = True
         return sent
 
     def set_ui_references(self, overlay):
         self.overlay = overlay
+
+    @staticmethod
+    def _has_process_rules(rules):
+        return any(
+            rule.get("enabled") is not False
+            and rule.get("match_type") in {"process_name", "process_name_or_title", "exe_path"}
+            for rule in rules
+        )
+
+    def _reset_process_scan_state(self, *, clear_pending_events=False):
+        self._process_scan_generation = getattr(self, "_process_scan_generation", 0) + 1
+        self.seen_process_ids = set()
+        self.seen_visible_process_ids = set()
+        self.seen_visible_window_handles_by_pid = {}
+        self.pending_window_reopen_process_ids = set()
+        if clear_pending_events:
+            self._process_scan_pending_shown = {}
+
+    def _sync_process_monitor(self):
+        should_monitor = bool(
+            getattr(self, "current_session_id", None)
+            and self._has_process_rules(getattr(self, "policy_rules", []))
+        )
+        monitor = getattr(self, "window_visibility_monitor", None)
+        if should_monitor and monitor is None:
+            self._start_window_visibility_monitor()
+        elif not should_monitor and monitor is not None:
+            self._stop_window_visibility_monitor()
+
+    def _sync_browser_monitor(self):
+        rules = getattr(self, "policy_rules", [])
+        grace_context = getattr(self, "violation_grace_context", None)
+        needs_monitor = bool(
+            getattr(self, "current_session_id", None)
+            and (
+                any(
+                    rule.get("match_type") == "website_domain"
+                    for rule in rules
+                )
+                or (
+                    grace_context
+                    and grace_context.get("detection_source")
+                    == "browser_domain"
+                )
+            )
+        )
+        monitor = getattr(self, "browser_url_monitor", None)
+        if needs_monitor and monitor is None:
+            self.browser_url_monitor = BrowserURLMonitor()
+        elif not needs_monitor and monitor is not None:
+            self.stop_browser_monitor()
 
     def _set_policy(self, raw_rules, version, source):
         if not isinstance(raw_rules, list):
@@ -1008,8 +1174,7 @@ class SmartLabAgent:
         if changed:
             # Re-check already-running processes when an administrator changes
             # the policy during an active session.
-            self.seen_process_ids.clear()
-            getattr(self, "seen_visible_process_ids", set()).clear()
+            SmartLabAgent._reset_process_scan_state(self)
         return True
 
     def _load_cached_policy(self):
@@ -1078,6 +1243,8 @@ class SmartLabAgent:
                 print(f"ใช้ Blacklist เดิมจาก {self.policy_source}")
             else:
                 self._use_fallback_policy()
+            SmartLabAgent._sync_process_monitor(self)
+            SmartLabAgent._sync_browser_monitor(self)
             return
 
         if not isinstance(result, dict) or not self._set_policy(
@@ -1088,9 +1255,13 @@ class SmartLabAgent:
             print("ดึง Blacklist ไม่ได้: Backend returned an empty or invalid policy")
             if self.policy_source is None:
                 self._use_fallback_policy()
+            SmartLabAgent._sync_process_monitor(self)
+            SmartLabAgent._sync_browser_monitor(self)
             return
 
         self.policy_token = result.get("policy_token")
+        SmartLabAgent._sync_process_monitor(self)
+        SmartLabAgent._sync_browser_monitor(self)
         print(
             f"ดึง Blacklist สำเร็จ {len(self.policy_rules)} รายการ "
             f"(เวอร์ชัน {self.policy_version})"
@@ -1109,10 +1280,8 @@ class SmartLabAgent:
         self.policy_version = None
         self.policy_source = None
         self.policy_token = None
-        self.seen_process_ids.clear()
-        self.seen_visible_process_ids.clear()
-        self.seen_visible_window_handles_by_pid = _visible_window_handles_by_pid()
-        self.pending_window_reopen_process_ids = set()
+        SmartLabAgent._reset_process_scan_state(self, clear_pending_events=True)
+        getattr(self, "_usage_name_cache", {}).clear()
         self.violation_reported = False
         self.violation_state.reset()
         self.violation_grace_context = None
@@ -1132,7 +1301,8 @@ class SmartLabAgent:
         if self.policy_source is None:
             # Keep local protection active while the first server request runs.
             self._use_fallback_policy()
-        self._start_window_visibility_monitor()
+        SmartLabAgent._sync_process_monitor(self)
+        SmartLabAgent._sync_browser_monitor(self)
         self.refresh_policy()
         self.monitor_timer.start(5000)
         self.heartbeat_timer.start(30000)
@@ -1234,6 +1404,31 @@ class SmartLabAgent:
         self.current_activity_name = app_name
         self.current_activity_started_at = observed_at
 
+    def _usage_name_for_active_window(self, window):
+        process_id = _window_process_id(window)
+        if not process_id:
+            return _usage_name_for_window(window)
+        if _is_agent_window(window, process_id):
+            return None
+        handle = getattr(window, "_hWnd", None)
+        if not handle:
+            return _usage_name_for_window(window, process_id=process_id)
+
+        key = (process_id, int(handle))
+        cache = getattr(self, "_usage_name_cache", None)
+        if cache is None:
+            cache = {}
+            self._usage_name_cache = cache
+        if key in cache:
+            return cache[key]
+
+        name = _usage_name_for_window(window, process_id=process_id)
+        if len(cache) >= 128:
+            cache.clear()
+        if name is not None:
+            cache[key] = name
+        return name
+
     def _checkpoint_current_activity(self, observed_at):
         """Persist a running app periodically without overlapping its segments."""
         if not self.current_activity_name or not self.current_activity_started_at:
@@ -1284,8 +1479,7 @@ class SmartLabAgent:
             # The original process may already be in seen_process_ids. Clear it
             # so the five-minute recheck inspects the process again.
             self.violation_grace_context = None
-            self.seen_process_ids.clear()
-            self.seen_visible_process_ids.clear()
+            self._reset_process_scan_state()
 
         if self.violation_state.is_grace_active(now):
             return
@@ -1354,10 +1548,60 @@ class SmartLabAgent:
         timeout_context["reason"] = (
             f"{context['reason']} (ไม่ขอโอกาสภายในเวลาที่กำหนด)"
         )
+        session_id = self.current_session_id
+        runner = getattr(self, "background_tasks", None)
+        if runner is None:
+            try:
+                still_present = self._violation_is_still_present(context)
+            except Exception as exc:
+                print(f"ตรวจโปรแกรมซ้ำไม่ได้: {exc}")
+                still_present = True
+            self._complete_violation_recheck(
+                session_id, context, timeout_context, still_present,
+            )
+            return
+
+        submitted = runner.submit(
+            f"violation-recheck-{session_id}",
+            lambda: self._violation_is_still_present(context),
+            lambda result, error: self._handle_violation_recheck_result(
+                session_id, context, timeout_context, result, error,
+            ),
+        )
+        if not submitted:
+            # A failed recheck submission must preserve the prior fail-closed
+            # behavior rather than leave the monitor stopped.
+            self._finalize_violation(timeout_context, show_dialog=False)
+
+    def _handle_violation_recheck_result(
+        self, session_id, context, timeout_context, result, error,
+    ):
+        if error is not None:
+            print(f"ตรวจโปรแกรมซ้ำไม่ได้: {error}")
+            still_present = True
+        else:
+            still_present = bool(result)
+        self._complete_violation_recheck(
+            session_id, context, timeout_context, still_present,
+        )
+
+    def _complete_violation_recheck(
+        self, session_id, context, timeout_context, still_present,
+    ):
+        if self.current_session_id != session_id:
+            return
+        if not still_present:
+            if self.current_session_id and not self.violation_reported:
+                self.monitor_timer.start(5000)
+            return
         self._finalize_violation(timeout_context, show_dialog=False)
 
-    def _violation_is_still_present(self, context):
-        rules = [context["matched_rule"]] if context.get("matched_rule") else self.policy_rules
+    def _violation_is_still_present(self, context, policy_rules=None):
+        rules = (
+            [context["matched_rule"]]
+            if context.get("matched_rule")
+            else (self.policy_rules if policy_rules is None else policy_rules)
+        )
         if context.get("detection_source") == "browser_domain":
             monitor = getattr(self, "browser_url_monitor", None)
             observation = monitor.recheck(context) if monitor else None
@@ -1373,8 +1617,16 @@ class SmartLabAgent:
             target_had_visible_window
             and target_process_id not in visible_process_ids
         ):
-            getattr(self, "seen_visible_process_ids", set()).discard(target_process_id)
             return False
+        if target_process_id is not None:
+            try:
+                process = psutil.Process(target_process_id)
+                name = process.name()
+                path = process.exe()
+                identity = read_executable_identity(path)
+                return bool(find_process_match(rules, name, path, identity))
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                return False
         for process in psutil.process_iter(["pid", "name"]):
             try:
                 process_id = process.info.get("pid")
@@ -1474,7 +1726,259 @@ class SmartLabAgent:
             self._stop_window_visibility_monitor()
             return set()
 
-    def _find_new_process_match(self, shown_process_ids=None):
+    def _process_scan_job(self, snapshot):
+        grace_present = None
+        should_scan = not snapshot["grace_active"]
+        context = snapshot["grace_context"]
+        if snapshot["grace_active"] and context:
+            if context.get("process_id") in snapshot["shown_process_ids"]:
+                grace_present = False
+            else:
+                try:
+                    grace_present = self._violation_is_still_present(
+                        snapshot["grace_context_copy"],
+                        policy_rules=snapshot["policy_rules"],
+                    )
+                except Exception:
+                    # Preserve the existing fail-closed behavior during a grace
+                    # recheck if process/browser state cannot be read.
+                    grace_present = True
+            should_scan = not grace_present
+
+        scan_result = None
+        if should_scan and snapshot["has_process_rules"]:
+            scanner = SimpleNamespace(
+                policy_rules=snapshot["policy_rules"],
+                seen_process_ids=snapshot["seen_process_ids"],
+                seen_visible_process_ids=snapshot["seen_visible_process_ids"],
+                seen_visible_window_handles_by_pid=snapshot[
+                    "seen_visible_window_handles_by_pid"
+                ],
+                pending_window_reopen_process_ids=snapshot[
+                    "pending_window_reopen_process_ids"
+                ],
+                window_visibility_monitor=None,
+            )
+            match = SmartLabAgent._find_new_process_match(
+                scanner, snapshot["shown_process_ids"],
+            )
+            scan_result = {
+                "match": match,
+                "seen_process_ids": scanner.seen_process_ids,
+                "seen_visible_process_ids": scanner.seen_visible_process_ids,
+                "seen_visible_window_handles_by_pid": (
+                    scanner.seen_visible_window_handles_by_pid
+                ),
+                "pending_window_reopen_process_ids": (
+                    scanner.pending_window_reopen_process_ids
+                ),
+            }
+
+        return {"grace_present": grace_present, "scan": scan_result}
+
+    def _queue_process_scan(self, shown_process_ids, grace_active):
+        pending_shown = getattr(self, "_process_scan_pending_shown", None)
+        if pending_shown is None:
+            pending_shown = {}
+            self._process_scan_pending_shown = pending_shown
+        for process_id in shown_process_ids:
+            pending_shown[process_id] = pending_shown.get(process_id, 0) + 1
+
+        policy_rules = getattr(self, "policy_rules", [])
+        has_process_rules = self._has_process_rules(policy_rules)
+        grace_context = getattr(self, "violation_grace_context", None) if grace_active else None
+        if grace_active and not grace_context:
+            pending_shown.clear()
+            return None
+        if not has_process_rules and not grace_context:
+            pending_shown.clear()
+            return None
+        if getattr(self, "_process_scan_in_flight", False):
+            return "pending"
+
+        shown_snapshot = set(pending_shown)
+        shown_counts = dict(pending_shown)
+        grace_context_copy = None
+        if grace_context:
+            grace_context_copy = dict(grace_context)
+            if isinstance(grace_context.get("matched_rule"), dict):
+                grace_context_copy["matched_rule"] = dict(
+                    grace_context["matched_rule"]
+                )
+
+        snapshot = {
+            "session_id": self.current_session_id,
+            "generation": getattr(self, "_process_scan_generation", 0),
+            "policy_rules": [dict(rule) for rule in policy_rules],
+            "has_process_rules": has_process_rules,
+            "grace_active": grace_active,
+            "grace_context": grace_context,
+            "grace_context_copy": grace_context_copy,
+            "shown_process_ids": shown_snapshot,
+            "shown_counts": shown_counts,
+            "seen_process_ids": set(getattr(self, "seen_process_ids", set())),
+            "seen_visible_process_ids": set(
+                getattr(self, "seen_visible_process_ids", set())
+            ),
+            "seen_visible_window_handles_by_pid": {
+                process_id: set(handles)
+                for process_id, handles in getattr(
+                    self, "seen_visible_window_handles_by_pid", {}
+                ).items()
+            },
+            "pending_window_reopen_process_ids": set(
+                getattr(self, "pending_window_reopen_process_ids", set())
+            ),
+        }
+
+        def operation():
+            return self._process_scan_job(snapshot)
+
+        def completed(result, error):
+            self._handle_process_scan_result(snapshot, result, error)
+
+        runner = getattr(self, "background_tasks", None)
+        if runner is None:
+            # Keep lightweight objects usable in offline tools and unit tests;
+            # the real Agent always owns a BackgroundTaskRunner.
+            try:
+                result = self._process_scan_job_inline(snapshot)
+            except Exception as error:
+                completed(None, error)
+                return None
+            else:
+                completed(result, None)
+                if result and result.get("scan") and result["scan"].get("match"):
+                    return "matched"
+                return None
+
+        self._process_scan_in_flight = True
+        submitted = runner.submit("process-scan", operation, completed)
+        if not submitted:
+            self._process_scan_in_flight = False
+            return None
+        return "pending"
+
+    def _process_scan_job_inline(self, snapshot):
+        grace_present = None
+        should_scan = not snapshot["grace_active"]
+        context = snapshot["grace_context"]
+        if snapshot["grace_active"] and context:
+            if context.get("process_id") in snapshot["shown_process_ids"]:
+                grace_present = False
+            else:
+                try:
+                    grace_present = self._violation_is_still_present(
+                        snapshot["grace_context_copy"],
+                        policy_rules=snapshot["policy_rules"],
+                    )
+                except Exception:
+                    grace_present = True
+            should_scan = not grace_present
+
+        scan_result = None
+        if should_scan and snapshot["has_process_rules"]:
+            match = self._find_new_process_match(
+                snapshot["shown_process_ids"], prune_window_monitor=False,
+            )
+            scan_result = {
+                "match": match,
+                "seen_process_ids": getattr(self, "seen_process_ids", set()),
+                "seen_visible_process_ids": getattr(
+                    self, "seen_visible_process_ids", set()
+                ),
+                "seen_visible_window_handles_by_pid": getattr(
+                    self, "seen_visible_window_handles_by_pid", {}
+                ),
+                "pending_window_reopen_process_ids": getattr(
+                    self, "pending_window_reopen_process_ids", set()
+                ),
+            }
+        return {"grace_present": grace_present, "scan": scan_result}
+
+    def _handle_process_scan_result(self, snapshot, result, error):
+        self._process_scan_in_flight = False
+        if error is not None:
+            print(f"ตรวจรายการโปรแกรมไม่สำเร็จ: {error}")
+            return
+        if (
+            snapshot["session_id"] != self.current_session_id
+            or snapshot["generation"] != getattr(self, "_process_scan_generation", 0)
+        ):
+            return
+        if not isinstance(result, dict):
+            return
+
+        if snapshot["grace_active"] and snapshot["grace_context"]:
+            if self.violation_grace_context is not snapshot["grace_context"]:
+                return
+            if result["grace_present"]:
+                return
+            self.violation_state.clear_grace()
+            self.violation_grace_context = None
+
+        scan = result.get("scan")
+        if not scan:
+            return
+
+        self.seen_process_ids = scan["seen_process_ids"]
+        self.seen_visible_process_ids = scan["seen_visible_process_ids"]
+        self.seen_visible_window_handles_by_pid = scan[
+            "seen_visible_window_handles_by_pid"
+        ]
+        self.pending_window_reopen_process_ids = scan[
+            "pending_window_reopen_process_ids"
+        ]
+        pending_shown = getattr(self, "_process_scan_pending_shown", {})
+        for process_id, consumed_count in snapshot["shown_counts"].items():
+            current_count = pending_shown.get(process_id, 0)
+            if current_count <= consumed_count:
+                pending_shown.pop(process_id, None)
+            else:
+                pending_shown[process_id] = current_count - consumed_count
+
+        monitor = getattr(self, "window_visibility_monitor", None)
+        if monitor is not None:
+            try:
+                monitor.prune(self.seen_process_ids)
+            except Exception as exc:
+                print(f"ล้างสถานะ event หน้าต่างเก่าไม่สำเร็จ: {exc}")
+
+        match = scan.get("match")
+        if match is None or not self.current_session_id or self.violation_dialog_active:
+            return
+        if self.violation_state.is_grace_active(datetime.now()):
+            return
+
+        (
+            process_name,
+            exe_path,
+            matched_rule,
+            detection_source,
+            identity,
+            process_id,
+            process_window_visible,
+        ) = match
+        rule_name = matched_rule.get("app_name") or matched_rule.get("match_value")
+        self._handle_violation_detection(
+            {
+                "program_name": (
+                    identity.get("original_filename") or identity.get("internal_name")
+                    or identity.get("product_name") or process_name
+                ),
+                "reason": f"ไม่อนุญาตให้เปิดแอป: {rule_name}",
+                "process_name": process_name,
+                "process_id": process_id,
+                "process_window_visible": process_window_visible,
+                "exe_path": exe_path,
+                "window_title": None,
+                "detection_source": detection_source,
+                "matched_rule": matched_rule,
+                "executable_identity": identity,
+            }
+        )
+
+    def _find_new_process_match(self, shown_process_ids=None, *, prune_window_monitor=True):
         """Inspect newly started processes and re-opened visible apps once."""
         shown_process_ids = set(shown_process_ids or ())
         current_process_ids = set()
@@ -1548,7 +2052,7 @@ class SmartLabAgent:
         pending_reopens.intersection_update(current_process_ids)
         self.pending_window_reopen_process_ids = pending_reopens
         monitor = getattr(self, "window_visibility_monitor", None)
-        if monitor is not None:
+        if monitor is not None and prune_window_monitor:
             try:
                 monitor.prune(current_process_ids)
             except Exception as exc:
@@ -1567,65 +2071,16 @@ class SmartLabAgent:
                 # A running forbidden process was intentionally skipped during
                 # the grace period, so it must be checked again now.
                 self.violation_grace_context = None
-                self.seen_process_ids.clear()
-                self.seen_visible_process_ids.clear()
+                self._reset_process_scan_state()
 
             grace_active = self.violation_state.is_grace_active(now)
-            if grace_active and self.violation_grace_context:
-                target_process_id = self.violation_grace_context.get("process_id")
-                reopened_during_grace = target_process_id in shown_process_ids
-                if reopened_during_grace:
-                    reported_app_open = False
-                else:
-                    try:
-                        reported_app_open = self._violation_is_still_present(
-                            self.violation_grace_context
-                        )
-                    except Exception as exc:
-                        print(f"ตรวจสถานะโปรแกรมระหว่างช่วงให้โอกาสไม่ได้: {exc}")
-                        reported_app_open = True
-                if not reported_app_open:
-                    # End the chance as soon as the reported app/site is closed;
-                    # a later launch is a new detection even within five minutes.
-                    self.violation_state.clear_grace()
-                    self.violation_grace_context = None
-                    grace_active = False
+            process_scan_status = self._queue_process_scan(
+                shown_process_ids, grace_active,
+            )
+            if process_scan_status == "matched":
+                return
 
-            # ตรวจ Process ใหม่จากข้อมูลที่ฝังอยู่ใน EXE
-            if not grace_active:
-                process_match = self._find_new_process_match(shown_process_ids)
-                if process_match is not None:
-                    (
-                        process_name,
-                        exe_path,
-                        matched_rule,
-                        detection_source,
-                        identity,
-                        process_id,
-                        process_window_visible,
-                    ) = process_match
-                    rule_name = matched_rule.get("app_name") or matched_rule.get("match_value")
-                    reason = f"ไม่อนุญาตให้เปิดแอป: {rule_name}"
-                    self._handle_violation_detection(
-                        {
-                            "program_name": (
-                                identity.get("original_filename") or identity.get("internal_name")
-                                or identity.get("product_name") or process_name
-                            ),
-                            "reason": reason,
-                            "process_name": process_name,
-                            "process_id": process_id,
-                            "process_window_visible": process_window_visible,
-                            "exe_path": exe_path,
-                            "window_title": None,
-                            "detection_source": detection_source,
-                            "matched_rule": matched_rule,
-                            "executable_identity": identity,
-                        }
-                    )
-                    return
-
-            if not grace_active and any(
+            if not grace_active and process_scan_status != "pending" and any(
                 rule.get("match_type") == "website_domain" for rule in self.policy_rules
             ):
                 if getattr(self, "browser_url_monitor", None) is None:
@@ -1646,7 +2101,7 @@ class SmartLabAgent:
 
             # Usage follows the foreground window's executable, not its title.
             active_win = gw.getActiveWindow()
-            app_name = _usage_name_for_window(active_win) if active_win else None
+            app_name = self._usage_name_for_active_window(active_win) if active_win else None
             self._track_active_activity(app_name, _utc_now())
             self._last_track_usage_error = None
 
@@ -1834,10 +2289,8 @@ class SmartLabAgent:
         self.policy_version = None
         self.policy_source = None
         self.policy_token = None
-        self.seen_process_ids.clear()
-        self.seen_visible_process_ids.clear()
-        self.seen_visible_window_handles_by_pid = {}
-        self.pending_window_reopen_process_ids = set()
+        self._reset_process_scan_state(clear_pending_events=True)
+        getattr(self, "_usage_name_cache", {}).clear()
         self.violation_state.reset()
         self.violation_grace_context = None
         self.violation_dialog_active = False

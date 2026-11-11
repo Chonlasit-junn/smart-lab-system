@@ -25,6 +25,9 @@ Migration 014 creates its primary key, checks and RLS together. It does not edit
 delete, import or validate legacy `user_otps` rows. No existing users, scores,
 roles or sessions are changed. The table is Backend-only and has no client RLS
 policies; the Backend must use an appropriately authorized database role.
+The Admin expired-data cleanup endpoint removes legacy plaintext `user_otps`
+created more than 24 hours ago in bounded batches. Rows without `created_at`
+remain for manual review.
 
 ## Behaviour
 

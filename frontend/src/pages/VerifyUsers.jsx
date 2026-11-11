@@ -504,6 +504,8 @@ export default function VerifyUsers() {
                   aria-label={t("admin.verifyTitle")}
                   sx={{
                     ...verticalScrollAreaSx,
+                    maxHeight: { xs: "none", sm: "min(60vh, 520px)" },
+                    overflowY: { xs: "visible", sm: "auto" },
                     overflowX: "hidden",
                     pr: 1,
                     display: "grid",
@@ -528,8 +530,7 @@ export default function VerifyUsers() {
                           width: "100%",
                           maxWidth: 300,
                           justifySelf: { xs: "center", sm: "start" },
-                          height: { xs: "auto", md: 380 },
-                          minHeight: { xs: 0, md: 380 },
+                          height: "auto",
                           display: "flex",
                           flexDirection: "column",
                           borderRadius: 5,
@@ -579,8 +580,8 @@ export default function VerifyUsers() {
                         <Box
                           sx={{
                             p: 2,
-                            flex: { xs: "1 0 auto", md: 1 },
-                            minHeight: { xs: "max-content", md: 0 },
+                            flex: "0 0 auto",
+                            minHeight: "auto",
                             display: "flex",
                             flexDirection: "column",
                           }}
@@ -663,7 +664,7 @@ export default function VerifyUsers() {
                             </Box>
                           </Box>
 
-                          <Divider sx={{ mb: 2, mt: "auto" }} />
+                          <Divider sx={{ mb: 2, mt: 2 }} />
 
                           <Box
                             sx={{
@@ -673,6 +674,7 @@ export default function VerifyUsers() {
                                 md: "repeat(2, minmax(0, 1fr))",
                               },
                               gap: 1,
+                              flexShrink: 0,
                             }}
                           >
                             <Button

@@ -4,7 +4,7 @@ param(
     [string]$PrebuiltPayloadPath = "",
     [ValidateSet("Agent", "Gatekeeper")]
     [string]$Product = "Agent",
-    [switch]$QaNoBookingTime,
+    [switch]$QaAgent,
     [switch]$UseVisualStudioAutomation
 )
 
@@ -23,19 +23,19 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $agentRoot = Join-Path $repoRoot "smart-lab-agent"
 $gatekeeperRoot = Join-Path $repoRoot "gatekeeper"
 $projectRoot = if ($Product -eq "Gatekeeper") { $gatekeeperRoot } else { $agentRoot }
-$isQaAgent = $Product -eq "Agent" -and $QaNoBookingTime.IsPresent
-if ($QaNoBookingTime -and $Product -ne "Agent") {
-    throw "-QaNoBookingTime is only valid when building the Agent product."
+$isQaAgent = $Product -eq "Agent" -and $QaAgent.IsPresent
+if ($QaAgent -and $Product -ne "Agent") {
+    throw "-QaAgent is only valid when building the Agent product."
 }
 
 $appExeName = if ($Product -eq "Gatekeeper") { "SmartGatekeeper.exe" } else { "SmartLabDevice.exe" }
-$appDisplayName = if ($Product -eq "Gatekeeper") { "Smart Lab Gatekeeper" } elseif ($isQaAgent) { "Smart Lab Agent QA - No Booking Time" } else { "Smart Lab Agent" }
+$appDisplayName = if ($Product -eq "Gatekeeper") { "Smart Lab Gatekeeper" } elseif ($isQaAgent) { "Smart Lab Agent QA" } else { "Smart Lab Agent" }
 $registerShortcutName = if ($Product -eq "Gatekeeper") { "Register This Scanner" } elseif ($isQaAgent) { "Register QA Agent" } else { "Register This Computer" }
-$registerShortcutArguments = if ($isQaAgent) { "--qa-no-booking-time --register" } else { "--register" }
-$productName = if ($Product -eq "Gatekeeper") { "Smart Lab Face Scanner" } elseif ($isQaAgent) { "Smart Lab Agent QA - No Booking Time" } else { "Smart Lab Device Agent" }
-$productComments = if ($Product -eq "Gatekeeper") { "Registers this computer as a face scanner and verifies lab access." } elseif ($isQaAgent) { "QA-only Agent build. Ignores booking time only when the QA Backend flag is enabled." } else { "Registers this computer and runs the Smart Lab Agent." }
+$registerShortcutArguments = if ($isQaAgent) { "--qa --register" } else { "--register" }
+$productName = if ($Product -eq "Gatekeeper") { "Smart Lab Face Scanner" } elseif ($isQaAgent) { "Smart Lab Agent QA" } else { "Smart Lab Device Agent" }
+$productComments = if ($Product -eq "Gatekeeper") { "Registers this computer as a face scanner and verifies lab access." } elseif ($isQaAgent) { "Isolated QA Agent build. Uses the same booking and access checks as the regular Agent." } else { "Registers this computer and runs the Smart Lab Agent." }
 $installFolder = if ($Product -eq "Gatekeeper") { "Smart Lab\Face Scanner" } elseif ($isQaAgent) { "Smart Lab\Agent QA" } else { "Smart Lab\Device Agent" }
-$buildVariant = if ($Product -eq "Gatekeeper") { "gatekeeper" } elseif ($isQaAgent) { "qa-no-booking-time" } else { "agent" }
+$buildVariant = if ($Product -eq "Gatekeeper") { "gatekeeper" } elseif ($isQaAgent) { "qa" } else { "agent" }
 $installerProjectName = if ($Product -eq "Gatekeeper") { "SmartGatekeeperInstaller" } else { "SmartLabAgentInstaller" }
 $registryBasePath = if ($Product -eq "Gatekeeper") { "Software\Smart Lab\Face Scanner" } elseif ($isQaAgent) { "Software\Smart Lab\Agent QA" } else { "Software\Smart Lab\Device Agent" }
 $upgradeCode = if ($Product -eq "Gatekeeper") { "{6E77A21F-69D9-4D82-90D0-52BDF4F0C571}" } elseif ($isQaAgent) { "{87B146E3-9F71-4610-9D5A-E3D72384D8C9}" } else { "{78B9A7C1-A3F4-4D82-974A-A7A69E9121CC}" }
@@ -47,7 +47,7 @@ $componentIds = if ($Product -eq "Gatekeeper") {
 } else {
     @{ Desktop = "{C41B79CE-2E28-41BD-B743-7607AB300021}"; Register = "{C41B79CE-2E28-41BD-B743-7607AB300022}"; Uninstall = "{C41B79CE-2E28-41BD-B743-7607AB300023}" }
 }
-$primaryShortcutArguments = if ($isQaAgent) { "--qa-no-booking-time" } else { "" }
+$primaryShortcutArguments = if ($isQaAgent) { "--qa" } else { "" }
 
 $usePrebuiltPayload = -not [string]::IsNullOrWhiteSpace($PrebuiltPayloadPath)
 $python = $null
@@ -196,7 +196,7 @@ try {
 }
 $productCode = ([guid]::new($productBytes)).ToString('B').ToUpperInvariant()
 $packageCode = [guid]::NewGuid().ToString('B').ToUpperInvariant()
-$msiFileName = if ($Product -eq "Gatekeeper") { "SmartLabGatekeeper.msi" } elseif ($isQaAgent) { "SmartLabAgent-QA-NoBookingTime.msi" } else { "SmartLabAgent.msi" }
+$msiFileName = if ($Product -eq "Gatekeeper") { "SmartLabGatekeeper.msi" } elseif ($isQaAgent) { "SmartLabAgent-QA.msi" } else { "SmartLabAgent.msi" }
 $msiPath = Join-Path $distRoot $msiFileName
 $templatePath = Join-Path $PSScriptRoot "SmartLabAgent.vdproj.template"
 $projectTemplate = Get-Content -LiteralPath $templatePath -Raw

@@ -2,14 +2,14 @@ import json
 import os
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Form, Header
+from fastapi import APIRouter, Depends, HTTPException, Form
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
-from access_policy import current_lab_booking, lab_access_denial, same_day_lab_booking
+from access_policy import current_lab_booking, lab_access_denial
 from database import get_db
 from device_registry import require_registered_device
 from policy import (
@@ -28,8 +28,6 @@ optional_agent_oauth2 = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 STALE_SESSION_AFTER = timedelta(minutes=2)
 MAX_IDEMPOTENCY_KEY_LENGTH = 128
 MAX_USAGE_BATCH_SIZE = 100
-QA_BOOKING_TIME_BYPASS_ENV = "SMART_LAB_AGENT_QA_NO_BOOKING_TIME"
-QA_BOOKING_TIME_BYPASS_HEADER = "X-SmartLab-QA-No-Booking-Time"
 VALID_END_REASONS = {
     "logout",
     "violation",
@@ -206,7 +204,6 @@ def start_session(
     device_token: Optional[str] = Form(None),
     agent_version: Optional[str] = Form(None),
     client_session_id: Optional[str] = Form(None),
-    qa_no_booking_time: Optional[str] = Header(None, alias=QA_BOOKING_TIME_BYPASS_HEADER),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -242,15 +239,7 @@ def start_session(
         raise HTTPException(status_code=403, detail=denial[1])
 
     lab_now = lab_now_naive()
-    qa_booking_time_bypass = (
-        os.getenv(QA_BOOKING_TIME_BYPASS_ENV, "").strip() == "1"
-        and qa_no_booking_time == "1"
-    )
-    current_booking = (
-        same_day_lab_booking(db, user.id, lab.id, lab_now.date())
-        if qa_booking_time_bypass
-        else current_lab_booking(db, user.id, lab.id, lab_now)
-    )
+    current_booking = current_lab_booking(db, user.id, lab.id, lab_now)
     if current_booking is None:
         raise HTTPException(
             status_code=403,
@@ -376,10 +365,11 @@ def start_session(
             registered_device = require_registered_device(db, device_id, device_token)
             fresh_lab = db.get(models.Lab, registered_device.lab_id)
             fresh_lab_time = lab_now_naive()
-            fresh_booking = (
-                same_day_lab_booking(db, user.id, registered_device.lab_id, fresh_lab_time.date())
-                if qa_booking_time_bypass
-                else current_lab_booking(db, user.id, registered_device.lab_id, fresh_lab_time)
+            fresh_booking = current_lab_booking(
+                db,
+                user.id,
+                registered_device.lab_id,
+                fresh_lab_time,
             )
             recovered_session = db.query(models.LabAccessLog).filter(
                 models.LabAccessLog.client_session_id == resolved_client_session_id,
