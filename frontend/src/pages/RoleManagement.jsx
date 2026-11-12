@@ -252,7 +252,7 @@ export default function RoleManagement() {
 
   return (
     <Box
-      className="app-layout admin-layout"
+      className="app-layout admin-layout admin-role-management"
       sx={{
         display: "flex",
         minHeight: "100vh",
@@ -303,7 +303,7 @@ export default function RoleManagement() {
 
       <Box className="main-area admin-main-area" sx={{ flex: 1, display: "flex", flexDirection: "column", overflowX: "hidden", minWidth: 0 }}>
         <Box
-          className="top-header admin-top-header"
+          className="top-header admin-top-header admin-role-management-top-header"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -316,7 +316,7 @@ export default function RoleManagement() {
             zIndex: 5,
           }}
         >
-          <Typography variant="h5" fontWeight="700" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>
+          <Typography variant="h5" fontWeight="700" className="admin-role-top-title" sx={{ color: "#1e293b", letterSpacing: "-1px" }}>
             {t("admin.rolesTitle")}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -385,13 +385,13 @@ export default function RoleManagement() {
           </Box>
         </Box>
 
-        <Box className="content-area admin-content-area page-content" sx={{ p: { xs: 3, md: 6 }, flex: 1 }}>
-          <Box className="page-header" sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, gap: 2, mb: 3, flexWrap: "wrap" }}>
-            <Box>
-              <Typography variant="h4" fontWeight="700" color="#1e293b" sx={{ letterSpacing: "-1px" }}>
+        <Box className="content-area admin-content-area page-content admin-role-management-content" sx={{ p: { xs: 3, md: 6 }, flex: 1, gap: { xs: 1.5, md: 3 }, minWidth: 0 }}>
+          <Box className="page-header admin-role-page-header" sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "center", sm: "center" }, gap: { xs: 1, md: 2 }, mb: 0, flexWrap: "wrap" }}>
+            <Box className="admin-role-page-heading">
+              <Typography className="admin-role-page-title" variant="h4" fontWeight="700" color="#1e293b" sx={{ letterSpacing: "-1px" }}>
                 {t("admin.rolesHeading")}
               </Typography>
-              <Typography variant="body2" color="#64748b" sx={{ mt: 0.75 }}>
+              <Typography className="admin-role-page-subtitle" variant="body2" color="#64748b" sx={{ mt: { xs: 0, md: 0.75 } }}>
                 {t("admin.rolesSubtitle")}
               </Typography>
             </Box>
@@ -400,32 +400,32 @@ export default function RoleManagement() {
               startIcon={<Refresh />}
               onClick={fetchRoleData}
               disabled={loading}
-              sx={{ borderRadius: 3, textTransform: "none", fontWeight: "600", borderColor: "#cbd5e1", color: "#475569" }}
+              sx={{ borderRadius: 3, textTransform: "none", fontWeight: "600", borderColor: "#cbd5e1", color: "#475569", minHeight: { xs: 40, md: 44 }, px: { xs: 1.25, md: 2 } }}
             >
               {t("admin.refreshData")}
             </Button>
           </Box>
 
-          <Alert severity="info" sx={{ mb: 3, borderRadius: 3 }}>
+          <Alert severity="info" className="admin-role-info" sx={{ mb: { xs: 0, md: 3 }, borderRadius: 3, py: { xs: 0.75, md: 1.5 }, "& .MuiAlert-message": { fontSize: { xs: "0.84rem", md: "1rem" }, lineHeight: 1.45 } }}>
             {t("admin.roleKeyInfo")}
           </Alert>
 
-          {error && <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>{error}</Alert>}
-          {success && <Alert severity="success" sx={{ mb: 3, borderRadius: 3 }}>{success}</Alert>}
+          {error && <Alert severity="error" className="admin-role-feedback" sx={{ mb: { xs: 0, md: 3 }, borderRadius: 3 }}>{error}</Alert>}
+          {success && <Alert severity="success" className="admin-role-feedback" sx={{ mb: { xs: 0, md: 3 }, borderRadius: 3 }}>{success}</Alert>}
 
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2, mb: 3 }}>
+          <Box className="admin-role-summary-grid" sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(3, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" }, gap: { xs: 1, sm: 2 }, mb: { xs: 0, md: 3 }, minWidth: 0 }}>
             {[
               { labelKey: "admin.allRolesSummary", value: roles.length, color: "#3b82f6", icon: <AdminPanelSettings /> },
               { labelKey: "admin.usersWithRole", value: assignedUsers, color: "#10b981", icon: <Person /> },
               { labelKey: "admin.systemRolesSummary", value: systemRoles, color: "#8b5cf6", icon: <Settings /> },
             ].map((card) => (
-              <Paper key={card.labelKey} className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 4, border: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 2 }}>
-                <Box sx={{ width: 46, height: 46, borderRadius: 3, bgcolor: `${card.color}15`, color: card.color, display: "grid", placeItems: "center" }}>
+              <Paper key={card.labelKey} className="surface-card admin-role-summary-card" elevation={0} sx={{ p: { xs: 1.25, sm: 2.5 }, borderRadius: { xs: 2.5, sm: 4 }, border: "1px solid #e2e8f0", display: "flex", flexDirection: { xs: "column", sm: "row" }, alignItems: { xs: "flex-start", sm: "center" }, gap: { xs: 0.75, sm: 2 }, minWidth: 0, minHeight: { xs: 112, sm: 0 } }}>
+                <Box className="admin-role-summary-icon" sx={{ width: { xs: 32, sm: 46 }, height: { xs: 32, sm: 46 }, flex: "0 0 auto", borderRadius: { xs: 2, sm: 3 }, bgcolor: `${card.color}15`, color: card.color, display: "grid", placeItems: "center", "& .MuiSvgIcon-root": { fontSize: { xs: 19, sm: 24 } } }}>
                   {card.icon}
                 </Box>
-                <Box>
-                  <Typography variant="body2" color="#64748b" fontWeight="500">{t(card.labelKey)}</Typography>
-                  <Typography variant="h5" color="#0f172a" fontWeight="700">{loading || loadFailed ? "—" : card.value}</Typography>
+                <Box className="admin-role-summary-copy" sx={{ minWidth: 0, width: "100%" }}>
+                  <Typography className="admin-role-summary-label" variant="body2" color="#64748b" fontWeight="500" sx={{ fontSize: { xs: "0.72rem", sm: "0.875rem" }, lineHeight: 1.3, overflowWrap: "anywhere" }}>{t(card.labelKey)}</Typography>
+                  <Typography className="admin-role-summary-value" variant="h5" color="#0f172a" fontWeight="700" sx={{ fontSize: { xs: "1.15rem", sm: "1.5rem" }, lineHeight: 1.15, mt: 0.35 }}>{loading || loadFailed ? "—" : card.value}</Typography>
                 </Box>
               </Paper>
             ))}

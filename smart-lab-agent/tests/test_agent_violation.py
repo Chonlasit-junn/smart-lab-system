@@ -1,6 +1,5 @@
 import sys
 import unittest
-from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -11,7 +10,7 @@ from agent_violation import ViolationState
 
 class ViolationStateTests(unittest.TestCase):
     def setUp(self):
-        self.start = datetime(2026, 9, 12, 10, 0, 0)
+        self.start = 1000.0
 
     def test_first_two_detections_can_receive_grace(self):
         state = ViolationState()
@@ -22,10 +21,10 @@ class ViolationStateTests(unittest.TestCase):
 
         state.grant_grace(self.start)
         self.assertIsNone(
-            state.register_detection(self.start + timedelta(seconds=299))
+            state.register_detection(self.start + 299)
         )
 
-        second_time = self.start + timedelta(seconds=300)
+        second_time = self.start + 300
         second = state.register_detection(second_time)
         self.assertEqual(second.number, 2)
         self.assertFalse(second.must_terminate)
@@ -35,11 +34,11 @@ class ViolationStateTests(unittest.TestCase):
 
         first = state.register_detection(self.start)
         state.grant_grace(self.start)
-        second_time = self.start + timedelta(seconds=300)
+        second_time = self.start + 300
         second = state.register_detection(second_time)
         state.grant_grace(second_time)
 
-        third = state.register_detection(second_time + timedelta(seconds=300))
+        third = state.register_detection(second_time + 300)
 
         self.assertEqual(first.number, 1)
         self.assertEqual(second.number, 2)
@@ -63,8 +62,15 @@ class ViolationStateTests(unittest.TestCase):
         state.grant_grace(self.start)
 
         self.assertTrue(state.clear_grace())
-        self.assertFalse(state.is_grace_active(self.start + timedelta(seconds=1)))
+        self.assertFalse(state.is_grace_active(self.start + 1))
         self.assertFalse(state.clear_grace())
+
+    def test_grace_uses_elapsed_monotonic_time_not_wall_clock(self):
+        state = ViolationState(grace_seconds=300)
+        state.grant_grace(self.start)
+
+        self.assertTrue(state.is_grace_active(self.start + 299))
+        self.assertFalse(state.is_grace_active(self.start + 300))
 
 
 if __name__ == "__main__":

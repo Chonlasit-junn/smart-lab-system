@@ -39,6 +39,13 @@ class ProgramIdentityTests(unittest.TestCase):
         self.assertEqual(self.match("game.exe", {"product_name": "Honkai: Star Rail"}), self.rule)
         self.assertIsNone(self.match("game.exe", {"product_name": "StarRail Notes"}))
 
+    def test_internal_name_can_match_when_original_filename_is_a_launcher(self):
+        self.assertEqual(self.match("launcher.exe", {
+            "original_filename": "Launcher.exe",
+            "internal_name": "HonkaiStarRail",
+            "product_name": "Launcher",
+        }), self.rule)
+
     def test_title_rule_is_inert_even_with_identity(self):
         self.rule["match_type"] = "window_title"
         self.assertIsNone(self.match("StarRail.exe", {"original_filename": "StarRail.exe"}))

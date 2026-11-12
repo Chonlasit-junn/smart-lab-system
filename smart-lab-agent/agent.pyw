@@ -12,6 +12,7 @@ import pygetwindow as gw
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from agent_device import get_agent_data_dir, load_device_registration
+from agent_clock import ServerClock
 from agent_outbox import AgentOutbox
 from program_identity import program_usage_name, read_executable_identity
 from browser_url import BrowserURLMonitor
@@ -32,10 +33,24 @@ from agent_window_events import WindowVisibilityMonitor
 from qt_runtime import prepare_qt_dll_search_path
 
 
+try:
+    from agent_build_info import AGENT_VERSION as BUILD_AGENT_VERSION
+    from agent_build_info import DEBUG_MODE as BUILD_DEBUG_MODE
+except ImportError:
+    BUILD_AGENT_VERSION = "source"
+    BUILD_DEBUG_MODE = True
+
+SERVER_CLOCK = ServerClock()
+
+
 def _utc_now():
     """Return an aware UTC timestamp for events sent to the Backend."""
 
-    return datetime.now(timezone.utc)
+    return SERVER_CLOCK.now_utc()
+
+
+def _sync_backend_clock(server_time):
+    return SERVER_CLOCK.sync(server_time)
 
 
 def _append_monitor_error_log(error_type):
@@ -224,8 +239,13 @@ LAB_CODE   = str(
     DEVICE_REGISTRATION.get("lab_code")
     or os.getenv("SMART_LAB_CODE", "LAB01")
 ).strip()
-AGENT_VERSION = os.getenv("SMART_LAB_AGENT_VERSION", "source")
-DEBUG_MODE = os.getenv("SMART_LAB_AGENT_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
+AGENT_VERSION = os.getenv("SMART_LAB_AGENT_VERSION", BUILD_AGENT_VERSION)
+_debug_override = os.getenv("SMART_LAB_AGENT_DEBUG")
+DEBUG_MODE = (
+    _debug_override.strip().lower() in {"1", "true", "yes", "on"}
+    if _debug_override is not None
+    else bool(BUILD_DEBUG_MODE)
+)
 # Keep workstation cleanup opt-in while it is being validated on Lab machines.
 # Set SMART_LAB_SESSION_CLEANUP=1 explicitly when this feature is ready.
 _cleanup_default = "0"
@@ -794,8 +814,10 @@ class LoginOverlay(QWidget):
                 return {"kind": kind}
 
         if session_response is not None and session_response.status_code == 200:
-            session_id = session_response.json().get("session_id")
+            session_payload = session_response.json()
+            session_id = session_payload.get("session_id")
             if session_id is not None:
+                _sync_backend_clock(session_payload.get("server_time"))
                 self.agent.confirm_session_attempt(client_session_id)
                 return {
                     "kind": "success",
@@ -1339,7 +1361,16 @@ class SmartLabAgent:
         if response is not None and 200 <= response.status_code < 300:
             # Successful heartbeat is also the reconnect signal for the outbox.
             self.flush_outbox(limit=3)
-        return {"status": response.status_code if response is not None else None}
+            try:
+                server_time = response.json().get("last_heartbeat_at")
+            except (AttributeError, ValueError):
+                server_time = None
+        else:
+            server_time = None
+        return {
+            "status": response.status_code if response is not None else None,
+            "server_time": server_time,
+        }
 
     def _handle_heartbeat_result(self, session_id, result, error):
         if error is not None:
@@ -1348,6 +1379,8 @@ class SmartLabAgent:
         if self.current_session_id != session_id:
             return
 
+        if isinstance(result, dict):
+            _sync_backend_clock(result.get("server_time"))
         status = result.get("status") if isinstance(result, dict) else None
         if status in {403, 409}:
             print("Session ไม่ active แล้ว กำลังกลับไปหน้า Login")
@@ -1474,7 +1507,7 @@ class SmartLabAgent:
         context.setdefault("detected_at", _utc_now().isoformat(timespec="seconds"))
         context.setdefault("policy_version", self.policy_version)
         context.setdefault("policy_token", self.policy_token)
-        now = datetime.now()
+        now = time.monotonic()
         if self.violation_state.clear_expired_grace(now):
             # The original process may already be in seen_process_ids. Clear it
             # so the five-minute recheck inspects the process again.
@@ -1522,7 +1555,7 @@ class SmartLabAgent:
             self.violation_dialog_active = False
 
         if chance_requested:
-            grace_until = self.violation_state.grant_grace(datetime.now())
+            grace_until = self.violation_state.grant_grace(time.monotonic())
             self.violation_grace_context = context
             print(
                 f"ให้โอกาสครั้งที่ {attempt.number} ถึง "
@@ -1945,9 +1978,12 @@ class SmartLabAgent:
                 print(f"ล้างสถานะ event หน้าต่างเก่าไม่สำเร็จ: {exc}")
 
         match = scan.get("match")
-        if match is None or not self.current_session_id or self.violation_dialog_active:
+        if match is None or not self.current_session_id:
             return
-        if self.violation_state.is_grace_active(datetime.now()):
+        if self.violation_dialog_active:
+            self.seen_process_ids.discard(match[5])
+            return
+        if self.violation_state.is_grace_active(time.monotonic()):
             return
 
         (
@@ -2005,8 +2041,11 @@ class SmartLabAgent:
         pending_reopens.difference_update(added_window_process_ids)
         self.seen_visible_window_handles_by_pid = current_visible_window_handles_by_pid
         match = None
+        deferred_match_process_ids = set()
+        retry_process_ids = set()
 
         for proc in psutil.process_iter(["pid", "name"]):
+            process_id = None
             try:
                 process_id = proc.info.get("pid")
                 if process_id is None:
@@ -2044,10 +2083,22 @@ class SmartLabAgent:
                         process_id,
                         process_id in current_visible_process_ids,
                     )
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                elif matched_rule is not None:
+                    deferred_match_process_ids.add(process_id)
+            except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                continue
+            except psutil.AccessDenied:
+                process_id = process_id or getattr(proc, "pid", None)
+                if process_id is not None:
+                    current_process_ids.add(process_id)
+                    retry_process_ids.add(process_id)
                 continue
 
-        self.seen_process_ids = current_process_ids
+        if match is not None:
+            deferred_match_process_ids.discard(match[5])
+        self.seen_process_ids = (
+            current_process_ids - retry_process_ids - deferred_match_process_ids
+        )
         self.seen_visible_process_ids = current_visible_process_ids
         pending_reopens.intersection_update(current_process_ids)
         self.pending_window_reopen_process_ids = pending_reopens
@@ -2066,7 +2117,7 @@ class SmartLabAgent:
 
             shown_process_ids = self._consume_shown_process_ids()
             self._checkpoint_current_activity(_utc_now())
-            now = datetime.now()
+            now = time.monotonic()
             if self.violation_state.clear_expired_grace(now):
                 # A running forbidden process was intentionally skipped during
                 # the grace period, so it must be checked again now.
@@ -2074,13 +2125,7 @@ class SmartLabAgent:
                 self._reset_process_scan_state()
 
             grace_active = self.violation_state.is_grace_active(now)
-            process_scan_status = self._queue_process_scan(
-                shown_process_ids, grace_active,
-            )
-            if process_scan_status == "matched":
-                return
-
-            if not grace_active and process_scan_status != "pending" and any(
+            if not grace_active and any(
                 rule.get("match_type") == "website_domain" for rule in self.policy_rules
             ):
                 if getattr(self, "browser_url_monitor", None) is None:
@@ -2098,6 +2143,12 @@ class SmartLabAgent:
                         "detection_source": "browser_domain", "matched_rule": matched_rule,
                     })
                     return
+
+            process_scan_status = self._queue_process_scan(
+                shown_process_ids, grace_active,
+            )
+            if process_scan_status == "matched":
+                return
 
             # Usage follows the foreground window's executable, not its title.
             active_win = gw.getActiveWindow()

@@ -36,6 +36,15 @@ VALID_END_REASONS = {
     "error",
     "admin",
 }
+
+
+def _session_started_response(session_id: int, recovered: bool = False) -> dict:
+    response = {"session_id": session_id, "server_time": utc_now()}
+    if recovered:
+        response["recovered"] = True
+    return response
+
+
 @router.get("/agent/policy")
 def get_agent_policy(db: Session = Depends(get_db)):
     """Return the active, versioned policy used by Windows Agents."""
@@ -274,7 +283,7 @@ def start_session(
                     resolved_lab_device_id,
                 ) and existing_request.booking_id == current_booking.id:
                     _bind_recovered_session_device(db, existing_request, registered_device)
-                    return {"session_id": existing_request.id, "recovered": True}
+                    return _session_started_response(existing_request.id, recovered=True)
                 raise HTTPException(
                     status_code=409,
                     detail="Client session key belongs to another active session.",
@@ -300,7 +309,7 @@ def start_session(
             resolved_lab_device_id,
         ) and active_user_session.booking_id == current_booking.id:
             _bind_recovered_session_device(db, active_user_session, registered_device)
-            return {"session_id": active_user_session.id, "recovered": True}
+            return _session_started_response(active_user_session.id, recovered=True)
         raise HTTPException(
             status_code=409,
             detail="This user already has an active lab session.",
@@ -390,13 +399,13 @@ def start_session(
                 )
             ):
                 _bind_recovered_session_device(db, recovered_session, registered_device)
-                return {"session_id": recovered_session.id, "recovered": True}
+                return _session_started_response(recovered_session.id, recovered=True)
         raise HTTPException(
             status_code=409,
             detail="This user or device already has an active lab session.",
         ) from exc
     db.refresh(new_log)
-    return {"session_id": new_log.id}
+    return _session_started_response(new_log.id)
 
 
 @router.post("/agent/log-usage")

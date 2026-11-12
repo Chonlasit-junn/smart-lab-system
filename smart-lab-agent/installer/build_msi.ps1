@@ -121,6 +121,17 @@ $buildLog = Join-Path $buildRoot "visualstudio-build.log"
 
 New-Item -ItemType Directory -Path $payloadRoot, $distRoot, (Join-Path $buildRoot "pyinstaller-work\device"), (Join-Path $buildRoot "spec") -Force | Out-Null
 
+if ($Product -eq "Agent" -and -not $usePrebuiltPayload) {
+    $buildDebugValue = if ($isQaAgent) { "True" } else { "False" }
+    $buildInfoPath = Join-Path $buildRoot "agent_build_info.py"
+    $buildInfo = "AGENT_VERSION = '$Version'`nDEBUG_MODE = $buildDebugValue`n"
+    [System.IO.File]::WriteAllText(
+        $buildInfoPath,
+        $buildInfo,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+}
+
 if ($usePrebuiltPayload) {
     $prebuiltPayload = Join-Path $resolvedPrebuiltPayloadPath $appExeName
     if (-not (Test-Path -LiteralPath $prebuiltPayload -PathType Leaf)) {
@@ -140,6 +151,8 @@ if ($usePrebuiltPayload) {
         $deviceBuildArgs = @(
             "-I", "-B", "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
             "--name", "SmartLabDevice",
+            "--paths", $buildRoot,
+            "--hidden-import", "agent_build_info",
             "--distpath", $payloadRoot,
             "--workpath", (Join-Path $buildRoot "pyinstaller-work\device"),
             "--specpath", (Join-Path $buildRoot "spec"),

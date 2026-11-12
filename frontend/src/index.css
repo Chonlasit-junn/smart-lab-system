@@ -2614,3 +2614,212 @@ textarea:focus-visible,
     margin-bottom: 1rem;
   }
 }
+
+@media (max-width: 768px) {
+  .register-page .login-banner {
+    min-height: 0;
+    padding: 14px 16px 10px;
+    gap: 4px;
+  }
+
+  .register-page .login-banner .MuiSvgIcon-root {
+    margin-bottom: 0 !important;
+    font-size: 36px !important;
+  }
+
+  .register-page .login-banner-title {
+    max-width: 100%;
+    font-size: clamp(1.15rem, 4.8vw, 1.5rem);
+    line-height: 1.15;
+    letter-spacing: -0.3px;
+  }
+
+  .register-page .login-banner-subtitle {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .register-page .login-form-section {
+    padding: 14px 18px;
+  }
+
+  .register-page .login-form-content {
+    padding: 0;
+    margin-block: 0 !important;
+  }
+
+  .register-page .login-title {
+    font-size: 1.35rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .register-page .login-subtitle {
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .register-page .login-banner {
+    padding: 12px 14px 8px;
+    gap: 2px;
+  }
+
+  .register-page .login-form-section {
+    padding: 10px 16px calc(24px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-role-management {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .admin-role-management .admin-role-management-top-header {
+    box-sizing: border-box;
+    flex: 0 0 64px;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    min-height: 64px;
+    height: 64px;
+    padding: 0 12px 0 56px !important;
+  }
+
+  .admin-role-management-top-header > .admin-role-top-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-size: clamp(0.92rem, 4vw, 1.05rem) !important;
+    line-height: 1.25 !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-role-management-top-header > .MuiBox-root {
+    flex: 0 0 auto;
+    gap: 8px !important;
+  }
+
+  .admin-role-management-top-header > .MuiBox-root > .MuiBox-root {
+    gap: 6px !important;
+  }
+
+  .admin-role-management-top-header .MuiDivider-root {
+    display: none;
+  }
+
+  .admin-role-management .admin-role-management-content {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden !important;
+    padding: 10px 12px calc(80px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .admin-role-management-content.page-content {
+    gap: 12px;
+  }
+
+  .admin-role-page-header {
+    min-width: 0;
+    align-items: center !important;
+    gap: 8px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .admin-role-page-heading {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .admin-role-page-title {
+    display: none;
+  }
+
+  .admin-role-page-subtitle {
+    font-size: 0.84rem !important;
+    line-height: 1.4 !important;
+  }
+
+  .admin-role-page-header .MuiButton-root {
+    flex: 0 0 auto;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  .admin-role-management .admin-role-info,
+  .admin-role-management .admin-role-feedback {
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 0 !important;
+  }
+
+  .admin-role-management .admin-role-info .MuiAlert-icon {
+    margin-right: 8px;
+    padding: 5px 0;
+  }
+
+  .admin-role-management .admin-role-summary-grid {
+    gap: 8px;
+    margin-bottom: 0 !important;
+  }
+
+  .admin-role-management .admin-role-summary-card {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 112px;
+    overflow: hidden;
+  }
+
+  .admin-role-management .admin-role-summary-icon {
+    max-width: 32px;
+    max-height: 32px;
+  }
+
+  .admin-role-management .data-table-shell,
+  .admin-role-management .responsive-data-table {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 360px) {
+  .admin-role-management .admin-role-summary-card {
+    min-height: 120px;
+    padding: 8px !important;
+  }
+
+  .admin-role-management .admin-role-summary-label {
+    font-size: 0.68rem !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-role-management {
+    height: auto !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    overflow-x: clip;
+    overflow-y: visible !important;
+  }
+
+  .admin-role-management .admin-main-area {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible !important;
+  }
+
+  .admin-role-management .admin-role-management-content {
+    flex: 1 0 auto;
+    min-height: calc(100vh - 64px);
+    min-height: calc(100dvh - 64px);
+    overflow-x: clip !important;
+    overflow-y: visible !important;
+  }
+}

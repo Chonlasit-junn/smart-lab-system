@@ -159,8 +159,13 @@ class BrowserURLMonitor:
         window = foreground_window()
         result = None
         if self.pending is not None and self.pending.done():
-            result = self.pending.result()
+            completed = self.pending
             self.pending = None
+            try:
+                result = completed.result()
+            except Exception:
+                # Discard a failed read and keep polling on the next tick.
+                result = None
             if result and (result["hwnd"] != window or time.monotonic() - self.requested_at > 7):
                 result = None
         if not self.closed and self.pending is None and window:

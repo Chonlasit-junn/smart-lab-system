@@ -68,6 +68,20 @@ class BrowserMonitorTests(unittest.TestCase):
             self.assertIsNone(monitor.poll())
         monitor.executor.submit.assert_not_called()
 
+    def test_failed_url_read_is_cleared_and_polling_recovers(self):
+        monitor = self.monitor()
+        failed = Future()
+        failed.set_exception(RuntimeError("browser read failed"))
+        next_request = Future()
+        monitor.pending = failed
+        monitor.executor.submit.return_value = next_request
+
+        with patch.object(browser_url, "foreground_window", return_value=42):
+            self.assertIsNone(monitor.poll())
+
+        self.assertIs(monitor.pending, next_request)
+        monitor.executor.submit.assert_called_once()
+
     def test_closed_monitor_does_not_schedule_work(self):
         monitor = self.monitor()
         monitor.closed = True

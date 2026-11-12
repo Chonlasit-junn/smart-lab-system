@@ -343,6 +343,7 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertEqual(usage["count"], 0)
         self.assertTrue(violation["ignored"])
         self.assertEqual(heartbeat["session_id"], self.session.id)
+        self.assertIsNotNone(heartbeat["last_heartbeat_at"].tzinfo)
         self.assertEqual(ended["session_status"], "completed")
 
     def test_legacy_session_rejects_owner_with_another_device_token(self):

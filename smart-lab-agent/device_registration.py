@@ -10,9 +10,13 @@ from urllib.parse import urlsplit
 
 import requests
 
+try:
+    from agent_build_info import AGENT_VERSION as BUILD_AGENT_VERSION
+except ImportError:
+    BUILD_AGENT_VERSION = "source"
 
 DEFAULT_API_URL = "https://h0sh1na-smart-lab-backend.hf.space"
-DEFAULT_AGENT_VERSION = os.getenv("SMART_LAB_AGENT_VERSION", "source")
+DEFAULT_AGENT_VERSION = os.getenv("SMART_LAB_AGENT_VERSION", BUILD_AGENT_VERSION)
 
 
 class LabSetupError(RuntimeError):

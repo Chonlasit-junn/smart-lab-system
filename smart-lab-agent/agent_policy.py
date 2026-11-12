@@ -122,10 +122,14 @@ def find_process_match(
 
     if not isinstance(executable_identity, dict):
         return None
-    original = executable_identity.get("original_filename") or executable_identity.get("internal_name")
-    original = normalize_process_name(original)
+    embedded_names = {
+        normalize_process_name(executable_identity.get("original_filename")),
+        normalize_process_name(executable_identity.get("internal_name")),
+    }
+    embedded_names.discard("")
     product = normalize_compact(executable_identity.get("product_name"))
     normalized_exe_path = normalize_path(exe_path)
+    aliases = {"starrail": {"starrail", "honkaistarrail"}}
 
     for rule in rules:
         if rule.get("enabled") is False:
@@ -140,12 +144,13 @@ def find_process_match(
         if match_type == "exe_path":
             expected.add(normalize_process_name(rule.get("app_name")))
         expected.discard("")
-        if original:
-            if original in expected:
-                return rule
-        elif product:
+        identity_names = set(expected)
+        for expected_name in expected:
+            identity_names.update(aliases.get(expected_name, ()))
+        if embedded_names.intersection(identity_names):
+            return rule
+        if not embedded_names and product:
             # Product-only resources use exact labels, not title substrings.
-            aliases = {"starrail": {"starrail", "honkaistarrail"}}
             if any(product in aliases.get(name, {name}) for name in expected):
                 return rule
 

@@ -96,6 +96,22 @@ class AgentHttpTests(unittest.TestCase):
             {"Authorization": "Bearer legacy-owner-token"},
         )
 
+    def test_successful_heartbeat_refreshes_the_server_clock(self):
+        instance = SimpleNamespace(
+            flush_outbox=Mock(), current_access_token="test-token", current_session_id=12,
+            heartbeat_timer=SimpleNamespace(stop=Mock()), info_bar=None,
+        )
+        server_time = "2026-11-11T02:01:00+00:00"
+        response = make_response(200, {"last_heartbeat_at": server_time})
+        with patch.object(agent, "post_with_retry", return_value=response), patch.object(
+            agent, "_sync_backend_clock",
+        ) as sync_clock:
+            result = agent.SmartLabAgent._send_heartbeat_request(instance, 12)
+            agent.SmartLabAgent._handle_heartbeat_result(instance, 12, result, None)
+
+        self.assertEqual(result["server_time"], server_time)
+        sync_clock.assert_called_once_with(server_time)
+
     def test_closed_session_request_retries_with_a_fresh_key(self):
         overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
         overlay.agent = SimpleNamespace(
@@ -135,6 +151,25 @@ class AgentHttpTests(unittest.TestCase):
         self.assertEqual(overlay.agent.current_access_token, "test-token")
         overlay.agent.discard_session_attempt.assert_called_once_with("client-key-1")
         overlay.agent.confirm_session_attempt.assert_called_once_with("client-key-2")
+
+    def test_session_start_synchronizes_clock_from_backend(self):
+        overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
+        overlay.agent = SimpleNamespace(
+            flush_outbox=Mock(),
+            get_or_create_session_attempt=Mock(return_value="client-key"),
+            confirm_session_attempt=Mock(),
+        )
+        server_time = "2026-11-11T02:00:00+00:00"
+        with patch.object(agent, "post_with_retry", side_effect=[
+            make_response(200, {"access_token": "test-token"}),
+            make_response(200, {"session_id": 42, "server_time": server_time}),
+        ]), patch.object(agent, "_sync_backend_clock") as sync_clock:
+            result = agent.LoginOverlay._authenticate_and_start_session(
+                overlay, "student@example.invalid", "test-password",
+            )
+
+        self.assertEqual(result["kind"], "success")
+        sync_clock.assert_called_once_with(server_time)
 
     def test_failed_start_session_keeps_the_http_status(self):
         overlay = agent.LoginOverlay.__new__(agent.LoginOverlay)
@@ -754,7 +789,7 @@ class AgentTelemetryTests(unittest.TestCase):
 
     def test_closing_app_during_grace_ends_chance_and_reopened_app_is_detected(self):
         instance = self.make_agent()
-        now = agent.datetime.now()
+        now = agent.time.monotonic()
         instance.violation_state.register_detection(now)
         instance.violation_state.grant_grace(now)
         instance.violation_grace_context = self.warning_context(instance)
@@ -776,7 +811,7 @@ class AgentTelemetryTests(unittest.TestCase):
 
         self.assertEqual(instance.violation_state.attempts, 2)
         self.assertEqual(instance.violation_grace_context.get("process_id"), 456)
-        self.assertTrue(instance.violation_state.is_grace_active(agent.datetime.now()))
+        self.assertTrue(instance.violation_state.is_grace_active(agent.time.monotonic()))
         self.assertEqual(process_iter.call_count, 1)
         self.assertEqual(read_identity.call_count, 1)
         dialog.exec.assert_called_once()
@@ -875,6 +910,60 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertTrue(reopened[6])
         self.assertIsNone(same_open_episode)
 
+    def test_other_matching_processes_remain_eligible_after_first_match(self):
+        instance = self.make_agent()
+        instance.seen_process_ids.clear()
+        processes = [
+            SimpleNamespace(
+                info={"pid": process_id, "name": "blocked.exe"},
+                exe=Mock(return_value=r"C:\apps\blocked.exe"),
+            )
+            for process_id in (123, 456)
+        ]
+        identity = {"original_filename": "blocked.exe"}
+
+        with patch.object(agent.psutil, "process_iter", return_value=processes), patch.object(
+            agent, "_visible_window_handles_by_pid", return_value={},
+        ), patch.object(agent, "read_executable_identity", return_value=identity):
+            first_match = instance._find_new_process_match()
+
+        self.assertEqual(first_match[5], 123)
+        self.assertNotIn(456, instance.seen_process_ids)
+
+        with patch.object(agent.psutil, "process_iter", return_value=[processes[1]]), patch.object(
+            agent, "_visible_window_handles_by_pid", return_value={},
+        ), patch.object(agent, "read_executable_identity", return_value=identity):
+            second_match = instance._find_new_process_match()
+
+        self.assertEqual(second_match[5], 456)
+
+    def test_access_denied_process_is_retried_on_a_later_scan(self):
+        instance = self.make_agent()
+        instance.seen_process_ids.clear()
+        process = SimpleNamespace(
+            pid=123,
+            info={"pid": 123, "name": "blocked.exe"},
+            exe=Mock(side_effect=agent.psutil.AccessDenied(123)),
+        )
+
+        with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
+            agent, "_visible_window_handles_by_pid", return_value={},
+        ):
+            self.assertIsNone(instance._find_new_process_match())
+
+        self.assertNotIn(123, instance.seen_process_ids)
+        process.exe.side_effect = None
+        process.exe.return_value = r"C:\apps\blocked.exe"
+        with patch.object(agent.psutil, "process_iter", return_value=[process]), patch.object(
+            agent, "_visible_window_handles_by_pid", return_value={},
+        ), patch.object(
+            agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"},
+        ):
+            match = instance._find_new_process_match()
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match[5], 123)
+
     def test_polling_fallback_detects_recreated_window_with_other_window_still_visible(self):
         instance = self.make_agent()
         instance.seen_process_ids = {123}
@@ -906,7 +995,7 @@ class AgentTelemetryTests(unittest.TestCase):
         instance = self.make_agent()
         instance.seen_process_ids = {123}
         instance.seen_visible_process_ids = {123}
-        now = agent.datetime.now()
+        now = agent.time.monotonic()
         instance.violation_state.register_detection(now)
         instance.violation_state.grant_grace(now)
         instance.violation_grace_context = {
@@ -988,6 +1077,31 @@ class AgentTelemetryTests(unittest.TestCase):
         context = instance._handle_violation_detection.call_args.args[0]
         self.assertEqual(context["browser_domain"], "example.com")
         self.assertEqual(context["detection_source"], "browser_domain")
+
+    def test_website_detection_runs_while_process_scan_is_pending(self):
+        instance = self.make_agent()
+        instance.policy_rules = [
+            {"match_type": "process_name", "match_value": "blocked.exe"},
+            {"match_type": "website_domain", "match_value": "example.com"},
+        ]
+        instance._process_scan_in_flight = True
+        instance._process_scan_pending_shown = {}
+        instance._process_scan_generation = 0
+        instance.browser_url_monitor = Mock()
+        instance.browser_url_monitor.poll.return_value = {
+            "domain": "example.com", "hwnd": 42, "pid": 123,
+            "process_name": "msedge.exe", "exe_path": r"C:\msedge.exe",
+            "executable_identity": {"original_filename": "msedge.exe"},
+        }
+        instance._handle_violation_detection = Mock()
+
+        with patch.object(agent.gw, "getActiveWindow", return_value=None):
+            agent.SmartLabAgent.track_usage(instance)
+
+        instance.browser_url_monitor.poll.assert_called_once()
+        instance._handle_violation_detection.assert_called_once()
+        context = instance._handle_violation_detection.call_args.args[0]
+        self.assertEqual(context["browser_domain"], "example.com")
 
     def test_periodic_checkpoints_and_logout_do_not_overlap(self):
         instance = self.make_agent()

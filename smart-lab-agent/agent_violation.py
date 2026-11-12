@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from typing import Optional
 
 
@@ -31,16 +30,16 @@ class ViolationState:
         self.max_attempts = max(1, int(max_attempts))
         self.grace_seconds = max(1, int(grace_seconds))
         self.attempts = 0
-        self.grace_until: Optional[datetime] = None
+        self.grace_until: Optional[float] = None
 
     def reset(self) -> None:
         self.attempts = 0
         self.grace_until = None
 
-    def is_grace_active(self, now: datetime) -> bool:
+    def is_grace_active(self, now: float) -> bool:
         return self.grace_until is not None and now < self.grace_until
 
-    def clear_expired_grace(self, now: datetime) -> bool:
+    def clear_expired_grace(self, now: float) -> bool:
         if self.grace_until is None or now < self.grace_until:
             return False
         self.grace_until = None
@@ -52,7 +51,7 @@ class ViolationState:
         self.grace_until = None
         return True
 
-    def register_detection(self, now: datetime) -> Optional[ViolationAttempt]:
+    def register_detection(self, now: float) -> Optional[ViolationAttempt]:
         """Register a detection unless the session is still in its grace period."""
 
         self.clear_expired_grace(now)
@@ -65,6 +64,6 @@ class ViolationState:
             must_terminate=self.attempts >= self.max_attempts,
         )
 
-    def grant_grace(self, now: datetime) -> datetime:
-        self.grace_until = now + timedelta(seconds=self.grace_seconds)
+    def grant_grace(self, now: float) -> float:
+        self.grace_until = float(now) + self.grace_seconds
         return self.grace_until

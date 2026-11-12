@@ -25,6 +25,12 @@ SQLite outbox. On a crash, completed checkpoints survive; the most recent partia
 interval can still be lost. At the end of a warning, it checks whether the detected
 application is still present before ending the session.
 
+After a session starts, the Agent synchronizes UTC time from the Backend and
+advances that clock using Windows' monotonic timer. Changing the workstation's
+date or time during a session therefore does not move usage or violation log
+timestamps. Successful heartbeats refresh the time anchor. Rebuild and install
+the Agent for this behavior; older installed builds continue using the local clock.
+
 Deploy the Backend update before distributing the updated Agent. The policy API
 now supplies a signed rule snapshot, which the Agent caches and attaches to queued
 violations with their original UTC detection time. This lets the Backend validate
@@ -136,6 +142,9 @@ device, and ban checks as regular sessions. The QA build does not bypass booking
 time or other access policies.
 The QA Agent writes monitor exception timestamps and exception types only to
 `%LOCALAPPDATA%\SmartLabAgentQA\SmartLabAgent\monitor-errors.log`.
+Agent build version is embedded from `-Version`. QA builds keep logoff disabled
+for testing, while regular Agent builds enable the configured violation logoff;
+`SMART_LAB_AGENT_DEBUG` can still override this per Windows account.
 
 Gatekeeper registers a distinct `gatekeeper-…` device against its selected Lab
 and stores its credential in the current Windows user's LocalAppData. Migration

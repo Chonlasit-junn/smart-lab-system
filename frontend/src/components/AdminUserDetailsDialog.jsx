@@ -422,43 +422,87 @@ export default function AdminUserDetailsDialog({
         },
       }}
     >
-      <DialogTitle sx={{ p: { xs: "max(16px, env(safe-area-inset-top)) 20px 16px", md: 4 }, pb: 2, flex: "0 0 auto" }}>
-        <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2, minWidth: 0 }}>
-            <Avatar src={profileImage || undefined} sx={{ bgcolor: stringToColor(profileName), width: 64, height: 64, fontSize: 22, fontWeight: "700", flexShrink: 0 }}>
+      <DialogTitle sx={{ p: { xs: "max(12px, env(safe-area-inset-top)) 16px 12px", md: 4 }, pb: { xs: 1.5, md: 2 }, flex: "0 0 auto", bgcolor: "var(--surface-elevated)", borderBottom: "1px solid var(--border-light)" }}>
+        <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1.5 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1.25, md: 2 }, minWidth: 0 }}>
+            <Avatar src={profileImage || undefined} sx={{ bgcolor: stringToColor(profileName), width: { xs: 52, md: 64 }, height: { xs: 52, md: 64 }, fontSize: { xs: 18, md: 22 }, fontWeight: "700", flexShrink: 0 }}>
               {getInitials(profile)}
             </Avatar>
             <Box sx={{ minWidth: 0 }}>
-              <Typography variant="h5" fontWeight="700" color="#1e293b" sx={{ overflowWrap: "break-word" }}>
+              <Typography variant={isMobile ? "h6" : "h5"} fontWeight="700" color="#1e293b" sx={{ lineHeight: 1.2, overflowWrap: "break-word" }}>
                 {profileName}
               </Typography>
-              <Typography variant="body2" color="#64748b" sx={{ overflowWrap: "break-word" }}>
+              <Typography variant="body2" color="#64748b" sx={{ mt: 0.25, fontSize: { xs: "0.78rem", sm: "0.875rem" }, lineHeight: 1.35, overflowWrap: "anywhere" }}>
                 {profile.email || t("common.noEmail")} · {t("common.userId")} #{profile.id || selectedUser?.user_id || "—"}
               </Typography>
-              <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
+              <Box sx={{ display: "flex", gap: 0.75, mt: { xs: 0.75, md: 1 }, flexWrap: "wrap" }}>
                 <Chip label={getRoleLabel(profile.role, t)} size="small" sx={{ bgcolor: "#eff6ff", color: "#2563eb", fontWeight: "700" }} />
                 <Chip label={accountStatus === "active" ? t("admin.userDetails.accountUsable") : t("admin.userDetails.awaitingReview")} size="small" sx={{ bgcolor: accountStatus === "active" ? "#ecfdf5" : "#fff7ed", color: accountStatus === "active" ? "#047857" : "#c2410c", fontWeight: "700" }} />
               </Box>
             </Box>
           </Box>
-          <IconButton onClick={onClose} aria-label={`${t("common.close")} ${t("common.details")}`} sx={{ color: "#64748b" }}>
+          <IconButton onClick={onClose} aria-label={`${t("common.close")} ${t("common.details")}`} sx={{ color: "#64748b", mt: -0.5, mr: -0.75, flexShrink: 0 }}>
             <Close />
           </IconButton>
         </Box>
       </DialogTitle>
 
-      <Box sx={{ flex: "0 0 auto", bgcolor: "#fff", borderBottom: "1px solid #e2e8f0" }}>
+      <Box sx={{ flex: "0 0 auto", bgcolor: "var(--surface-elevated)", borderBottom: "1px solid var(--border-light)" }}>
         <Tabs
           value={tab}
           onChange={onTabChange}
-          variant="scrollable"
+          variant={isMobile ? "standard" : "scrollable"}
           scrollButtons="auto"
           sx={{
-            px: { xs: 1, md: 2 },
-            "& .MuiTab-root": { textTransform: "none", fontWeight: "700", minHeight: 58 },
+            px: { xs: 0.5, md: 2 },
+            minHeight: { xs: 0, md: 58 },
+            "& .MuiTabs-scroller": { overflow: { xs: "visible !important", md: "hidden" } },
+            "& .MuiTabs-flexContainer": {
+              display: { xs: "grid", md: "flex" },
+              gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "none" },
+              gap: { xs: 0.75, md: 0 },
+              p: { xs: 1, md: 0 },
+            },
+            "& .MuiTabs-indicator": { display: { xs: "none", md: "block" } },
+            "& .MuiTab-root": {
+              textTransform: "none",
+              fontWeight: "700",
+              minHeight: { xs: 42, md: 58 },
+              minWidth: { xs: 0, md: 100 },
+              maxWidth: { xs: "none", md: 360 },
+              px: { xs: 1, md: 2 },
+              py: { xs: 0.75, md: 1.5 },
+              borderRadius: { xs: 2, md: 0 },
+              color: "var(--text-muted)",
+              "&.Mui-selected": {
+                color: "var(--brand-color)",
+                bgcolor: { xs: "var(--surface-subtle)", md: "transparent" },
+              },
+            },
+            "& .MuiTab-root.Mui-selected .admin-user-details-tab-count": {
+              color: "var(--brand-color)",
+              bgcolor: "var(--brand-soft)",
+            },
+            "& .MuiTabs-scrollButtons": { display: { xs: "none", md: "flex" } },
           }}
         >
-          {tabs.map((item) => <Tab key={item.label} label={`${item.label} (${item.count})`} />)}
+          {tabs.map((item) => (
+            <Tab
+              key={item.label}
+              label={(
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0.75, width: "100%", minWidth: 0 }}>
+                  <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</Box>
+                  <Box
+                    component="span"
+                    className="admin-user-details-tab-count"
+                    sx={{ minWidth: 24, px: 0.75, py: 0.15, borderRadius: 999, bgcolor: "var(--surface-subtle)", color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 700, lineHeight: 1.5 }}
+                  >
+                    {item.count}
+                  </Box>
+                </Box>
+              )}
+            />
+          ))}
         </Tabs>
       </Box>
 
@@ -467,7 +511,7 @@ export default function AdminUserDetailsDialog({
         dividers
         sx={{
           p: 0,
-          bgcolor: "#fcfdfe",
+          bgcolor: "var(--surface-elevated)",
           flex: "1 1 0%",
           height: "auto",
           minHeight: 0,
@@ -477,7 +521,7 @@ export default function AdminUserDetailsDialog({
         <Box
           className="admin-user-details-scroll-area"
           sx={{
-            p: { xs: 2, md: 4 },
+            p: { xs: 1.25, md: 4 },
             height: "100%",
             boxSizing: "border-box",
             minHeight: 0,
@@ -498,7 +542,7 @@ export default function AdminUserDetailsDialog({
           ) : detail ? (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5, minHeight: "max-content" }}>
               <Box sx={{ order: { xs: 2, md: 1 }, display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) minmax(0, 1fr)" }, gap: 2.5, flexShrink: 0 }}>
-                <Paper className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
+                <Paper className="surface-card" elevation={0} sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 3, border: "1px solid var(--border-light)", bgcolor: "var(--card-bg)" }}>
                   <Typography variant="subtitle2" fontWeight="700" color="#64748b" sx={{ mb: 2 }}>{t("admin.userDetails.accountDetails")}</Typography>
                   <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 2 }}>
                     <ProfileField label={t("admin.userDetails.studentId")} value={profile.student_id} fallback={t("common.notSpecified")} />
@@ -509,7 +553,7 @@ export default function AdminUserDetailsDialog({
                     <ProfileField label={t("admin.lastUpdated")} value={formatDateTime(profile.updated_at, locale)} fallback={t("common.noData")} />
                   </Box>
                 </Paper>
-                <Paper className="surface-card" elevation={0} sx={{ p: 2.5, borderRadius: 3, border: "1px solid #e2e8f0", bgcolor: "white" }}>
+                <Paper className="surface-card" elevation={0} sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 3, border: "1px solid var(--border-light)", bgcolor: "var(--card-bg)" }}>
                   <Typography variant="subtitle2" fontWeight="700" color="#64748b" sx={{ mb: 2 }}>{t("admin.userDetails.accountStatusAndUsage")}</Typography>
                   <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 2 }}>
                     <Box><Typography variant="caption" color="#94a3b8">{t("common.points")}</Typography><Typography className="theme-colored" variant="h5" fontWeight="700" color={getScoreColor(pointValue)}>{pointValue}/100</Typography></Box>
@@ -520,8 +564,8 @@ export default function AdminUserDetailsDialog({
                 </Paper>
               </Box>
 
-              <Paper className="surface-card data-table-shell" elevation={0} sx={{ order: { xs: 1, md: 2 }, flexShrink: 0, borderRadius: 3, border: "1px solid #e2e8f0", overflow: "hidden", bgcolor: "white" }}>
-                <Box sx={{ p: { xs: 0, md: 1 } }}>
+              <Paper className="surface-card data-table-shell" elevation={0} sx={{ order: { xs: 1, md: 2 }, flexShrink: 0, borderRadius: 3, border: "1px solid var(--border-light)", overflow: "hidden", bgcolor: "var(--card-bg)" }}>
+                <Box sx={{ p: { xs: 1.25, md: 1 } }}>
                   <Box sx={historyPanelScrollSx}>
                     {tab === 0 && <UserBookings rows={detail.bookings || []} t={t} locale={locale} />}
                     {tab === 1 && <UserSessions rows={detail.sessions || []} t={t} locale={locale} />}

@@ -542,7 +542,7 @@ export default function Register() {
   );
 
   return (
-    <div className="login-wrapper" style={{ position: 'relative' }}>
+    <div className="login-wrapper register-page" style={{ position: 'relative' }}>
 
       <div className="login-container">
 
