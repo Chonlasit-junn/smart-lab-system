@@ -382,6 +382,7 @@ class DeviceRegistrationTests(unittest.TestCase):
         self.assertEqual(access_log.lab_device_id, device.id)
         self.assertEqual(access_log.booking_id, booking.id)
         self.assertIsNotNone(result["server_time"].tzinfo)
+        self.assertEqual(result["booking_ends_at"], "2026-09-22T03:00:00+00:00")
 
     def test_start_session_enforces_booking_window_even_if_legacy_qa_flag_is_set(self):
         registration = devices.register_device_as_admin(

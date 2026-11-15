@@ -3,8 +3,8 @@ import { notificationClearKey, readNotificationId, saveNotificationId } from '..
 
 export const NOTIFICATION_CLEAR_EVENT = 'smart-lab-notifications-cleared';
 
-export function useNotificationClearState(email) {
-  const key = notificationClearKey(email);
+export function useNotificationClearState(email, feed = "points") {
+  const key = notificationClearKey(email, feed);
   const snapshot = useCallback(() => readNotificationId(window.localStorage, key), [key]);
   const subscribe = useCallback(notify => {
     const onStorage = event => { if (event.key === null || event.key === key) notify(); };

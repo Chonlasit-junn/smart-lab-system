@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -75,9 +75,51 @@ class AgentHttpTests(unittest.TestCase):
 
     def test_revoked_device_heartbeat_returns_to_login(self):
         instance = SimpleNamespace(current_session_id=7, heartbeat_timer=SimpleNamespace(stop=Mock()), info_bar=SimpleNamespace(trigger_logout=Mock()))
-        agent.SmartLabAgent._handle_heartbeat_result(instance, 7, {"status": 403}, None)
+        with patch.object(agent, "_show_session_notice") as show_notice:
+            agent.SmartLabAgent._handle_heartbeat_result(instance, 7, {"status": 403}, None)
         instance.heartbeat_timer.stop.assert_called_once()
         instance.info_bar.trigger_logout.assert_called_once()
+        show_notice.assert_called_once()
+
+    def test_booking_expiry_shows_a_reason_before_returning_to_login(self):
+        instance = SimpleNamespace(
+            current_session_id=7,
+            heartbeat_timer=SimpleNamespace(stop=Mock()),
+            info_bar=SimpleNamespace(trigger_logout=Mock()),
+        )
+        with patch.object(agent, "_show_session_notice") as show_notice:
+            agent.SmartLabAgent._handle_heartbeat_result(
+                instance,
+                7,
+                {"status": 409, "detail": "Session booking has ended."},
+                None,
+            )
+
+        show_notice.assert_called_once_with(
+            "หมดเวลาจอง Lab",
+            "หมดเวลาจองแล้ว ระบบกำลังบันทึก Session และจะกลับไปหน้าเข้าสู่ระบบ",
+        )
+        instance.info_bar.trigger_logout.assert_called_once()
+
+    def test_booking_deadline_warns_once_with_five_minutes_remaining(self):
+        deadline = datetime(2026, 11, 11, 10, 0, tzinfo=timezone.utc)
+        instance = SimpleNamespace(
+            current_session_id=7,
+            booking_ends_at=deadline,
+            booking_end_warning_shown=False,
+            violation_dialog_active=False,
+        )
+        with patch.object(agent, "_utc_now", return_value=deadline - timedelta(minutes=4)), patch.object(
+            agent, "_show_session_notice",
+        ) as show_notice:
+            agent.SmartLabAgent._check_booking_deadline(instance)
+            agent.SmartLabAgent._check_booking_deadline(instance)
+
+        self.assertTrue(instance.booking_end_warning_shown)
+        show_notice.assert_called_once_with(
+            "ใกล้หมดเวลาจอง Lab",
+            "เหลือเวลาจองไม่เกิน 5 นาที เมื่อหมดเวลาระบบจะบันทึก Session และกลับไปหน้าเข้าสู่ระบบ กรุณาบันทึกงานของคุณ",
+        )
 
     def test_heartbeat_preserves_http_conflict_status(self):
         instance = SimpleNamespace(
@@ -102,7 +144,11 @@ class AgentHttpTests(unittest.TestCase):
             heartbeat_timer=SimpleNamespace(stop=Mock()), info_bar=None,
         )
         server_time = "2026-11-11T02:01:00+00:00"
-        response = make_response(200, {"last_heartbeat_at": server_time})
+        booking_ends_at = "2026-11-11T10:00:00+00:00"
+        response = make_response(200, {
+            "last_heartbeat_at": server_time,
+            "booking_ends_at": booking_ends_at,
+        })
         with patch.object(agent, "post_with_retry", return_value=response), patch.object(
             agent, "_sync_backend_clock",
         ) as sync_clock:
@@ -110,6 +156,11 @@ class AgentHttpTests(unittest.TestCase):
             agent.SmartLabAgent._handle_heartbeat_result(instance, 12, result, None)
 
         self.assertEqual(result["server_time"], server_time)
+        self.assertEqual(result["booking_ends_at"], booking_ends_at)
+        self.assertEqual(
+            instance.booking_ends_at,
+            datetime.fromisoformat(booking_ends_at),
+        )
         sync_clock.assert_called_once_with(server_time)
 
     def test_closed_session_request_retries_with_a_fresh_key(self):
@@ -125,7 +176,10 @@ class AgentHttpTests(unittest.TestCase):
         responses = [
             make_response(200, {"access_token": "test-token"}),
             make_response(409, {"detail": "Session request is already closed."}),
-            make_response(200, {"session_id": 42}),
+            make_response(200, {
+                "session_id": 42,
+                "booking_ends_at": "2026-11-11T10:00:00+00:00",
+            }),
         ]
 
         with patch.object(agent, "post_with_retry", side_effect=responses) as post:
@@ -137,7 +191,12 @@ class AgentHttpTests(unittest.TestCase):
 
         self.assertEqual(
             result,
-            {"kind": "success", "session_id": 42, "email": "student@example.invalid"},
+            {
+                "kind": "success",
+                "session_id": 42,
+                "email": "student@example.invalid",
+                "booking_ends_at": "2026-11-11T10:00:00+00:00",
+            },
         )
         self.assertEqual(post.call_count, 3)
         self.assertEqual(
@@ -169,6 +228,7 @@ class AgentHttpTests(unittest.TestCase):
             )
 
         self.assertEqual(result["kind"], "success")
+        self.assertIsNone(result["booking_ends_at"])
         sync_clock.assert_called_once_with(server_time)
 
     def test_failed_start_session_keeps_the_http_status(self):
@@ -1189,6 +1249,8 @@ class AgentTelemetryTests(unittest.TestCase):
         call_order = []
 
         with patch.object(agent, "DEBUG_MODE", False), patch.object(
+            agent, "WINDOWS_LOGOFF_ENABLED", True,
+        ), patch.object(
             agent.os, "system", side_effect=lambda _command: call_order.append("logout"),
         ) as logoff:
             agent.SmartLabAgent.stop_and_send_logs(instance, 12, "violation")
@@ -1205,6 +1267,10 @@ class AgentTelemetryTests(unittest.TestCase):
             agent.os, "system", side_effect=lambda _command: call_order.append("logout"),
         ) as logoff:
             deliver()
+            handle_delivery(True, None)
+            logoff.assert_not_called()
+            handle_delivery(False, RuntimeError("end-session delivery failed"))
+            logoff.assert_not_called()
             handle_delivery(False, None)
             logoff.assert_called_once_with("shutdown /l /f")
 

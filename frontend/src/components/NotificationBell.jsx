@@ -4,6 +4,7 @@ import { DeleteSweep, Notifications } from "@mui/icons-material";
 import { useLanguage } from "../context/language-context.js";
 import { formatDateTime } from "../utils/dateFormat";
 import { getPointReasonLabel } from "../utils/pointReason";
+import { getTicketReplyStatusPresentation } from "../utils/ticketStatus.js";
 import { useNotificationReadState } from "../context/useNotificationReadState.js";
 import { useNotificationClearState } from "../context/useNotificationClearState.js";
 import { useNotifications } from "../context/useNotifications.js";
@@ -19,51 +20,93 @@ export default function NotificationBell({
   const { currentUser } = useAuth();
   const { t } = useLanguage();
   const [anchorEl, setAnchorEl] = useState(null);
-  const { logs: pointLogs, loading, ready, error, refresh } = useNotifications(loadNotifications);
-  const [lastSeenLogId, markNotificationsRead] = useNotificationReadState(currentUser?.email);
-  const [clearedThroughId, clearNotificationsThrough] = useNotificationClearState(currentUser?.email);
+  const { logs, loading, ready, error, refresh } = useNotifications(loadNotifications);
+  const [lastSeenPointLogId, markPointNotificationsRead] = useNotificationReadState(currentUser?.email);
+  const [lastSeenTicketReplyId, markTicketNotificationsRead] = useNotificationReadState(currentUser?.email, "tickets");
+  const [clearedPointThroughId, clearPointNotificationsThrough] = useNotificationClearState(currentUser?.email);
+  const [clearedTicketThroughId, clearTicketNotificationsThrough] = useNotificationClearState(currentUser?.email, "tickets");
+
+  const pointLogs = useMemo(
+    () => logs.filter((log) => log.notification_kind !== "ticket_reply"),
+    [logs],
+  );
+  const ticketReplies = useMemo(
+    () => logs.filter((log) => log.notification_kind === "ticket_reply"),
+    [logs],
+  );
 
   const visiblePointLogs = useMemo(
-    () => pointLogs.filter((log) => log.id > clearedThroughId).slice(0, 10),
-    [clearedThroughId, pointLogs],
+    () => pointLogs.filter((log) => log.id > clearedPointThroughId).slice(0, 10),
+    [clearedPointThroughId, pointLogs],
+  );
+  const visibleTicketReplies = useMemo(
+    () => ticketReplies.filter((reply) => reply.id > clearedTicketThroughId).slice(0, 10),
+    [clearedTicketThroughId, ticketReplies],
   );
 
   const notifications = useMemo(
-    () =>
-      visiblePointLogs.map((log) => {
+    () => [
+      ...visiblePointLogs.map((log) => {
         const isPositive = log.change > 0;
         const reasonLabel = getPointReasonLabel(log.reason, t);
         return {
-          id: log.id,
+          id: `point:${log.id}`,
           title: `${reasonLabel} ${isPositive ? "+" : ""}${log.change} ${t("common.points")}`,
           subtitle: log.note || "—",
+          createdAt: log.created_at,
           time: formatDateTime(log.created_at, t("common.locale"), {
             includeSeconds: true,
           }),
           color: isPositive ? "#16a34a" : "#dc2626",
           iconText: isPositive ? "+" : "-",
-          unread: log.id > lastSeenLogId,
+          unread: log.id > lastSeenPointLogId,
         };
       }),
-    [lastSeenLogId, t, visiblePointLogs],
+      ...visibleTicketReplies.map((reply) => {
+        const statusPresentation = getTicketReplyStatusPresentation(reply.status);
+        const replyMessage = reply.message || "";
+        const messagePreview = replyMessage.length > 180
+          ? `${replyMessage.slice(0, 180)}…`
+          : replyMessage;
+        return {
+          id: `ticket:${reply.id}`,
+          title: `${t("common.ticketReplyNotification")}: ${reply.subject}`,
+          subtitle: `${messagePreview} · ${t("common.status")}: ${t(statusPresentation.labelKey)}`,
+          createdAt: reply.created_at,
+          time: formatDateTime(reply.created_at, t("common.locale"), {
+            includeSeconds: true,
+          }),
+          color: "#2563eb",
+          iconText: "T",
+          unread: reply.id > lastSeenTicketReplyId,
+        };
+      }),
+    ].sort((left, right) =>
+      (Date.parse(right.createdAt) || 0) - (Date.parse(left.createdAt) || 0),
+    ),
+    [lastSeenPointLogId, lastSeenTicketReplyId, t, visiblePointLogs, visibleTicketReplies],
   );
 
   const handleNotificationClick = (event) => {
     setAnchorEl(event.currentTarget);
     refresh();
-    if (visiblePointLogs.length === 0) return;
-
-    const latestId = Math.max(...visiblePointLogs.map((log) => log.id));
-    if (latestId > lastSeenLogId) {
-      markNotificationsRead(latestId);
-    }
+    const latestPointId = visiblePointLogs.reduce((latest, log) => Math.max(latest, Number(log.id) || 0), 0);
+    const latestTicketId = visibleTicketReplies.reduce((latest, reply) => Math.max(latest, Number(reply.id) || 0), 0);
+    if (latestPointId > lastSeenPointLogId) markPointNotificationsRead(latestPointId);
+    if (latestTicketId > lastSeenTicketReplyId) markTicketNotificationsRead(latestTicketId);
   };
 
   const handleClearNotifications = () => {
-    const latestId = pointLogs.reduce((latest, log) => Math.max(latest, Number(log.id) || 0), 0);
-    if (!latestId) return;
-    markNotificationsRead(latestId);
-    clearNotificationsThrough(latestId);
+    const latestPointId = pointLogs.reduce((latest, log) => Math.max(latest, Number(log.id) || 0), 0);
+    const latestTicketId = ticketReplies.reduce((latest, reply) => Math.max(latest, Number(reply.id) || 0), 0);
+    if (latestPointId) {
+      markPointNotificationsRead(latestPointId);
+      clearPointNotificationsThrough(latestPointId);
+    }
+    if (latestTicketId) {
+      markTicketNotificationsRead(latestTicketId);
+      clearTicketNotificationsThrough(latestTicketId);
+    }
   };
 
   return (
@@ -202,7 +245,15 @@ export default function NotificationBell({
                   <Typography
                     fontSize={compact ? "12px" : "13px"}
                     fontWeight={compact ? undefined : "400"}
-                    sx={{ color: "var(--text-gray)", mt: 0.3 }}
+                    sx={{
+                      color: "var(--text-gray)",
+                      mt: 0.3,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      overflowWrap: "anywhere",
+                    }}
                   >
                     {notification.subtitle}
                   </Typography>

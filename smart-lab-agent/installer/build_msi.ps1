@@ -41,11 +41,11 @@ $registryBasePath = if ($Product -eq "Gatekeeper") { "Software\Smart Lab\Face Sc
 $upgradeCode = if ($Product -eq "Gatekeeper") { "{6E77A21F-69D9-4D82-90D0-52BDF4F0C571}" } elseif ($isQaAgent) { "{87B146E3-9F71-4610-9D5A-E3D72384D8C9}" } else { "{78B9A7C1-A3F4-4D82-974A-A7A69E9121CC}" }
 
 $componentIds = if ($Product -eq "Gatekeeper") {
-    @{ Desktop = "{B119D16C-425B-43DD-9F29-32D1C7D05011}"; Register = "{B119D16C-425B-43DD-9F29-32D1C7D05012}"; Uninstall = "{B119D16C-425B-43DD-9F29-32D1C7D05013}" }
+    @{ Desktop = "{B119D16C-425B-43DD-9F29-32D1C7D05011}"; Register = "{B119D16C-425B-43DD-9F29-32D1C7D05012}"; Uninstall = "{B119D16C-425B-43DD-9F29-32D1C7D05013}"; Startup = $null }
 } elseif ($isQaAgent) {
-    @{ Desktop = "{8E5A1D66-83A1-4E20-AF36-03720862A021}"; Register = "{8E5A1D66-83A1-4E20-AF36-03720862A022}"; Uninstall = "{8E5A1D66-83A1-4E20-AF36-03720862A023}" }
+    @{ Desktop = "{8E5A1D66-83A1-4E20-AF36-03720862A021}"; Register = "{8E5A1D66-83A1-4E20-AF36-03720862A022}"; Uninstall = "{8E5A1D66-83A1-4E20-AF36-03720862A023}"; Startup = "{8E5A1D66-83A1-4E20-AF36-03720862A024}" }
 } else {
-    @{ Desktop = "{C41B79CE-2E28-41BD-B743-7607AB300021}"; Register = "{C41B79CE-2E28-41BD-B743-7607AB300022}"; Uninstall = "{C41B79CE-2E28-41BD-B743-7607AB300023}" }
+    @{ Desktop = "{C41B79CE-2E28-41BD-B743-7607AB300021}"; Register = "{C41B79CE-2E28-41BD-B743-7607AB300022}"; Uninstall = "{C41B79CE-2E28-41BD-B743-7607AB300023}"; Startup = "{C41B79CE-2E28-41BD-B743-7607AB300024}" }
 }
 $primaryShortcutArguments = if ($isQaAgent) { "--qa" } else { "" }
 
@@ -553,6 +553,66 @@ try {
     $startMenuDirectory = @($startMenuDirectories.Keys)[0]
     if ($startMenuDirectory -notmatch '^[A-Za-z0-9_]+$') {
         throw "Unexpected MSI identifier for the Smart Lab Start Menu folder: '$startMenuDirectory'."
+    }
+
+    if ($Product -eq "Agent") {
+        $startupComponent = 'SmartLabAgentAutoStart'
+        $startupRegistryKeyPath = 'SmartLabAgentAutoStartKeyPath'
+        $startupRunEntry = if ($isQaAgent) { 'SmartLabAgentQA' } else { 'SmartLabAgent' }
+        $startupArguments = if ($primaryShortcutArguments) { " $primaryShortcutArguments" } else { "" }
+        if (-not $fileKeysByName.ContainsKey($appExeName)) {
+            throw "The MSI is missing '$appExeName' required for Agent auto-start."
+        }
+        $startupCommand = '"[#' + $fileKeysByName[$appExeName] + ']"' + $startupArguments
+
+        $insertStartupComponentSql = "INSERT INTO ``Component`` (``Component``, ``ComponentId``, ``Directory_``, ``Attributes``, ``Condition``, ``KeyPath``) VALUES ('$startupComponent', '$($componentIds.Startup)', '$startMenuDirectory', 260, NULL, '$startupRegistryKeyPath')"
+        $view = $database.OpenView($insertStartupComponentSql)
+        $view.Execute()
+        $view.Close()
+        [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
+        $view = $null
+
+        $insertStartupMarkerSql = "INSERT INTO ``Registry`` (``Registry``, ``Root``, ``Key``, ``Name``, ``Value``, ``Component_``) VALUES ('$startupRegistryKeyPath', 2, '$registryBasePath', 'AgentAutoStartKeyPath', '1', '$startupComponent')"
+        $view = $database.OpenView($insertStartupMarkerSql)
+        $view.Execute()
+        $view.Close()
+        [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
+        $view = $null
+
+        $startupRunRegistryId = 'SmartLabAgentAutoStartRunValue'
+        $insertStartupRunSql = "INSERT INTO ``Registry`` (``Registry``, ``Root``, ``Key``, ``Name``, ``Value``, ``Component_``) VALUES ('$startupRunRegistryId', 2, 'Software\Microsoft\Windows\CurrentVersion\Run', '$startupRunEntry', '$startupCommand', '$startupComponent')"
+        $view = $database.OpenView($insertStartupRunSql)
+        $view.Execute()
+        $view.Close()
+        [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
+        $view = $null
+
+        $insertStartupFeatureSql = "INSERT INTO ``FeatureComponents`` (``Feature_``, ``Component_``) VALUES ('DefaultFeature', '$startupComponent')"
+        $view = $database.OpenView($insertStartupFeatureSql)
+        $view.Execute()
+        $view.Close()
+        [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
+        $view = $null
+
+        $view = $database.OpenView("SELECT ``Attributes``, ``KeyPath`` FROM ``Component`` WHERE ``Component`` = '$startupComponent'")
+        $view.Execute()
+        $record = $view.Fetch()
+        if (-not $record -or $record.IntegerData(1) -ne 260 -or $record.StringData(2) -ne $startupRegistryKeyPath) {
+            throw "The Agent auto-start component did not pass its 64-bit registry key-path validation."
+        }
+        $view.Close()
+        [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
+        $view = $null
+
+        $view = $database.OpenView("SELECT ``Root``, ``Key``, ``Name``, ``Value``, ``Component_`` FROM ``Registry`` WHERE ``Registry`` = '$startupRunRegistryId'")
+        $view.Execute()
+        $record = $view.Fetch()
+        if (-not $record -or $record.IntegerData(1) -ne 2 -or $record.StringData(2) -ne 'Software\Microsoft\Windows\CurrentVersion\Run' -or $record.StringData(3) -ne $startupRunEntry -or $record.StringData(4) -ne $startupCommand -or $record.StringData(5) -ne $startupComponent) {
+            throw "The Agent Windows sign-in auto-start entry did not pass validation."
+        }
+        $view.Close()
+        [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
+        $view = $null
     }
 
     $uninstallComponent = 'SmartLabUninstallShortcut'

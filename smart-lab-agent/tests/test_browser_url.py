@@ -33,6 +33,21 @@ class WebsitePolicyTests(unittest.TestCase):
         for domain in ("example.com.evil.com", "notexample.com", "evil.com/example.com", None):
             self.assertIsNone(find_website_match(self.rules, domain))
 
+    def test_website_rules_detect_com_and_net_domains_from_browser_urls(self):
+        rules = normalize_rules([
+            {"id": 3, "app_name": "Blocked .com", "match_type": "website_domain",
+             "match_value": "blocked.com", "enabled": True},
+            {"id": 4, "app_name": "Blocked .net", "match_type": "website_domain",
+             "match_value": "blocked.net", "enabled": True},
+        ])
+        for url, expected_rule_id in (
+            ("https://www.blocked.com/path?q=private", 3),
+            ("https://sub.blocked.net/", 4),
+        ):
+            domain = browser_url.normalize_domain(url)
+            with self.subTest(url=url):
+                self.assertEqual(find_website_match(rules, domain)["id"], expected_rule_id)
+
     def test_website_rules_do_not_match_executable_identity(self):
         self.assertIsNone(find_process_match(self.rules, "example.com.exe",
                                             executable_identity={"original_filename": "example.com.exe"}))

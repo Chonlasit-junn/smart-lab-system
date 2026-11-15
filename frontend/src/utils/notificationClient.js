@@ -20,11 +20,33 @@ export const notificationStore = createNotificationStore({
   readToken: readNotificationToken,
   isVisible: () => pageActive && document.visibilityState !== 'hidden' && navigator.onLine !== false,
   fetchLogs: async (token, signal) => {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL}/users/me/points/logs`, {
-      headers: { Authorization: `Bearer ${token}` }, signal,
-      params: { limit: 20, notifications_only: true },
-    });
-    return response.data?.data;
+    const config = {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    };
+    const [pointsResponse, ticketsResponse] = await Promise.all([
+      axios.get(`${import.meta.env.VITE_API_URL}/users/me/points/logs`, {
+        ...config,
+        params: { limit: 20, notifications_only: true },
+      }),
+      axios.get(`${import.meta.env.VITE_API_URL}/tickets/me/notifications`, {
+        ...config,
+        params: { limit: 20 },
+      }),
+    ]);
+
+    const pointLogs = (pointsResponse.data?.data || []).map(log => ({
+      ...log,
+      notification_kind: 'point',
+    }));
+    const ticketReplies = (ticketsResponse.data?.data || []).map(reply => ({
+      ...reply,
+      notification_kind: 'ticket_reply',
+    }));
+
+    return [...pointLogs, ...ticketReplies].sort((left, right) =>
+      (Date.parse(right.created_at) || 0) - (Date.parse(left.created_at) || 0),
+    );
   },
   listen: notify => {
     pageActive = true;

@@ -1,8 +1,8 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { NOTIFICATION_READ_EVENT, notificationReadKey, readNotificationId, saveNotificationId } from '../utils/notificationReadState.js';
 
-export function useNotificationReadState(email) {
-  const key = notificationReadKey(email);
+export function useNotificationReadState(email, feed = "points") {
+  const key = notificationReadKey(email, feed);
   const snapshot = useCallback(() => readNotificationId(window.localStorage, key), [key]);
   const subscribe = useCallback(notify => {
     const onStorage = event => { if (event.key === null || event.key === key) notify(); };

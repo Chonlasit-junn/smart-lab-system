@@ -1,13 +1,14 @@
 export const NOTIFICATION_READ_EVENT = 'smart-lab-notifications-read';
 
-export function notificationReadKey(email) {
+export function notificationReadKey(email, feed = "points") {
   const identity = typeof email === 'string' ? email.trim().toLowerCase() : '';
-  return identity ? `last_seen_point_log_id:${encodeURIComponent(identity)}` : null;
+  const recordType = feed === "tickets" ? "ticket_reply" : "point_log";
+  return identity ? `last_seen_${recordType}_id:${encodeURIComponent(identity)}` : null;
 }
 
-export function notificationClearKey(email) {
-  const readKey = notificationReadKey(email);
-  return readKey ? `cleared_point_log_id:${readKey.slice('last_seen_point_log_id:'.length)}` : null;
+export function notificationClearKey(email, feed = "points") {
+  const readKey = notificationReadKey(email, feed);
+  return readKey ? readKey.replace("last_seen_", "cleared_") : null;
 }
 
 export function readNotificationId(storage, key) {

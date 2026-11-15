@@ -105,6 +105,18 @@ def response_detail(response):
     return ""
 
 
+def _show_session_notice(title, message):
+    dialog = QMessageBox()
+    dialog.setIcon(QMessageBox.Icon.Warning)
+    dialog.setWindowTitle(title)
+    dialog.setText(message)
+    dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
+    dialog.setWindowFlags(
+        dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint
+    )
+    dialog.exec()
+
+
 def _with_device_credentials(payload):
     return {
         **payload,
@@ -246,6 +258,10 @@ DEBUG_MODE = (
     if _debug_override is not None
     else bool(BUILD_DEBUG_MODE)
 )
+WINDOWS_LOGOFF_ENABLED = os.getenv(
+    "SMART_LAB_AGENT_WINDOWS_LOGOFF",
+    "0",
+).strip().lower() in {"1", "true", "yes", "on"}
 # Keep workstation cleanup opt-in while it is being validated on Lab machines.
 # Set SMART_LAB_SESSION_CLEANUP=1 explicitly when this feature is ready.
 _cleanup_default = "0"
@@ -823,6 +839,7 @@ class LoginOverlay(QWidget):
                     "kind": "success",
                     "session_id": session_id,
                     "email": email,
+                    "booking_ends_at": session_payload.get("booking_ends_at"),
                 }
 
         status = session_response.status_code if session_response is not None else None
@@ -848,7 +865,11 @@ class LoginOverlay(QWidget):
                     session_id,
                 )
                 self.info_bar.show()
-                self.agent.start_monitoring(session_id, self.info_bar)
+                self.agent.start_monitoring(
+                    session_id,
+                    self.info_bar,
+                    booking_ends_at=result.get("booking_ends_at"),
+                )
             elif kind == "connection_error":
                 self._show_error("ไม่สามารถเชื่อมต่อ Server ได้ กรุณาตรวจสอบอินเทอร์เน็ต")
             elif kind == "approval_required":
@@ -894,6 +915,8 @@ class SmartLabAgent:
         self.current_activity_name = None
         self.current_activity_started_at = None
         self.current_session_id = None
+        self.booking_ends_at = None
+        self.booking_end_warning_shown = False
         self.current_access_token = None
         self.info_bar       = None
         self.overlay        = None
@@ -920,6 +943,8 @@ class SmartLabAgent:
         self.monitor_timer.timeout.connect(self.track_usage)
         self.heartbeat_timer = QTimer()
         self.heartbeat_timer.timeout.connect(self.send_heartbeat)
+        self.booking_deadline_timer = QTimer()
+        self.booking_deadline_timer.timeout.connect(self._check_booking_deadline)
         self.policy_timer = QTimer()
         self.policy_timer.timeout.connect(self.refresh_policy)
         self.outbox_retry_timer = QTimer()
@@ -1292,9 +1317,12 @@ class SmartLabAgent:
     def refresh_policy(self):
         self.fetch_policy()
 
-    def start_monitoring(self, session_id, info_bar):
+    def start_monitoring(self, session_id, info_bar, booking_ends_at=None):
         self.current_session_id = session_id
         self.info_bar = info_bar
+        self.booking_ends_at = None
+        self.booking_end_warning_shown = False
+        SmartLabAgent._update_booking_deadline(self, booking_ends_at)
         self.usage_segments = []
         self.current_activity_name = None
         self.current_activity_started_at = None
@@ -1328,7 +1356,44 @@ class SmartLabAgent:
         self.refresh_policy()
         self.monitor_timer.start(5000)
         self.heartbeat_timer.start(30000)
+        booking_timer = getattr(self, "booking_deadline_timer", None)
+        if booking_timer is not None:
+            booking_timer.start(5000)
         self.policy_timer.start(POLICY_REFRESH_SECONDS * 1000)
+
+    def _update_booking_deadline(self, value):
+        if not isinstance(value, str) or not value.strip():
+            return
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                return
+            deadline = parsed.astimezone(timezone.utc)
+        except (OverflowError, TypeError, ValueError):
+            return
+
+        if deadline != getattr(self, "booking_ends_at", None):
+            self.booking_ends_at = deadline
+            self.booking_end_warning_shown = False
+
+    def _check_booking_deadline(self):
+        deadline = getattr(self, "booking_ends_at", None)
+        if (
+            not getattr(self, "current_session_id", None)
+            or deadline is None
+            or getattr(self, "booking_end_warning_shown", False)
+            or getattr(self, "violation_dialog_active", False)
+        ):
+            return
+
+        remaining = (deadline - _utc_now()).total_seconds()
+        if 0 < remaining <= 5 * 60:
+            self.booking_end_warning_shown = True
+            _show_session_notice(
+                "ใกล้หมดเวลาจอง Lab",
+                "เหลือเวลาจองไม่เกิน 5 นาที เมื่อหมดเวลาระบบจะบันทึก Session "
+                "และกลับไปหน้าเข้าสู่ระบบ กรุณาบันทึกงานของคุณ",
+            )
 
     def send_heartbeat(self):
         session_id = self.current_session_id
@@ -1358,11 +1423,14 @@ class SmartLabAgent:
             retries=1,
             timeout=10,
         )
+        booking_ends_at = None
         if response is not None and 200 <= response.status_code < 300:
             # Successful heartbeat is also the reconnect signal for the outbox.
             self.flush_outbox(limit=3)
             try:
-                server_time = response.json().get("last_heartbeat_at")
+                payload = response.json()
+                server_time = payload.get("last_heartbeat_at")
+                booking_ends_at = payload.get("booking_ends_at")
             except (AttributeError, ValueError):
                 server_time = None
         else:
@@ -1370,6 +1438,8 @@ class SmartLabAgent:
         return {
             "status": response.status_code if response is not None else None,
             "server_time": server_time,
+            "booking_ends_at": booking_ends_at,
+            "detail": response_detail(response),
         }
 
     def _handle_heartbeat_result(self, session_id, result, error):
@@ -1381,11 +1451,34 @@ class SmartLabAgent:
 
         if isinstance(result, dict):
             _sync_backend_clock(result.get("server_time"))
+            SmartLabAgent._update_booking_deadline(self, result.get("booking_ends_at"))
         status = result.get("status") if isinstance(result, dict) else None
         if status in {403, 409}:
             print("Session ไม่ active แล้ว กำลังกลับไปหน้า Login")
             self.heartbeat_timer.stop()
+            booking_timer = getattr(self, "booking_deadline_timer", None)
+            if booking_timer is not None:
+                booking_timer.stop()
             if self.info_bar:
+                detail = result.get("detail", "") if isinstance(result, dict) else ""
+                if detail == "Session booking has ended.":
+                    _show_session_notice(
+                        "หมดเวลาจอง Lab",
+                        "หมดเวลาจองแล้ว ระบบกำลังบันทึก Session "
+                        "และจะกลับไปหน้าเข้าสู่ระบบ",
+                    )
+                elif detail == "Session access is no longer available.":
+                    _show_session_notice(
+                        "สิทธิ์ใช้งาน Session สิ้นสุดแล้ว",
+                        "บัญชีหรือสิทธิ์เข้าใช้ Lab เปลี่ยนแปลง ระบบกำลังบันทึก Session "
+                        "และจะกลับไปหน้าเข้าสู่ระบบ",
+                    )
+                else:
+                    _show_session_notice(
+                        "Session สิ้นสุดแล้ว",
+                        "ไม่สามารถใช้งาน Session นี้ต่อได้ ระบบกำลังบันทึกข้อมูล "
+                        "และจะกลับไปหน้าเข้าสู่ระบบ",
+                    )
                 self.info_bar.trigger_logout()
         elif status is None:
             print("ส่ง heartbeat ไม่ได้: Server ไม่ตอบกลับ")
@@ -2193,7 +2286,7 @@ class SmartLabAgent:
         end_reason,
         violations,
     ):
-        self._send_fallback_violation_logs(violations)
+        delivered = self._send_fallback_violation_logs(violations)
 
         if summary:
             for offset in range(0, len(summary), USAGE_LOG_BATCH_SIZE):
@@ -2208,8 +2301,11 @@ class SmartLabAgent:
                         headers=_session_auth_headers(self),
                     )
                     print(f"Server Response: {response.status_code if response is not None else 'Timeout'}")
+                    if response is None or not 200 <= response.status_code < 300:
+                        delivered = False
                 except Exception as error:
                     print(f"ส่งข้อมูลไม่ได้: {error}")
+                    delivered = False
         else:
             print("ไม่มีสถิติการใช้งานที่บันทึกได้")
 
@@ -2223,10 +2319,15 @@ class SmartLabAgent:
                 headers=_session_auth_headers(self),
             )
             print(f"End session response: {response.status_code if response is not None else 'Timeout'}")
+            if response is None or not 200 <= response.status_code < 300:
+                delivered = False
         except Exception as error:
             print(f"ปิด Session ไม่ได้: {error}")
+            delivered = False
+        return delivered
 
     def _send_fallback_violation_logs(self, violations):
+        delivered = True
         for payload in violations:
             try:
                 response = post_with_retry(
@@ -2235,14 +2336,21 @@ class SmartLabAgent:
                     headers=_session_auth_headers(self),
                 )
                 print(f"Violation response: {response.status_code if response is not None else 'Timeout'}")
+                if response is None or not 200 <= response.status_code < 300:
+                    delivered = False
             except Exception as error:
                 print(f"บันทึก violation ไม่ได้: {error}")
+                delivered = False
+        return delivered
 
     def stop_and_send_logs(self, session_id, end_reason="logout"):
         self.stop_browser_monitor()
         self._stop_window_visibility_monitor()
         self.monitor_timer.stop()
         self.heartbeat_timer.stop()
+        booking_timer = getattr(self, "booking_deadline_timer", None)
+        if booking_timer is not None:
+            booking_timer.stop()
         self.policy_timer.stop()
         self._close_current_activity(_utc_now())
         summary = list(self.usage_segments)
@@ -2250,7 +2358,11 @@ class SmartLabAgent:
         print("\n--- บันทึกข้อมูลลง local outbox ---")
         print(f"Data: {summary}")
 
-        logoff_immediately = not DEBUG_MODE and self.outbox is not None
+        should_logoff = (
+            WINDOWS_LOGOFF_ENABLED
+            and not DEBUG_MODE
+            and end_reason == "violation"
+        )
         if self.outbox is not None:
             violations = list(self._pending_fallback_violations)
             self._pending_fallback_violations.clear()
@@ -2263,10 +2375,6 @@ class SmartLabAgent:
                     event_id=payload.get("event_id"),
                 ):
                     fallback_violations.append(payload)
-            logoff_after_fallback = bool(fallback_violations) and not DEBUG_MODE
-            if logoff_after_fallback:
-                logoff_immediately = False
-
             # Retry only segments that could not be saved to the outbox when
             # their activity ended; already queued items may have been delivered.
             for segment in summary:
@@ -2291,34 +2399,39 @@ class SmartLabAgent:
             )
 
             def deliver_outbox():
+                fallback_delivered = True
                 if fallback_violations:
-                    self._send_fallback_violation_logs(fallback_violations)
-                self.flush_outbox(limit=10)
-                return self.outbox.has_pending_for_session(session_id)
+                    fallback_delivered = self._send_fallback_violation_logs(fallback_violations)
+                # A normal session can accumulate more than ten checkpoint
+                # events. Drain bounded pages so end-session is not left
+                # behind them when Windows logs off.
+                for _ in range(10):
+                    self.flush_outbox(limit=100)
+                    if not self.outbox.has_pending_for_session(session_id):
+                        return not fallback_delivered
+                return True
 
             def handle_outbox_delivery(pending, error):
                 if error is not None:
                     print(f"ส่งข้อมูลจาก local outbox ไม่สำเร็จ: {error}")
                 elif pending:
                     print("ยังมีข้อมูลรอส่ง จะ retry อัตโนมัติเมื่อ Internet กลับมา")
-                if logoff_after_fallback:
+                if should_logoff and error is None and not pending:
                     os.system("shutdown /l /f")
 
-            submitted = self.background_tasks.submit(
+            self.background_tasks.submit(
                 f"outbox-session-{session_id}",
                 deliver_outbox,
                 handle_outbox_delivery,
             )
-            if logoff_after_fallback and not submitted:
-                os.system("shutdown /l /f")
         else:
             violations = list(self._pending_fallback_violations)
             self._pending_fallback_violations.clear()
 
-            def handle_fallback_delivery(_result, error):
+            def handle_fallback_delivery(delivered, error):
                 if error is not None:
                     print(f"ส่งบันทึก Session ไม่สำเร็จ: {error}")
-                if not DEBUG_MODE:
+                if should_logoff and error is None and delivered:
                     os.system("shutdown /l /f")
 
             self.background_tasks.submit(
@@ -2345,10 +2458,9 @@ class SmartLabAgent:
         self.violation_state.reset()
         self.violation_grace_context = None
         self.violation_dialog_active = False
+        self.booking_ends_at = None
+        self.booking_end_warning_shown = False
         self.current_session_id = None
-
-        if logoff_immediately:
-            os.system("shutdown /l /f")
 
     def stop_browser_monitor(self):
         monitor = getattr(self, "browser_url_monitor", None)

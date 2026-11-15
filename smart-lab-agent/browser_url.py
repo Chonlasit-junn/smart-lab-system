@@ -63,14 +63,26 @@ while ($line = [Console]::ReadLine()) {
             $visited++
             $current = $node.Current
             if ($current.ControlType -eq [System.Windows.Automation.ControlType]::Document) { continue }
-            if ($current.ControlType -eq [System.Windows.Automation.ControlType]::Edit) {
+            if ($current.ControlType -eq [System.Windows.Automation.ControlType]::Edit -or
+                $current.ControlType -eq [System.Windows.Automation.ControlType]::ComboBox) {
                 $shortcut = ($current.AcceleratorKey -replace '\s', '').ToLowerInvariant()
+                $automationId = [string]$current.AutomationId
+                $name = [string]$current.Name
                 $isAddress = ($shortcut -eq 'ctrl+l' -or $shortcut -eq 'alt+d' -or
-                              $current.AutomationId -eq 'addressEditBox')
+                              $automationId -in @('addressEditBox', 'omnibox') -or
+                              $name -match '(?i)^address( and search)? bar$')
                 if ($isAddress -and -not $current.HasKeyboardFocus -and -not $current.IsOffscreen) {
-                    $pattern = $node.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-                    $value = [string]$pattern.Current.Value
-                    break
+                    # Some browser versions expose multiple matching controls,
+                    # and not every one supports ValuePattern. Skip those and
+                    # continue searching instead of aborting the whole scan.
+                    try {
+                        $pattern = $node.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+                        $candidate = [string]$pattern.Current.Value
+                        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+                            $value = $candidate
+                            break
+                        }
+                    } catch { }
                 }
             }
             if ($depth -ge 8) { continue }

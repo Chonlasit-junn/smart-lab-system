@@ -1,8 +1,8 @@
 export const NOTIFICATION_POLL_MS = 15_000;
 const EMPTY = Object.freeze({ logs: [], loading: false, ready: false, error: false });
 
-export const isUserPointLog = log =>
-  log.source_type !== 'admin_test' && !String(log.reason || '').startsWith('admin_');
+export const isUserPointLog = log => log.notification_kind === 'ticket_reply' ||
+  (log.source_type !== 'admin_test' && !String(log.reason || '').startsWith('admin_'));
 
 // One in-memory feed per browser tab, scoped to both account and credential.
 // Dependencies are injected so races and polling can be tested without an API.

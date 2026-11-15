@@ -9,8 +9,8 @@
 - `lab_setup.py`, `lab_setup.pyw`, `provision_device.py`: เครื่องมือตั้งค่า/เตรียมเครื่อง
 - `installer/`: สคริปต์ build, template และ [คู่มือติดตั้ง MSI](installer/README.md)
 - `tests/`: source tests; ไม่ใช่ไฟล์ชั่วคราว
-- `build_msi/`: ไฟล์ระหว่าง build; `qa-archive/` ภายในเก็บ browser profiles ทดสอบเก่า
-- `dist_msi/`: MSI แยกตาม `agent/` และ `qa/`; รุ่นเก่าเก็บใน `archive/agent/` และ `archive/qa/`
+- `build_msi/`: ไฟล์ระหว่าง build; build QA เก่าเก็บใน `qa-archive/builds/` และ browser profiles ทดสอบเก่าเก็บใน `qa-archive/`
+- `dist_msi/`: MSI รุ่นปัจจุบันแยกตาม `agent/` และ `qa/`; รุ่นที่เลิกใช้เก็บใน `archive/agent/` และ `archive/qa/`
 - `venv/`: Python environment เฉพาะเครื่อง build ไม่ต้องส่งให้เครื่อง Lab
 
 ไม่ย้าย source modules เพราะ tests และ PyInstaller อ้างอิงตำแหน่งเหล่านี้ ดูแนวทางเก็บไฟล์ใน [โครงสร้างโปรเจค](../docs/PROJECT_STRUCTURE.md)

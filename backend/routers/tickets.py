@@ -6,6 +6,7 @@ import models, schemas
 
 router = APIRouter()
 ALLOWED_TICKET_STATUSES = {"open", "in_progress", "closed"}
+TICKET_NOTIFICATION_LIMIT = 20
 TICKET_REPLY_STATUS_TO_TICKET_STATUS = {
     "received": "open",
     "in_progress": "in_progress",
@@ -158,6 +159,41 @@ def get_my_tickets(
         "page_size": page_limit,
         "total": total,
         "has_more": page_number * page_limit < total,
+    }
+
+
+# Keep the notification feed scoped to the signed-in user's tickets.
+@router.get("/tickets/me/notifications")
+def get_my_ticket_notifications(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = Query(TICKET_NOTIFICATION_LIMIT, ge=1, le=100),
+):
+    replies = db.query(
+        models.TicketReply,
+        models.Ticket.subject,
+    ).join(
+        models.Ticket,
+        models.Ticket.id == models.TicketReply.ticket_id,
+    ).filter(
+        models.Ticket.user_id == current_user.id,
+    ).order_by(
+        models.TicketReply.created_at.desc(),
+        models.TicketReply.id.desc(),
+    ).limit(limit).all()
+
+    return {
+        "data": [
+            {
+                "id": reply.id,
+                "ticket_id": reply.ticket_id,
+                "subject": subject,
+                "message": reply.message,
+                "status": reply.status,
+                "created_at": reply.created_at,
+            }
+            for reply, subject in replies
+        ],
     }
 
 

@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Form
 from fastapi.security import OAuth2PasswordBearer
@@ -18,7 +18,7 @@ from policy import (
 )
 from routers.points import apply_point_event, mark_due_no_shows
 from routers.users import get_current_user
-from time_utils import as_utc, as_lab_naive, lab_now_naive, utc_now
+from time_utils import LAB_TIMEZONE, as_utc, as_lab_naive, lab_now_naive, utc_now
 from utils import normalize_email
 from url_policy import normalize_domain
 
@@ -38,8 +38,19 @@ VALID_END_REASONS = {
 }
 
 
-def _session_started_response(session_id: int, recovered: bool = False) -> dict:
-    response = {"session_id": session_id, "server_time": utc_now()}
+def _booking_ends_at(booking) -> str:
+    local_end = datetime.combine(booking.booking_date, booking.end_time).replace(
+        tzinfo=LAB_TIMEZONE,
+    )
+    return local_end.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _session_started_response(session_id: int, booking, recovered: bool = False) -> dict:
+    response = {
+        "session_id": session_id,
+        "server_time": utc_now(),
+        "booking_ends_at": _booking_ends_at(booking),
+    }
     if recovered:
         response["recovered"] = True
     return response
@@ -283,7 +294,11 @@ def start_session(
                     resolved_lab_device_id,
                 ) and existing_request.booking_id == current_booking.id:
                     _bind_recovered_session_device(db, existing_request, registered_device)
-                    return _session_started_response(existing_request.id, recovered=True)
+                    return _session_started_response(
+                        existing_request.id,
+                        current_booking,
+                        recovered=True,
+                    )
                 raise HTTPException(
                     status_code=409,
                     detail="Client session key belongs to another active session.",
@@ -309,7 +324,11 @@ def start_session(
             resolved_lab_device_id,
         ) and active_user_session.booking_id == current_booking.id:
             _bind_recovered_session_device(db, active_user_session, registered_device)
-            return _session_started_response(active_user_session.id, recovered=True)
+            return _session_started_response(
+                active_user_session.id,
+                current_booking,
+                recovered=True,
+            )
         raise HTTPException(
             status_code=409,
             detail="This user already has an active lab session.",
@@ -399,13 +418,17 @@ def start_session(
                 )
             ):
                 _bind_recovered_session_device(db, recovered_session, registered_device)
-                return _session_started_response(recovered_session.id, recovered=True)
+                return _session_started_response(
+                    recovered_session.id,
+                    fresh_booking,
+                    recovered=True,
+                )
         raise HTTPException(
             status_code=409,
             detail="This user or device already has an active lab session.",
         ) from exc
     db.refresh(new_log)
-    return _session_started_response(new_log.id)
+    return _session_started_response(new_log.id, current_booking)
 
 
 @router.post("/agent/log-usage")
@@ -756,6 +779,7 @@ def heartbeat(
         "message": "Heartbeat accepted.",
         "session_id": session_id,
         "last_heartbeat_at": heartbeat_at,
+        "booking_ends_at": _booking_ends_at(booking),
     }
 
 

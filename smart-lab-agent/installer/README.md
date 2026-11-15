@@ -5,7 +5,7 @@ The MSI is built with Microsoft's **Visual Studio Installer Projects** extension
 - **Register This Computer** signs in with an Admin account, loads active Labs, and registers this computer to the selected Lab.
 - **Smart Lab Agent** uses that credential to report to the Backend and enforce the Lab policy.
 
-The MSI is per-machine and defaults to `Program Files\Smart Lab\Device Agent`; the setup wizard lets the installer choose another destination. It adds the Agent and registration shortcuts under **Start → Smart Lab**, plus an **Uninstall Smart Lab Agent** shortcut and a standard entry in Windows Apps/Programs. The installer also offers a checkbox to add both app shortcuts to the Desktop, selected by default. It does not register a Windows service or start the Agent automatically. The Agent is a desktop application and must run in the signed-in Lab Windows session.
+The MSI is per-machine and defaults to `Program Files\Smart Lab\Device Agent`; the setup wizard lets the installer choose another destination. It adds the Agent and registration shortcuts under **Start → Smart Lab**, plus an **Uninstall Smart Lab Agent** shortcut and a standard entry in Windows Apps/Programs. The installer also offers a checkbox to add both app shortcuts to the Desktop, selected by default. The Agent opens its login screen when a user signs in to Windows, so it can be used again after a policy-triggered Windows logoff. This is a desktop app, not a Windows service; the face scanner does not auto-start.
 
 ## Registering a Lab computer
 
@@ -142,9 +142,10 @@ device, and ban checks as regular sessions. The QA build does not bypass booking
 time or other access policies.
 The QA Agent writes monitor exception timestamps and exception types only to
 `%LOCALAPPDATA%\SmartLabAgentQA\SmartLabAgent\monitor-errors.log`.
-Agent build version is embedded from `-Version`. QA builds keep logoff disabled
-for testing, while regular Agent builds enable the configured violation logoff;
-`SMART_LAB_AGENT_DEBUG` can still override this per Windows account.
+Agent build version is embedded from `-Version`. Windows logoff is disabled by
+default. Set `SMART_LAB_AGENT_WINDOWS_LOGOFF=1` to opt in to Windows logoff after
+a policy violation in non-debug builds. `SMART_LAB_AGENT_DEBUG` can still
+override debug behavior per Windows account.
 
 Gatekeeper registers a distinct `gatekeeper-…` device against its selected Lab
 and stores its credential in the current Windows user's LocalAppData. Migration
@@ -200,4 +201,4 @@ For an installer-only rebuild using an already-built, verified shared executable
 .\smart-lab-agent\installer\build_msi.ps1 -Version 1.1.1 -PrebuiltPayloadPath 'C:\build-output\payload'
 ```
 
-Build files are placed in ignored `smart-lab-agent\build_msi\` and `smart-lab-agent\dist_msi\` directories. Standard Agent builds go under `dist_msi\agent\`, and QA Agent builds go under `dist_msi\qa\`; each uses a timestamped directory and does not overwrite an earlier MSI. Gatekeeper builds remain under its separate `gatekeeper\dist_msi\` directory. This project does not include a code-signing certificate; production distribution should sign the MSI and executables with the organization's certificate. An unsigned build may trigger Windows reputation or SmartScreen warnings.
+Build files are placed in ignored `smart-lab-agent\build_msi\` and `smart-lab-agent\dist_msi\` directories. Standard Agent builds go under `dist_msi\agent\`, and QA Agent builds go under `dist_msi\qa\`; each uses a timestamped directory and does not overwrite an earlier MSI. When a QA version is retired, move its release folder to `dist_msi\archive\qa\` and its intermediate build folder to `build_msi\qa-archive\builds\`. New QA builds continue to use `dist_msi\qa\`. Gatekeeper builds remain under its separate `gatekeeper\dist_msi\` directory. This project does not include a code-signing certificate; production distribution should sign the MSI and executables with the organization's certificate. An unsigned build may trigger Windows reputation or SmartScreen warnings.
