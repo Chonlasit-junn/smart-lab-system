@@ -7,6 +7,7 @@ import {
   AccordionSummary,
   Box,
   Button,
+  CardActionArea,
   Card,
   CardContent,
   Chip,
@@ -24,9 +25,12 @@ import {
   Typography,
 } from "@mui/material";
 import {
+  ArrowBack,
   Computer,
   DeleteOutline,
   ExpandMore,
+  LocationOn,
+  PeopleAlt,
   PauseCircleOutline,
   PlayArrow,
   ShieldOutlined,
@@ -52,6 +56,7 @@ export default function AdminDevices() {
   const [labs, setLabs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [selectedLabId, setSelectedLabId] = useState(null);
   const [savingDeviceId, setSavingDeviceId] = useState(null);
   const [controllingDeviceId, setControllingDeviceId] = useState(null);
   const [removingDeviceId, setRemovingDeviceId] = useState(null);
@@ -207,6 +212,11 @@ export default function AdminDevices() {
       String(a.code || "").localeCompare(String(b.code || "")),
     );
   }, [devices, labs, t]);
+
+  const selectedLab = useMemo(
+    () => labCards.find((lab) => String(lab.id) === String(selectedLabId)) || null,
+    [labCards, selectedLabId],
+  );
 
   const getAgentControlView = (device) => {
     const hasControlProtocol = Number(device.agent_control_version || 0) >= 1;
@@ -368,6 +378,36 @@ export default function AdminDevices() {
     );
   };
 
+  const renderLabDeviceSection = (lab, kind) => {
+    const isGatekeeper = kind === "gatekeeper";
+    const labDevices = isGatekeeper ? lab.gatekeepers : lab.agents;
+
+    return (
+      <Accordion key={kind} disableGutters defaultExpanded elevation={0} sx={{ borderTop: "1px solid #e2e8f0", "&:before": { display: "none" } }}>
+        <AccordionSummary expandIcon={<ExpandMore />} sx={{ px: 0, minHeight: 52, "& .MuiAccordionSummary-content": { my: 1 } }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            {isGatekeeper
+              ? <ShieldOutlined fontSize="small" color="primary" />
+              : <Computer fontSize="small" color="primary" />}
+            <Typography fontWeight={700}>
+              {t(isGatekeeper ? "admin.gatekeeperSection" : "admin.labAgentsSection")}
+            </Typography>
+            <Chip size="small" label={labDevices.length} />
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ px: 0, pt: 0 }}>
+          <Box sx={{ display: "grid", gap: 1.25 }}>
+            {labDevices.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {t(isGatekeeper ? "admin.noGatekeepers" : "admin.noAgents")}
+              </Typography>
+            ) : labDevices.map((device) => renderDeviceCard(device, kind))}
+          </Box>
+        </AccordionDetails>
+      </Accordion>
+    );
+  };
+
   return (
     <Box className="app-layout admin-layout" sx={{ display: "flex", minHeight: "100vh", bgcolor: "#fcfdfe", fontFamily: "var(--font-family-ui)" }}>
       <Box className="sidebar admin-sidebar" sx={{ width: "var(--sidebar-width)", bgcolor: "#f0f7ff", borderRight: "1px solid #e2efff", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", zIndex: 10 }}>
@@ -397,76 +437,174 @@ export default function AdminDevices() {
         </Box>
 
         <Box className="content-area admin-content-area page-content admin-devices-content" sx={{ p: { xs: 2, md: 5 }, flex: 1 }}>
-          <Box className="page-header" sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" }, gap: 2, mb: 3, flexDirection: { xs: "column", md: "row" } }}>
-            <Box>
-              <Typography variant="h4" fontWeight="700" color="#0f172a">{t("admin.deviceHeading")}</Typography>
-              <Typography color="#64748b" sx={{ mt: 0.5 }}>{t("admin.deviceSubtitle")}</Typography>
-            </Box>
-          </Box>
-
           {loadFailed && <LoadError onRetry={fetchData} />}
           {loading ? (
             <Paper elevation={0} sx={{ py: 7, textAlign: "center", border: "1px solid #e2e8f0", borderRadius: 3 }}>
               <CircularProgress size={28} aria-label={t("common.loading")} />
             </Paper>
-          ) : !loadFailed && labCards.length === 0 ? (
-            <Paper elevation={0} sx={{ py: 7, px: 2, textAlign: "center", border: "1px solid #e2e8f0", borderRadius: 3 }}>
-              <Typography color="text.secondary">{t("admin.noDevices")}</Typography>
-            </Paper>
           ) : (
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", xl: "repeat(2, minmax(0, 1fr))" }, alignItems: "start", gap: 2 }}>
-              {labCards.map((lab) => (
-                <Card key={lab.id} variant="outlined" sx={{ borderRadius: 3, minWidth: 0, overflow: "hidden" }}>
-                  <CardContent sx={{ p: { xs: 1.5, sm: 2.5 }, "&:last-child": { pb: { xs: 1.5, sm: 2.5 } } }}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5, minWidth: 0 }}>
-                      <Avatar sx={{ bgcolor: "primary.main", width: 42, height: 42 }}>
-                        <Computer fontSize="small" />
-                      </Avatar>
-                      <Box sx={{ minWidth: 0, flex: 1 }}>
-                        <Typography variant="h6" fontWeight={700} sx={{ overflowWrap: "anywhere" }}>
-                          {lab.code}{lab.name ? ` — ${lab.name}` : ""}
-                        </Typography>
-                        {lab.location && <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>{lab.location}</Typography>}
+            selectedLab ? (
+              <Box>
+                <Button
+                  startIcon={<ArrowBack />}
+                  onClick={() => setSelectedLabId(null)}
+                  sx={{
+                    mb: 2.5,
+                    color: "#64748b",
+                    fontWeight: 600,
+                    textTransform: "none",
+                    "&:hover": { color: "#0f172a", bgcolor: "transparent" },
+                  }}
+                >
+                  {t("admin.backToAllRooms")}
+                </Button>
+
+                <Paper
+                  elevation={0}
+                  sx={{
+                    display: "flex",
+                    alignItems: { xs: "flex-start", sm: "center" },
+                    gap: 2,
+                    p: { xs: 2, sm: 3 },
+                    mb: 3,
+                    borderRadius: 3,
+                    border: "1px solid #e2e8f0",
+                    bgcolor: "white",
+                  }}
+                >
+                  <Avatar sx={{ bgcolor: "#f1f5f9", color: "#64748b", width: 56, height: 56 }}>
+                    <Computer />
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="h5" fontWeight={700} color="#1e293b" sx={{ overflowWrap: "anywhere" }}>
+                      {selectedLab.code}
+                    </Typography>
+                    <Typography color="#64748b" sx={{ overflowWrap: "anywhere" }}>{selectedLab.name}</Typography>
+                    {selectedLab.location && (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.75, color: "#64748b" }}>
+                        <LocationOn sx={{ fontSize: 17 }} />
+                        <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>{selectedLab.location}</Typography>
                       </Box>
-                    </Box>
+                    )}
+                  </Box>
+                  <Chip
+                    size="small"
+                    label={t(selectedLab.status === "active" ? "common.active" : "admin.disabled")}
+                    sx={{
+                      flexShrink: 0,
+                      bgcolor: selectedLab.status === "active" ? "#dcfce7" : "#fee2e2",
+                      color: selectedLab.status === "active" ? "#15803d" : "#dc2626",
+                      fontWeight: 700,
+                    }}
+                  />
+                </Paper>
 
-                    <Accordion disableGutters defaultExpanded elevation={0} sx={{ borderTop: "1px solid #e2e8f0", "&:before": { display: "none" } }}>
-                      <AccordionSummary expandIcon={<ExpandMore />} sx={{ px: 0, minHeight: 48, "& .MuiAccordionSummary-content": { my: 1 } }}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <ShieldOutlined fontSize="small" color="primary" />
-                          <Typography fontWeight={700}>{t("admin.gatekeeperSection")}</Typography>
-                          <Chip size="small" label={lab.gatekeepers.length} />
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails sx={{ px: 0, pt: 0 }}>
-                        <Box sx={{ display: "grid", gap: 1.25 }}>
-                          {lab.gatekeepers.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary">{t("admin.noGatekeepers")}</Typography>
-                          ) : lab.gatekeepers.map((device) => renderDeviceCard(device, "gatekeeper"))}
-                        </Box>
-                      </AccordionDetails>
-                    </Accordion>
+                <Box sx={{ display: "grid", gap: 2 }}>
+                  {renderLabDeviceSection(selectedLab, "gatekeeper")}
+                  {renderLabDeviceSection(selectedLab, "agent")}
+                </Box>
+              </Box>
+            ) : (
+              <Box>
+                <Box
+                  className="page-header manage-labs-list-header"
+                  sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2, mb: 3 }}
+                >
+                  <Box>
+                    <Typography variant="h6" fontWeight={600} color="#64748b">
+                      {t("admin.allLaboratoryRooms")}
+                    </Typography>
+                    <Typography color="#64748b" variant="body2" sx={{ mt: 0.5 }}>
+                      {t("admin.deviceSubtitle")}
+                    </Typography>
+                  </Box>
+                </Box>
 
-                    <Accordion disableGutters defaultExpanded elevation={0} sx={{ borderTop: "1px solid #e2e8f0", "&:before": { display: "none" } }}>
-                      <AccordionSummary expandIcon={<ExpandMore />} sx={{ px: 0, minHeight: 48, "& .MuiAccordionSummary-content": { my: 1 } }}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <Computer fontSize="small" color="primary" />
-                          <Typography fontWeight={700}>{t("admin.labAgentsSection")}</Typography>
-                          <Chip size="small" label={lab.agents.length} />
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails sx={{ px: 0, pt: 0 }}>
-                        <Box sx={{ display: "grid", gap: 1.25 }}>
-                          {lab.agents.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary">{t("admin.noAgents")}</Typography>
-                          ) : lab.agents.map((device) => renderDeviceCard(device, "agent"))}
-                        </Box>
-                      </AccordionDetails>
-                    </Accordion>
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
+                {labCards.length === 0 ? (
+                  <Paper elevation={0} sx={{ py: 7, px: 2, textAlign: "center", border: "1px solid #e2e8f0", borderRadius: 3 }}>
+                    <Typography color="text.secondary">{t("admin.noDevices")}</Typography>
+                  </Paper>
+                ) : (
+                  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(3, minmax(0, 1fr))" }, gap: { xs: 2, md: 3 } }}>
+                    {labCards.map((lab) => (
+                      <Card
+                        key={lab.id}
+                        className="lab-card surface-card"
+                        variant="outlined"
+                        sx={{
+                          display: "flex",
+                          flexDirection: "column",
+                          height: "100%",
+                          minWidth: 0,
+                          overflow: "hidden",
+                          borderRadius: 6,
+                          borderColor: "#e2e8f0",
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
+                          transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                          "&:hover": {
+                            transform: "translateY(-6px)",
+                            boxShadow: "0 20px 40px rgba(59, 130, 246, 0.15)",
+                            borderColor: "#93c5fd",
+                          },
+                        }}
+                      >
+                        <CardActionArea
+                          onClick={() => setSelectedLabId(String(lab.id))}
+                          aria-label={`${t("common.details")}: ${lab.code} ${lab.name || ""}`}
+                          sx={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "stretch" }}
+                        >
+                          <Box sx={{ height: 150, bgcolor: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
+                            <Computer sx={{ fontSize: 60, color: "#cbd5e1", transition: "color 0.25s", ".MuiCardActionArea-root:hover &": { color: "#3b82f6" } }} />
+                          </Box>
+                          <CardContent sx={{ p: { xs: 2.5, md: 4 }, width: "100%", flexGrow: 1, "&:last-child": { pb: { xs: 2.5, md: 4 } } }}>
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, minWidth: 0 }}>
+                              <Typography variant="h5" fontWeight={700} color="#1e293b" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                                {lab.code}
+                              </Typography>
+                              <Chip
+                                size="small"
+                                label={t(lab.status === "active" ? "common.active" : "admin.disabled")}
+                                sx={{
+                                  flexShrink: 0,
+                                  bgcolor: lab.status === "active" ? "#dcfce7" : "#fee2e2",
+                                  color: lab.status === "active" ? "#15803d" : "#dc2626",
+                                  fontWeight: 700,
+                                }}
+                              />
+                            </Box>
+                            <Typography variant="body2" color="#64748b" sx={{ mt: 0.5, minHeight: 22, overflowWrap: "anywhere" }}>
+                              {lab.name || "—"}
+                            </Typography>
+
+                            <Divider sx={{ my: 2.5, borderColor: "#e2e8f0" }} />
+                            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0, color: "#64748b" }}>
+                                <ShieldOutlined sx={{ fontSize: 18, flexShrink: 0 }} />
+                                <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: "anywhere" }}>
+                                  {lab.gatekeepers.length} {t("admin.gatekeeperSection")}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0, color: "#64748b" }}>
+                                <PeopleAlt sx={{ fontSize: 18, flexShrink: 0 }} />
+                                <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: "anywhere" }}>
+                                  {lab.agents.length} {t("admin.labAgentsSection")}
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 2.5, color: "#64748b", minWidth: 0 }}>
+                              <LocationOn sx={{ fontSize: 17, flexShrink: 0 }} />
+                              <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                                {lab.location || "—"}
+                              </Typography>
+                            </Box>
+                          </CardContent>
+                        </CardActionArea>
+                      </Card>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            )
           )}
         </Box>
       </Box>
