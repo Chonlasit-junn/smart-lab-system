@@ -15,7 +15,6 @@ import {
   LinearProgress,
   MenuItem,
   Paper,
-  Popover,
   Select,
   Table,
   TableBody,
@@ -33,9 +32,7 @@ import {
   Computer,
   Group,
   Lock,
-  Logout,
   Notifications,
-  Person,
   Refresh,
   RemoveCircleOutline,
   Restore,
@@ -43,16 +40,13 @@ import {
   Visibility,
   WarningAmber,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useAuth } from "../context/auth-context";
 import AdminUserDetailsDialog from "../components/AdminUserDetailsDialog";
 import AdminNavigation from "../components/AdminNavigation";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
-import AdminHeaderAccount from "../components/AdminHeaderAccount";
-import AdminModeSwitch from "../components/AdminModeSwitch";
+import AdminAccountMenu from "../components/AdminAccountMenu";
 import ResponsiveDataTable from "../components/ResponsiveDataTable";
 import {
   buildTestPointEndpoint,
@@ -126,13 +120,10 @@ const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
 
 export default function AdminPoints() {
   const PAGE_SIZE = 25;
-  const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
   const pointsControllerRef = useRef(null);
   const detailControllerRef = useRef(null);
 
-  const [anchorEl, setAnchorEl] = useState(null);
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [warningThreshold, setWarningThreshold] = useState(DEFAULT_WARNING_THRESHOLD);
@@ -231,11 +222,6 @@ export default function AdminPoints() {
     detailControllerRef.current?.abort();
   }, []);
 
-  const handleLogout = () => {
-    setAnchorEl(null);
-    logout();
-    navigate("/");
-  };
 
   const handleOpenUserDetail = async (user) => {
     const token = localStorage.getItem("access_token");
@@ -550,64 +536,7 @@ export default function AdminPoints() {
               sx={{ height: 30, my: "auto", bgcolor: "var(--border-light)" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <AdminHeaderAccount
-                onClick={(event) => setAnchorEl(event.currentTarget)}
-                buttonSx={{ "&:hover": { bgcolor: "var(--surface-subtle)" } }}
-              />
-              <Popover
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={() => setAnchorEl(null)}
-                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                transformOrigin={{ vertical: "top", horizontal: "right" }}
-                PaperProps={{
-                  sx: {
-                    mt: 1.5,
-                    width: 280,
-                    borderRadius: 4,
-                    boxShadow: "0 20px 45px rgba(15,23,42,0.16)",
-                    border: "1px solid var(--border-light)",
-                  },
-                }}
-              >
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    px: 2,
-                    pt: 1.5,
-                  }}
-                >
-                  <Typography fontSize="13px" fontWeight="500" color="var(--text-muted)">
-                    {currentUser?.email || "—"}
-                  </Typography>
-                  <IconButton
-                    size="small"
-                    onClick={() => setAnchorEl(null)}
-                    aria-label={t("common.closeMenu")}
-                  >
-                    <Close sx={{ fontSize: 18, color: "var(--text-muted)" }} />
-                  </IconButton>
-                </Box>
-                <Box sx={{ px: 2, py: 1.5 }}>
-                  <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
-                  <Button
-                    fullWidth
-                    onClick={handleLogout}
-                    startIcon={<Logout />}
-                    sx={{
-                      justifyContent: "flex-start",
-                      color: "var(--danger-color)",
-                      fontWeight: "600",
-                      textTransform: "none",
-                      borderRadius: 2,
-                    }}
-                  >
-                    {t("common.logout")}
-                  </Button>
-                </Box>
-              </Popover>
+              <AdminAccountMenu />
             </Box>
           </Box>
         </Box>

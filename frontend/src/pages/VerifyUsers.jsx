@@ -12,32 +12,25 @@ import {
   IconButton,
   InputBase,
   Paper,
-  Popover,
   Typography,
 } from "@mui/material";
 import {
   Cancel,
   CheckCircle,
-  Close,
   Computer,
   Email,
-  Logout,
   PendingActions,
-  Person,
   PersonOutline,
   Phone,
   Search,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
-import AdminHeaderAccount from "../components/AdminHeaderAccount";
+import AdminAccountMenu from "../components/AdminAccountMenu";
 import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
-import AdminModeSwitch from "../components/AdminModeSwitch";
 import { isPendingUser } from "./verifyUsersUtils";
 import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
 
@@ -68,12 +61,9 @@ const getProfileImage = (profilePic) => {
 };
 
 export default function VerifyUsers() {
-  const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
   const pendingUsersControllerRef = useRef(null);
 
-  const [anchorEl, setAnchorEl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -164,11 +154,6 @@ export default function VerifyUsers() {
     });
   }, [pendingUsers, searchQuery]);
 
-  const handleLogout = () => {
-    setAnchorEl(null);
-    logout();
-    navigate("/");
-  };
 
   return (
     <Box
@@ -311,64 +296,7 @@ export default function VerifyUsers() {
               sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <AdminHeaderAccount
-                onClick={(event) => setAnchorEl(event.currentTarget)}
-                buttonSx={{ "&:hover": { bgcolor: "#f1f5f9" } }}
-              />
-              <Popover
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={() => setAnchorEl(null)}
-                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                transformOrigin={{ vertical: "top", horizontal: "right" }}
-                PaperProps={{
-                  sx: {
-                    mt: 1.5,
-                    width: 280,
-                    borderRadius: 4,
-                    boxShadow: "0 20px 45px rgba(15,23,42,0.16)",
-                    border: "1px solid #e2e8f0",
-                  },
-                }}
-              >
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    px: 2,
-                    pt: 1.5,
-                  }}
-                >
-                  <Typography fontSize="13px" fontWeight="500" color="#64748b">
-                    {currentUser?.email || "—"}
-                  </Typography>
-                  <IconButton
-                    size="small"
-                    onClick={() => setAnchorEl(null)}
-                    aria-label={t("common.closeMenu")}
-                  >
-                    <Close sx={{ fontSize: 18, color: "#64748b" }} />
-                  </IconButton>
-                </Box>
-                <Box sx={{ px: 2, py: 1.5 }}>
-                  <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
-                  <Button
-                    fullWidth
-                    onClick={handleLogout}
-                    startIcon={<Logout />}
-                    sx={{
-                      justifyContent: "flex-start",
-                      color: "#ef4444",
-                      fontWeight: "600",
-                      textTransform: "none",
-                      borderRadius: 2,
-                    }}
-                  >
-                    {t("common.logout")}
-                  </Button>
-                </Box>
-              </Popover>
+              <AdminAccountMenu />
             </Box>
           </Box>
         </Box>

@@ -979,10 +979,74 @@ textarea:focus-visible,
 }
 
 .admin-account-menu {
-  width: 200px;
-  padding: 8px;
+  width: 300px;
+  padding: 0;
   border: 1px solid var(--border-light);
-  border-radius: 12px !important;
+  border-radius: 16px !important;
+  background: var(--card-bg) !important;
+  color: var(--text-dark);
+  box-shadow: var(--shadow-md) !important;
+  overflow: hidden;
+}
+
+.admin-account-menu__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 0 16px;
+}
+
+.admin-account-menu__email {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-account-menu__identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 20px 18px;
+  text-align: center;
+}
+
+.admin-account-menu__name {
+  margin-top: 8px !important;
+  color: var(--text-dark);
+  font-size: 16px !important;
+  font-weight: 700 !important;
+}
+
+.admin-account-menu__role {
+  color: var(--text-muted);
+  font-size: 12px !important;
+}
+
+.admin-account-menu__manage {
+  margin-top: 12px !important;
+  padding: 4px 18px !important;
+  border-radius: var(--radius-pill) !important;
+  border-color: var(--brand-color) !important;
+  color: var(--brand-color) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+}
+
+.admin-account-menu__manage:hover {
+  border-color: var(--brand-hover) !important;
+  background: var(--brand-soft) !important;
+}
+
+.admin-account-menu__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
 }
 
 .admin-account-action {

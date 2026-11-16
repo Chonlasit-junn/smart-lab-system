@@ -1,44 +1,14 @@
 import { useState } from "react";
-import {
-  Computer,
-  Logout,
-  Menu as MenuIcon,
-  Person,
-} from "@mui/icons-material";
-import {
-  Box,
-  Button,
-  Divider,
-  IconButton,
-  Popover,
-  Typography,
-} from "@mui/material";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/auth-context";
+import { Computer, Menu as MenuIcon } from "@mui/icons-material";
+import { Box, Divider, IconButton, Typography } from "@mui/material";
 import { useLanguage } from "../context/language-context.js";
 import AdminNavigation from "./AdminNavigation";
-import AdminHeaderAccount from "./AdminHeaderAccount";
-import AdminModeSwitch from "./AdminModeSwitch";
+import AdminAccountMenu from "./AdminAccountMenu";
 import AdminNotificationBell from "./AdminNotificationBell";
 
 export default function AdminShell({ title, children }) {
-  const navigate = useNavigate();
-  const { logout } = useAuth();
   const { t } = useLanguage();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState(null);
-
-  const handleNavigate = (path) => {
-    setIsSidebarOpen(false);
-    setAnchorEl(null);
-    navigate(path);
-  };
-
-  const handleLogout = () => {
-    setAnchorEl(null);
-    logout();
-    navigate("/");
-  };
 
   return (
     <Box className="app-layout admin-layout admin-shell">
@@ -89,43 +59,13 @@ export default function AdminShell({ title, children }) {
               iconColor="#64748b"
             />
             <Divider orientation="vertical" flexItem className="admin-header-divider" />
-            <AdminHeaderAccount
-              onClick={(event) => setAnchorEl(event.currentTarget)}
-              buttonSx={{ p: 0.8 }}
-            />
+            <AdminAccountMenu buttonSx={{ p: 0.8 }} />
           </Box>
         </Box>
 
         <Box className="content-area admin-content-area">{children}</Box>
       </Box>
 
-      <Popover
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={() => setAnchorEl(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-        PaperProps={{ className: "admin-account-menu" }}
-      >
-        <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
-        <Divider sx={{ my: 0.5 }} />
-        <Button
-          fullWidth
-          startIcon={<Person />}
-          onClick={() => handleNavigate("/profile")}
-          className="admin-account-action"
-        >
-          {t("common.manageAccount")}
-        </Button>
-        <Button
-          fullWidth
-          startIcon={<Logout />}
-          onClick={handleLogout}
-          className="admin-account-action danger"
-        >
-          {t("common.logout")}
-        </Button>
-      </Popover>
     </Box>
   );
 }

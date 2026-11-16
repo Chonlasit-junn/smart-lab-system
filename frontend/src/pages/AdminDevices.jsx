@@ -11,7 +11,6 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
-  IconButton,
   MenuItem,
   Paper,
   Select,
@@ -24,23 +23,17 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  Close,
   Computer,
   DeleteOutline,
-  Logout,
-  Person,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
-import AdminHeaderAccount from "../components/AdminHeaderAccount";
+import AdminAccountMenu from "../components/AdminAccountMenu";
 import LoadError from "../components/LoadError";
-import AdminModeSwitch from "../components/AdminModeSwitch";
 import ResponsiveDataTable from "../components/ResponsiveDataTable";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -52,11 +45,8 @@ const STATUS_LABELS = {
 };
 
 export default function AdminDevices() {
-  const navigate = useNavigate();
-  const { logout } = useAuth();
   const { t } = useLanguage();
   const devicesControllerRef = useRef(null);
-  const [anchorEl, setAnchorEl] = useState(null);
   const [devices, setDevices] = useState([]);
   const [labs, setLabs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -158,12 +148,6 @@ export default function AdminDevices() {
     }));
   };
 
-  const handleLogout = () => {
-    setAnchorEl(null);
-    logout();
-    navigate("/");
-  };
-
   return (
     <Box className="app-layout admin-layout" sx={{ display: "flex", minHeight: "100vh", bgcolor: "#fcfdfe", fontFamily: "var(--font-family-ui)" }}>
       <Box className="sidebar admin-sidebar" sx={{ width: "var(--sidebar-width)", bgcolor: "#f0f7ff", borderRight: "1px solid #e2efff", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", zIndex: 10 }}>
@@ -188,10 +172,7 @@ export default function AdminDevices() {
               iconColor="#64748b"
             />
             <Divider className="admin-header-divider admin-devices-header-divider" orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
-            <AdminHeaderAccount
-              summaryClassName="admin-devices-header-summary"
-              onClick={(event) => setAnchorEl(event.currentTarget)}
-            />
+            <AdminAccountMenu summaryClassName="admin-devices-header-summary" />
           </Box>
         </Box>
 
@@ -323,13 +304,6 @@ export default function AdminDevices() {
         <Alert severity={notice.severity} onClose={() => setNotice((current) => ({ ...current, open: false }))}>{notice.message}</Alert>
       </Snackbar>
 
-      {Boolean(anchorEl) && (
-        <Paper className="surface-card" sx={{ position: "fixed", right: 28, top: 68, zIndex: 20, p: 1, width: 190, border: "1px solid #e2e8f0" }}>
-          <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
-          <Button fullWidth startIcon={<Logout />} onClick={handleLogout} sx={{ justifyContent: "flex-start", textTransform: "none", color: "#ef4444" }}>{t("common.logout")}</Button>
-          <IconButton size="small" onClick={() => setAnchorEl(null)} sx={{ position: "absolute", top: 3, right: 3 }}><Close fontSize="small" /></IconButton>
-        </Paper>
-      )}
     </Box>
   );
 }

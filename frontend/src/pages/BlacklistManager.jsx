@@ -36,16 +36,13 @@ import {
   Block,
   Close,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
-import AdminHeaderAccount, { AdminIdentityAvatar } from "../components/AdminHeaderAccount";
-import AdminModeSwitch from "../components/AdminModeSwitch";
+import AdminAccountMenu from "../components/AdminAccountMenu";
 import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import ResponsiveDataTable from "../components/ResponsiveDataTable";
 import { blacklistFormError, serializeBlacklistForm } from "../utils/blacklistPolicy";
@@ -58,25 +55,9 @@ const MAX_BLACKLIST_NAME_LENGTH = 100;
 const MAX_BLACKLIST_DESCRIPTION_LENGTH = 500;
 
 export default function BlacklistManager() {
-  const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
   const { t } = useLanguage();
   const blacklistControllerRef = useRef(null);
 
-  // --- User menu (avatar dropdown) ---
-  const [anchorEl, setAnchorEl] = useState(null);
-  const openUserMenu = Boolean(anchorEl);
-  const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
-  const handleCloseUserMenu = () => setAnchorEl(null);
-  const handleManageAccount = () => {
-    handleCloseUserMenu();
-    navigate("/profile");
-  };
-  const handleLogout = () => {
-    handleCloseUserMenu();
-    logout();
-    navigate("/");
-  };
 
   const [blacklist, setBlacklist] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -355,126 +336,7 @@ export default function BlacklistManager() {
               sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <AdminHeaderAccount
-                onClick={handleAvatarClick}
-                buttonSx={{ "&:hover": { bgcolor: "#f1f5f9" } }}
-              />
-
-              <Popover
-                anchorEl={anchorEl}
-                open={openUserMenu}
-                onClose={handleCloseUserMenu}
-                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                transformOrigin={{ vertical: "top", horizontal: "right" }}
-                PaperProps={{
-                  sx: {
-                    mt: 1.5,
-                    width: 320,
-                    borderRadius: 5,
-                    boxShadow: "0 20px 45px rgba(15,23,42,0.16)",
-                    border: "1px solid #e2e8f0",
-                    overflow: "hidden",
-                  },
-                }}
-              >
-                {/* header: identity email + close */}
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    px: 2,
-                    pt: 1.5,
-                  }}
-                >
-                  <Typography
-                    fontSize="13px"
-                    fontWeight="500"
-                    color="#64748b"
-                    sx={{ pl: 0.5 }}
-                  >
-                    {currentUser?.email || "—"}
-                  </Typography>
-                  <IconButton size="small" onClick={handleCloseUserMenu}>
-                    <Close sx={{ fontSize: 18, color: "#64748b" }} />
-                  </IconButton>
-                </Box>
-
-                {/* avatar + greeting */}
-                <Box sx={{ textAlign: "center", px: 3, pb: 3, pt: 0.5 }}>
-                  <Box sx={{ position: "relative", display: "inline-block" }}>
-                    <AdminIdentityAvatar
-                      sx={{
-                        bgcolor: "#0f172a",
-                        width: 84,
-                        height: 84,
-                        mx: "auto",
-                        boxShadow:
-                          "0 0 0 4px #eff6ff, 0 8px 20px rgba(59,130,246,0.25)",
-                      }}
-                    />
-                  </Box>
-
-                  <Typography
-                    sx={{ mt: 1.5, color: "#1e293b" }}
-                    fontWeight="600"
-                    fontSize="18px"
-                  >
-                    {currentUser?.name || "Admin"}
-                  </Typography>
-
-                  <Button
-                    variant="outlined"
-                    onClick={handleManageAccount}
-                    sx={{
-                      mt: 2,
-                      borderRadius: 20,
-                      textTransform: "none",
-                      fontWeight: "600",
-                      fontSize: "13px",
-                      px: 2.5,
-                      py: 0.6,
-                      color: "#3b82f6",
-                      borderColor: "#cbd8f5",
-                      "&:hover": {
-                        borderColor: "#3b82f6",
-                        bgcolor: "#eff6ff",
-                      },
-                    }}
-                  >
-                    {t("common.manageAccount")}
-                  </Button>
-                </Box>
-
-                <Divider />
-
-                {/* account actions */}
-                <Box sx={{ px: 1, py: 1 }}>
-                  <AdminModeSwitch destination="booking" onNavigate={handleCloseUserMenu} />
-                  <Box
-                    onClick={handleLogout}
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1.5,
-                      px: 1.5,
-                      py: 1,
-                      borderRadius: 2,
-                      cursor: "pointer",
-                      "&:hover": { bgcolor: "#fef2f2" },
-                    }}
-                  >
-                    <Logout sx={{ fontSize: 20, color: "#ef4444" }} />
-                    <Typography
-                      fontSize="13px"
-                      fontWeight="600"
-                      color="#ef4444"
-                    >
-                      {t("common.logout")}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Popover>
+              <AdminAccountMenu buttonSx={{ "&:hover": { bgcolor: "#f1f5f9" } }} />
             </Box>
           </Box>
         </Box>

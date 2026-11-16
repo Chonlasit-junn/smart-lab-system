@@ -18,7 +18,6 @@ import {
   InputLabel,
   MenuItem,
   Paper,
-  Popover,
   Select,
   Table,
   TableBody,
@@ -30,17 +29,14 @@ import {
 } from "@mui/material";
 import {
   AdminPanelSettings,
-  Close,
   Computer,
   Edit,
-  Logout,
   Person,
   Refresh,
   Save,
   Search,
   Settings,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
@@ -48,8 +44,7 @@ import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
-import AdminHeaderAccount from "../components/AdminHeaderAccount";
-import AdminModeSwitch from "../components/AdminModeSwitch";
+import AdminAccountMenu from "../components/AdminAccountMenu";
 import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
 import ResponsiveDataTable from "../components/ResponsiveDataTable";
 
@@ -90,12 +85,10 @@ function RoleChip({ role }) {
 }
 
 export default function RoleManagement() {
-  const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
+  const { currentUser } = useAuth();
   const { t } = useLanguage();
   const rolesControllerRef = useRef(null);
 
-  const [anchorEl, setAnchorEl] = useState(null);
   const [roles, setRoles] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -245,11 +238,6 @@ export default function RoleManagement() {
     }
   };
 
-  const handleLogout = () => {
-    setAnchorEl(null);
-    logout();
-    navigate("/");
-  };
 
   return (
     <Box
@@ -327,48 +315,7 @@ export default function RoleManagement() {
             />
             <Divider orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <AdminHeaderAccount
-                onClick={(event) => setAnchorEl(event.currentTarget)}
-                buttonSx={{ "&:hover": { bgcolor: "#f1f5f9" } }}
-              />
-              <Popover
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={() => setAnchorEl(null)}
-                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                transformOrigin={{ vertical: "top", horizontal: "right" }}
-                slotProps={{
-                  paper: {
-                    sx: {
-                      mt: 1.5,
-                      width: 280,
-                      borderRadius: 4,
-                      boxShadow: "0 20px 45px rgba(15,23,42,0.16)",
-                      border: "1px solid #e2e8f0",
-                    },
-                  },
-                }}
-              >
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 2, pt: 1.5 }}>
-                  <Typography fontSize="13px" fontWeight="500" color="#64748b">
-                    {currentUser?.email || "—"}
-                  </Typography>
-                  <IconButton size="small" onClick={() => setAnchorEl(null)} aria-label={t("common.closeMenu")}>
-                    <Close sx={{ fontSize: 18, color: "#64748b" }} />
-                  </IconButton>
-                </Box>
-                <Box sx={{ px: 2, py: 1.5 }}>
-                  <AdminModeSwitch destination="booking" onNavigate={() => setAnchorEl(null)} />
-                  <Button
-                    fullWidth
-                    onClick={handleLogout}
-                    startIcon={<Logout />}
-                    sx={{ justifyContent: "flex-start", color: "#ef4444", fontWeight: "600", textTransform: "none", borderRadius: 2 }}
-                  >
-                    {t("common.logout")}
-                  </Button>
-                </Box>
-              </Popover>
+              <AdminAccountMenu />
             </Box>
           </Box>
         </Box>

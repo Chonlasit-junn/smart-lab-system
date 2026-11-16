@@ -39,6 +39,26 @@ export function AdminIdentityAvatar({ className, sx }) {
   );
 }
 
+export function AdminIdentityDetails({ avatarSx }) {
+  const { name, role } = useAdminIdentity();
+
+  return (
+    <>
+      <AdminIdentityAvatar
+        sx={{
+          width: 72,
+          height: 72,
+          border: "3px solid var(--surface-elevated)",
+          boxShadow: "0 0 0 1px var(--border-light)",
+          ...avatarSx,
+        }}
+      />
+      <Typography className="admin-account-menu__name">{name}</Typography>
+      <Typography className="admin-account-menu__role">{role}</Typography>
+    </>
+  );
+}
+
 export default function AdminHeaderAccount({
   onClick,
   summaryClassName = "",
