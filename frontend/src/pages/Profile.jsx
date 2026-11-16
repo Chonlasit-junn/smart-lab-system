@@ -37,6 +37,7 @@ import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
+import { profileImageUrl } from "../utils/profileImageUrl.js";
 import { getPointReasonLabel } from "../utils/pointReason";
 import NotificationBell from "../components/NotificationBell";
 import LoadError from "../components/LoadError";
@@ -45,13 +46,6 @@ import AdminModeSwitch from "../components/AdminModeSwitch";
 import SupportModal from "./SupportModal";
 
 const API_URL = import.meta.env.VITE_API_URL;
-
-const getProfileImageUrl = (profilePic) => {
-  if (!profilePic) return undefined;
-  if (/^https?:\/\//i.test(profilePic)) return profilePic;
-  if (!API_URL) return profilePic;
-  return `${API_URL}/${String(profilePic).replace(/^\/+/, "")}`;
-};
 
 const FACULTY_NAMES = {
   business: "School of Business Administration",
@@ -608,7 +602,7 @@ export default function Profile() {
                         sx={{ px: 3, pb: 3, mt: "-48px", textAlign: "center" }}
                       >
                         <Avatar
-                          src={getProfileImageUrl(profile.profile_pic)}
+                          src={profileImageUrl(profile.profile_pic)}
                           sx={{
                             width: 96,
                             height: 96,

@@ -866,6 +866,7 @@ def _logs_response(
     limit: int,
     before_id: Optional[int],
     exclude_admin_actions: bool = False,
+    offset: int = 0,
 ) -> dict:
     query = db.query(models.PointLog).filter(models.PointLog.user_id == user_id)
     if exclude_admin_actions:
@@ -877,7 +878,7 @@ def _logs_response(
 
     logs = query.order_by(
         models.PointLog.id.desc(),
-    ).limit(limit + 1).all()
+    ).offset(offset if before_id is None else 0).limit(limit + 1).all()
     has_more = len(logs) > limit
     logs = logs[:limit]
     next_cursor = str(logs[-1].id) if has_more and logs else None
@@ -890,6 +891,12 @@ def _logs_response(
         "has_more": has_more,
         "next_cursor": next_cursor,
     }
+
+
+def _page_query(query, limit: int, offset: int = 0):
+    rows = query.offset(offset).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    return rows[:limit], has_more
 
 
 @router.get("/users/me/points")
@@ -1562,6 +1569,12 @@ def get_low_point_users(
 def get_admin_user_details(
     user_id: int,
     limit: int = Query(50, ge=1, le=100),
+    bookings_offset: int = Query(0, ge=0),
+    sessions_offset: int = Query(0, ge=0),
+    program_usage_offset: int = Query(0, ge=0),
+    point_history_offset: int = Query(0, ge=0),
+    daily_scores_offset: int = Query(0, ge=0),
+    violations_offset: int = Query(0, ge=0),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1632,11 +1645,11 @@ def get_admin_user_details(
     ).filter(
         models.Booking.user_id == user.id,
     )
-    bookings = bookings_query.order_by(
+    bookings, bookings_has_more = _page_query(bookings_query.order_by(
         models.Booking.booking_date.desc(),
         models.Booking.start_time.desc(),
         models.Booking.id.desc(),
-    ).limit(limit).all()
+    ), limit, bookings_offset)
 
     session_query = db.query(models.LabAccessLog, models.Lab).join(
         models.Lab,
@@ -1644,12 +1657,12 @@ def get_admin_user_details(
     ).filter(
         models.LabAccessLog.user_id == user.id,
     )
-    sessions = session_query.order_by(
+    sessions, sessions_has_more = _page_query(session_query.order_by(
         models.LabAccessLog.entry_time.desc(),
         models.LabAccessLog.id.desc(),
-    ).limit(limit).all()
+    ), limit, sessions_offset)
 
-    program_rows = db.query(
+    program_query = db.query(
         models.ProgramUsageLog,
         models.LabAccessLog,
         models.Lab,
@@ -1664,9 +1677,10 @@ def get_admin_user_details(
     ).order_by(
         models.ProgramUsageLog.usage_start_time.desc(),
         models.ProgramUsageLog.id.desc(),
-    ).limit(limit).all()
+    )
+    program_rows, programs_have_more = _page_query(program_query, limit, program_usage_offset)
 
-    violation_rows = db.query(
+    violation_query = db.query(
         models.UsageViolation,
         models.LabAccessLog,
         models.Lab,
@@ -1681,20 +1695,27 @@ def get_admin_user_details(
     ).order_by(
         models.UsageViolation.detected_at.desc(),
         models.UsageViolation.id.desc(),
-    ).limit(limit).all()
+    )
+    violation_rows, violations_have_more = _page_query(violation_query, limit, violations_offset)
 
-    daily_score_rows = db.query(models.UserDailyScore).filter(
+    daily_score_query = db.query(models.UserDailyScore).filter(
         models.UserDailyScore.user_id == user.id,
     ).order_by(
         models.UserDailyScore.score_date.desc(),
-    ).limit(limit).all()
+    )
+    daily_score_rows, daily_scores_have_more = _page_query(
+        daily_score_query, limit, daily_scores_offset,
+    )
+    point_history_page = _logs_response(
+        user.id, db, limit, None, offset=point_history_offset,
+    )
 
     db.commit()
     return {
         "profile": profile,
         "points": point_status,
         "point_request": _serialize_point_request(latest_request) if latest_request else None,
-        "point_history": _logs_response(user.id, db, limit, None)["data"],
+        "point_history": point_history_page["data"],
         "daily_scores": [
             {"score_date": row.score_date, "score": _clamp_score(row.score)}
             for row in daily_score_rows
@@ -1789,5 +1810,37 @@ def get_admin_user_details(
             "total_point_events": db.query(models.PointLog).filter(
                 models.PointLog.user_id == user.id,
             ).count(),
+        },
+        "pagination": {
+            "bookings": {
+                "offset": bookings_offset,
+                "next_offset": bookings_offset + len(bookings),
+                "has_more": bookings_has_more,
+            },
+            "sessions": {
+                "offset": sessions_offset,
+                "next_offset": sessions_offset + len(sessions),
+                "has_more": sessions_has_more,
+            },
+            "program_usage": {
+                "offset": program_usage_offset,
+                "next_offset": program_usage_offset + len(program_rows),
+                "has_more": programs_have_more,
+            },
+            "point_history": {
+                "offset": point_history_offset,
+                "next_offset": point_history_offset + len(point_history_page["data"]),
+                "has_more": point_history_page["has_more"],
+            },
+            "daily_scores": {
+                "offset": daily_scores_offset,
+                "next_offset": daily_scores_offset + len(daily_score_rows),
+                "has_more": daily_scores_have_more,
+            },
+            "violations": {
+                "offset": violations_offset,
+                "next_offset": violations_offset + len(violation_rows),
+                "has_more": violations_have_more,
+            },
         },
     }

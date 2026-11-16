@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import date
@@ -48,7 +48,7 @@ class LabUpdate(BaseModel):
     location: Optional[str] = Field(None, max_length=120)
 
 class LabStatusUpdate(BaseModel):
-    status: str = Field(..., example="active")
+    status: Literal["active", "inactive", "maintenance"] = Field(..., example="active")
 
 class LabCapacityUpdate(BaseModel):
     capacity: int = Field(..., ge=0)

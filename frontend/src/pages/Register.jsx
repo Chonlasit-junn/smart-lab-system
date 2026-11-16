@@ -170,9 +170,9 @@ export default function Register() {
   const handleGoToStep4 = (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
-    if (!formData.first_name || !formData.last_name || !formData.password) return setError(t.errFieldsReq);
+    if (!formData.first_name.trim() || !formData.last_name.trim() || !formData.password) return setError(t.errFieldsReq);
     if (!isValidNewPassword(formData.password)) return setError(t.passwordInvalid);
-    if (accountType === 'student' && (!selectedFaculty || !selectedDepartment)) return setError(t.errFieldsReq);
+    if (accountType === 'student' && (!formData.student_id.trim() || !selectedFaculty || !selectedDepartment)) return setError(t.errFieldsReq);
     if (accountType === 'general' && !isValidPhoneNumber(formData.phone)) return setError(t.errPhoneInvalid);
     if (accountType === 'general' && !consentChecked) return setError(t.errConsent);
     setStep(4);
@@ -332,7 +332,8 @@ export default function Register() {
       <p className="login-subtitle">{t.step1Sub}</p>
       <form onSubmit={handleRequestOTP}>
         <TextField fullWidth label={t.emailLabel} name="email" type="email" variant="outlined"
-          value={formData.email} onChange={handleChange} disabled={loading} sx={{ mb: 3, ...inputSx }} />
+          value={formData.email} onChange={handleChange} disabled={loading}
+          inputProps={{ maxLength: 254 }} sx={{ mb: 3, ...inputSx }} />
         <Button fullWidth type="submit" variant="contained" disabled={loading || resendSeconds > 0}
           endIcon={!loading && <ArrowForwardIcon />} sx={{ ...primaryBtnSx, py: 1.5 }}>
           {loading ? <CircularProgress size={24} color="inherit" /> : resendSeconds > 0 ? t.otpResendWait.replace('{seconds}', resendSeconds) : t.reqOtpBtn}
@@ -369,20 +370,23 @@ export default function Register() {
       <p className="login-subtitle">{t.step3Sub} <strong>{accountType === 'student' ? t.roleStudent : t.roleGuest}</strong></p>
       <form onSubmit={handleGoToStep4}>
         <Box sx={{ display: 'flex', gap: 2, mb: 2.5 }}>
-          <TextField fullWidth label={t.firstName} name="first_name" variant="outlined"
-            value={formData.first_name} onChange={handleChange} sx={inputSx} />
-          <TextField fullWidth label={t.lastName} name="last_name" variant="outlined"
-            value={formData.last_name} onChange={handleChange} sx={inputSx} />
+          <TextField fullWidth required label={t.firstName} name="first_name" variant="outlined"
+            value={formData.first_name} onChange={handleChange}
+            inputProps={{ maxLength: 80 }} sx={inputSx} />
+          <TextField fullWidth required label={t.lastName} name="last_name" variant="outlined"
+            value={formData.last_name} onChange={handleChange}
+            inputProps={{ maxLength: 80 }} sx={inputSx} />
         </Box>
 
         <TextField fullWidth label={t.emailLabel} name="email" variant="outlined"
-          value={formData.email} disabled sx={{ mb: 2.5, ...inputSx }} />
+          value={formData.email} disabled inputProps={{ maxLength: 254 }} sx={{ mb: 2.5, ...inputSx }} />
 
         {accountType === 'student' && (
           <Box sx={{ px: 2.5, pt: 2, pb: 2.5, mb: 2.5, bgcolor: 'var(--surface-info)', borderRadius: 'var(--radius-control)', border: '1px solid var(--border-light)' }}>
             <Typography variant="caption" fontWeight="600" sx={{ fontSize: '0.85rem', color: 'var(--brand-color)' }}>{t.uniDetails}</Typography>
-            <TextField fullWidth label={t.studentId} name="student_id" size="small"
-              value={formData.student_id} onChange={handleChange} sx={{ mt: 1.5, mb: 2, ...inputSx }} />
+            <TextField fullWidth required label={t.studentId} name="student_id" size="small"
+              value={formData.student_id} onChange={handleChange}
+              inputProps={{ maxLength: 32 }} sx={{ mt: 1.5, mb: 2, ...inputSx }} />
 
             {/* คณะ */}
             <FormControl fullWidth size="small" sx={{ mb: 2, ...inputSx }}>
@@ -440,6 +444,7 @@ export default function Register() {
         <TextField
           fullWidth label={t.password} name="password" type={showPassword ? 'text' : 'password'}
           variant="outlined" value={formData.password} onChange={handleChange}
+          inputProps={{ maxLength: 72 }}
           sx={{ mb: 3.5, ...inputSx }} helperText={<PasswordRequirements value={formData.password} translations={t} />}
           autoComplete="new-password"
           InputProps={{

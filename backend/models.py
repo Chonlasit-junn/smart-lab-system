@@ -197,6 +197,14 @@ class LabDevice(Base):
             "status IN ('active', 'maintenance', 'revoked')",
             name="lab_devices_status_check",
         ),
+        CheckConstraint(
+            "agent_control_status IN ('active', 'maintenance')",
+            name="lab_devices_agent_control_status_check",
+        ),
+        CheckConstraint(
+            "agent_control_version >= 0",
+            name="lab_devices_agent_control_version_check",
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -214,6 +222,12 @@ class LabDevice(Base):
     agent_token_hash = Column(String(64), unique=True, nullable=False)
     agent_version = Column(String(64), nullable=True)
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    maintenance_until = Column(DateTime(timezone=True), nullable=True)
+    control_requested_at = Column(DateTime(timezone=True), nullable=True)
+    control_requested_by = Column(BIGINT_ID, ForeignKey("users.id"), nullable=True)
+    agent_control_status = Column(String(32), nullable=False, default="active", server_default="active")
+    agent_control_ack_at = Column(DateTime(timezone=True), nullable=True)
+    agent_control_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True),

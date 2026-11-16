@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from jose import jwt, JWTError
 import models
 from database import get_db
-from profile_storage import get_profile_image_url, get_profile_image_urls
+from profile_storage import (
+    get_profile_image_url,
+    get_profile_image_urls,
+    resolve_local_profile_image,
+)
 from utils import normalize_email
 from security_config import SECRET_KEY, ALGORITHM
 from access_policy import primary_role
@@ -53,6 +58,25 @@ def require_admin_user(
 
 
 router = APIRouter(tags=["Users"])
+
+
+@router.get("/uploads/profiles/{filename}", include_in_schema=False)
+def get_local_profile_image(
+    filename: str,
+    expires: int = Query(..., ge=0),
+    signature: str = Query(..., min_length=64, max_length=64),
+):
+    image_path = resolve_local_profile_image(filename, expires, signature)
+    if image_path is None:
+        raise HTTPException(status_code=404, detail="Profile image not found.")
+    return FileResponse(
+        image_path,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 @router.get("/users")
 def get_all_users(

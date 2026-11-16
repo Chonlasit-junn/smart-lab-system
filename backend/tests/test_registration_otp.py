@@ -80,16 +80,71 @@ class RegistrationOTPTests(unittest.TestCase):
     def row(self, email=None):
         return self.db.get(models.RegistrationOTP, email or self.email, populate_existing=True)
 
-    def register(self, code, email=None, password="Test-pass1", image_size=(10, 10)):
+    def register(
+        self,
+        code,
+        email=None,
+        password="Test-pass1",
+        image_size=(10, 10),
+        first_name="Test",
+        last_name="Account",
+        student_id="S001",
+    ):
         image = io.BytesIO()
         Image.new("RGB", image_size).save(image, format="JPEG")
         return asyncio.run(auth.register(
             email=email or self.email, otp=code, password=password,
-            first_name="Test", last_name="Account", student_id="S001",
+            first_name=first_name, last_name=last_name, student_id=student_id,
             faculty="Science", department="Computing", phone="0000000000",
             face_image=UploadFile(filename="face.jpg", file=io.BytesIO(image.getvalue())),
             db=self.db,
         ))
+
+    def test_blank_registration_names_are_rejected_before_otp_consumption(self):
+        _, code = self.issue()
+
+        with self.assertRaises(HTTPException) as caught:
+            self.register(code, first_name="   ")
+
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertIsNone(self.row().consumed_at)
+        self.assertEqual(self.db.query(models.User).count(), 0)
+
+    def test_student_registration_requires_student_details(self):
+        email = "student@bumail.net"
+        _, code = self.issue(email)
+
+        with self.assertRaises(HTTPException) as caught:
+            self.register(code, email=email, student_id="   ")
+
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertIsNone(self.row(email).consumed_at)
+        self.assertEqual(self.db.query(models.User).count(), 0)
+
+    def test_registration_form_rejects_overlong_names(self):
+        app = FastAPI()
+        app.include_router(auth.router)
+        app.dependency_overrides[auth.get_db] = lambda: self.db
+
+        async def submit():
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://unit.test",
+            ) as client:
+                return await client.post(
+                    "/register",
+                    data={
+                        "email": self.email,
+                        "otp": "123456",
+                        "password": "Test-password1",
+                        "first_name": "A" * 81,
+                        "last_name": "Account",
+                    },
+                    files={"face_image": ("face.jpg", b"face", "image/jpeg")},
+                )
+
+        response = asyncio.run(submit())
+        self.assertEqual(response.status_code, 422)
 
     def test_multiple_faces_do_not_create_account_or_consume_otp_or_keep_image(self):
         _, code = self.issue()
@@ -237,11 +292,12 @@ class RegistrationOTPTests(unittest.TestCase):
         _, code = self.issue()
         async def flow():
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://unit.test") as client:
-                result = await client.post("/register", data={"email": self.email, "otp": code,
-                    "password": "short", "first_name": "Test", "last_name": "Policy"},
-                    files={"face_image": ("invalid.jpg", b"not-an-image", "image/jpeg")})
-                self.assertEqual(result.status_code, 422)
-                self.assertEqual(result.json()["detail"], auth.PASSWORD_POLICY_ERROR)
+                for password in ("short", "x" * 73):
+                    result = await client.post("/register", data={"email": self.email, "otp": code,
+                        "password": password, "first_name": "Test", "last_name": "Policy"},
+                        files={"face_image": ("invalid.jpg", b"not-an-image", "image/jpeg")})
+                    self.assertEqual(result.status_code, 422)
+                    self.assertEqual(result.json()["detail"], auth.PASSWORD_POLICY_ERROR)
         asyncio.run(flow())
         self.assertIsNone(self.row().consumed_at)
         auth.get_deepface.assert_not_called()

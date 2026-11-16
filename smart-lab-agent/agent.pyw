@@ -817,6 +817,8 @@ class LoginOverlay(QWidget):
         self.error_label.show()
 
     def handle_login(self):
+        if getattr(self.agent, "device_control_mode", "active") != "active":
+            return
         if not self.login_btn.isEnabled():
             return
 
@@ -946,6 +948,14 @@ class LoginOverlay(QWidget):
             kind = result.get("kind") if isinstance(result, dict) else None
             if kind == "success":
                 session_id = result["session_id"]
+                if getattr(self.agent, "device_control_mode", "active") == "maintenance":
+                    self.hide()
+                    self.agent.stop_and_send_logs(
+                        session_id,
+                        end_reason="maintenance",
+                        cleanup_session=False,
+                    )
+                    return
                 self.is_authenticated = True
                 self.hide()
                 self.info_bar = SessionInfoBar(
@@ -1010,6 +1020,10 @@ class SmartLabAgent:
         self.current_access_token = None
         self.info_bar       = None
         self.overlay        = None
+        self.login_screen = None
+        self.device_control_mode = "active"
+        self._device_control_poll_in_flight = False
+        self._last_device_control_error = None
         self.policy_rules = []
         self.policy_version = None
         self.policy_source = None
@@ -1040,6 +1054,8 @@ class SmartLabAgent:
         self.outbox_retry_timer = QTimer()
         self.outbox_retry_timer.timeout.connect(self.retry_outbox)
         self.outbox_retry_timer.start(30_000)
+        self.device_control_timer = QTimer()
+        self.device_control_timer.timeout.connect(self.poll_device_control)
         QTimer.singleShot(0, self.retry_outbox)
 
     def get_or_create_session_attempt(self, email):
@@ -1245,6 +1261,130 @@ class SmartLabAgent:
 
     def set_ui_references(self, overlay):
         self.overlay = overlay
+        self.login_screen = overlay
+
+    def start_device_control_polling(self):
+        if not REGISTERED_DEVICE_ID or not DEVICE_TOKEN:
+            return False
+        self.device_control_timer.start(15_000)
+        QTimer.singleShot(0, self.poll_device_control)
+        return True
+
+    def poll_device_control(self):
+        if (
+            not REGISTERED_DEVICE_ID
+            or not DEVICE_TOKEN
+            or self._device_control_poll_in_flight
+        ):
+            return False
+
+        reported_status = self.device_control_mode
+
+        def request_control_state():
+            response = post_with_retry(
+                f"{API_URL}/agent/control-state",
+                data={
+                    "device_id": REGISTERED_DEVICE_ID,
+                    "device_token": DEVICE_TOKEN,
+                    "reported_status": reported_status,
+                    "control_version": 1,
+                },
+                retries=1,
+                timeout=10,
+            )
+            if response is None:
+                return {"status": None, "detail": "Server did not respond."}
+            if not 200 <= response.status_code < 300:
+                return {
+                    "status": response.status_code,
+                    "detail": response_detail(response),
+                }
+            try:
+                payload = response.json()
+            except (AttributeError, ValueError):
+                payload = {}
+            return {"status": response.status_code, **payload}
+
+        submitted = self.background_tasks.submit(
+            "device-control",
+            request_control_state,
+            self._handle_device_control_result,
+        )
+        self._device_control_poll_in_flight = submitted
+        return submitted
+
+    def _handle_device_control_result(self, result, error):
+        self._device_control_poll_in_flight = False
+        status = result.get("status") if isinstance(result, dict) else None
+        if error is not None:
+            status = "error"
+            detail = str(error)
+        else:
+            detail = result.get("detail", "") if isinstance(result, dict) else ""
+
+        if status != 200:
+            error_key = (status, detail)
+            if error_key != self._last_device_control_error:
+                print(f"ตรวจสอบคำสั่ง Agent ไม่สำเร็จ: {detail or status}")
+                self._last_device_control_error = error_key
+            return
+
+        self._last_device_control_error = None
+        _sync_backend_clock(result.get("server_time"))
+        requested_status = result.get("control_status")
+        if requested_status in {"active", "maintenance"}:
+            self._apply_device_control_status(requested_status)
+
+    def _apply_device_control_status(self, requested_status):
+        if requested_status not in {"active", "maintenance"}:
+            return False
+        if requested_status == self.device_control_mode:
+            return False
+
+        self.device_control_mode = requested_status
+        overlay = self.login_screen
+        if requested_status == "maintenance":
+            info_bar = self.info_bar
+            self.info_bar = None
+            if info_bar is not None:
+                countdown_timer = getattr(info_bar, "countdown_timer", None)
+                if countdown_timer is not None:
+                    countdown_timer.stop()
+                info_bar.hide()
+
+            for timer_name in (
+                "monitor_timer",
+                "heartbeat_timer",
+                "booking_deadline_timer",
+                "policy_timer",
+            ):
+                timer = getattr(self, timer_name, None)
+                if timer is not None:
+                    timer.stop()
+
+            session_id = self.current_session_id
+            if session_id is not None:
+                self.stop_and_send_logs(
+                    session_id,
+                    end_reason="maintenance",
+                    cleanup_session=False,
+                )
+            else:
+                self.stop_browser_monitor()
+                self._stop_window_visibility_monitor()
+
+            if overlay is not None:
+                overlay.is_authenticated = False
+                overlay.focus_timer.stop()
+                overlay.hide()
+            print("Agent ถูกพักชั่วคราวตามคำสั่ง Admin; Windows session ยังเปิดอยู่")
+            return True
+
+        if overlay is not None:
+            overlay.focus_timer.start(1000)
+            overlay.reset_and_show()
+        print("Agent กลับมาทำงานตามคำสั่ง Admin")
+        return True
 
     @staticmethod
     def _has_process_rules(rules):
@@ -1555,14 +1695,18 @@ class SmartLabAgent:
                 payload = response.json()
                 server_time = payload.get("last_heartbeat_at")
                 booking_ends_at = payload.get("booking_ends_at")
+                control_status = payload.get("control_status")
             except (AttributeError, ValueError):
                 server_time = None
+                control_status = None
         else:
             server_time = None
+            control_status = None
         return {
             "status": response.status_code if response is not None else None,
             "server_time": server_time,
             "booking_ends_at": booking_ends_at,
+            "control_status": control_status,
             "detail": response_detail(response),
         }
 
@@ -1575,6 +1719,9 @@ class SmartLabAgent:
 
         if isinstance(result, dict):
             _sync_backend_clock(result.get("server_time"))
+            if result.get("control_status") == "maintenance":
+                self._apply_device_control_status("maintenance")
+                return
             SmartLabAgent._update_booking_deadline(self, result.get("booking_ends_at"))
         status = result.get("status") if isinstance(result, dict) else None
         if status in {403, 409}:
@@ -2466,7 +2613,7 @@ class SmartLabAgent:
                 delivered = False
         return delivered
 
-    def stop_and_send_logs(self, session_id, end_reason="logout"):
+    def stop_and_send_logs(self, session_id, end_reason="logout", *, cleanup_session=True):
         _close_booking_warning_dialog(self)
         self.stop_browser_monitor()
         self._stop_window_visibility_monitor()
@@ -2569,7 +2716,11 @@ class SmartLabAgent:
                 handle_fallback_delivery,
             )
 
-        self._cleanup_session()
+        if cleanup_session:
+            self._cleanup_session()
+        else:
+            # Maintenance must not close apps, clear browser data, or remove files.
+            self.session_cleanup = None
         self.usage_segments = []
         self.current_activity_name = None
         self.current_activity_started_at = None
@@ -2603,6 +2754,7 @@ def run_agent() -> int:
     app.aboutToQuit.connect(agent_logic._stop_window_visibility_monitor)
     login_screen = LoginOverlay(agent_logic)
     login_screen.show()
+    agent_logic.start_device_control_polling()
     return app.exec()
 
 

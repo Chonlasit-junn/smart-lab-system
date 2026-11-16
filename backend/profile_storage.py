@@ -8,10 +8,17 @@ to ``supabase`` and providing the service-role key to the Backend only.
 from __future__ import annotations
 
 import os
+import hashlib
+import hmac
+import re
+import time
+from pathlib import Path
 from urllib.parse import quote
 
 import httpx
 from dotenv import load_dotenv
+from security_config import SECRET_KEY, is_production
+from utils import UPLOAD_DIR
 
 load_dotenv()
 
@@ -32,6 +39,8 @@ try:
 except ValueError:
     PROFILE_SIGNED_URL_TTL = 3600
 PROFILE_SIGNED_URL_BATCH_SIZE = 100
+LOCAL_PROFILE_SIGNED_URL_TTL = 300
+_LOCAL_PROFILE_FILENAME = re.compile(r"^[a-f0-9]{32}\.jpg$", re.IGNORECASE)
 
 
 class ProfileStorageError(RuntimeError):
@@ -159,6 +168,47 @@ def _frontend_signed_url(signed_url: str) -> str:
     return f"{SUPABASE_URL}/storage/v1/{signed_url}"
 
 
+def _local_profile_filename(profile_pic: str | None) -> str | None:
+    path = str(profile_pic or "").replace("\\", "/").lstrip("/")
+    prefix = "uploads/profiles/"
+    filename = path[len(prefix):] if path.startswith(prefix) else ""
+    return filename if _LOCAL_PROFILE_FILENAME.fullmatch(filename) else None
+
+
+def _local_profile_signature(filename: str, expires: int) -> str:
+    message = f"local-profile-image:{filename}:{expires}".encode("utf-8")
+    return hmac.new(SECRET_KEY.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def _signed_local_profile_url(profile_pic: str) -> str | None:
+    filename = _local_profile_filename(profile_pic)
+    if filename is None:
+        return None
+    expires = int(time.time()) + LOCAL_PROFILE_SIGNED_URL_TTL
+    signature = _local_profile_signature(filename, expires)
+    return f"uploads/profiles/{quote(filename)}?expires={expires}&signature={signature}"
+
+
+def resolve_local_profile_image(filename: str, expires: int, signature: str) -> Path | None:
+    """Resolve a local avatar only when its short-lived URL signature is valid."""
+    if not _LOCAL_PROFILE_FILENAME.fullmatch(filename or ""):
+        return None
+    now = int(time.time())
+    if expires < now or expires > now + LOCAL_PROFILE_SIGNED_URL_TTL:
+        return None
+    expected = _local_profile_signature(filename, expires)
+    if not hmac.compare_digest(expected, signature or ""):
+        return None
+
+    image_path = Path(UPLOAD_DIR) / filename
+    try:
+        if image_path.resolve().parent != Path(UPLOAD_DIR).resolve() or not image_path.is_file():
+            return None
+    except OSError:
+        return None
+    return image_path
+
+
 def get_profile_image_urls(profile_pics: list[str | None]) -> list[str | None]:
     """Resolve local, external, and private Supabase avatar paths in one batch."""
     resolved = []
@@ -166,6 +216,12 @@ def get_profile_image_urls(profile_pics: list[str | None]) -> list[str | None]:
     for profile_pic in profile_pics:
         if not profile_pic or profile_pic.startswith(("http://", "https://")):
             resolved.append(profile_pic)
+        elif _local_profile_filename(profile_pic):
+            resolved.append(
+                _signed_local_profile_url(profile_pic)
+                if is_production(os.environ)
+                else profile_pic
+            )
         elif uses_supabase_storage() and profile_pic.startswith("profiles/"):
             resolved.append(None)
             private_paths.append(profile_pic)

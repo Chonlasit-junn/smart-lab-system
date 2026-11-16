@@ -2,6 +2,7 @@ import React from "react";
 import LoadError from "./LoadError";
 import {
   Avatar,
+  Button,
   Box,
   Chip,
   CircularProgress,
@@ -33,9 +34,8 @@ import {
   ReportProblem,
 } from "@mui/icons-material";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
+import { profileImageUrl } from "../utils/profileImageUrl.js";
 import { useLanguage } from "../context/language-context.js";
-
-const API_URL = import.meta.env.VITE_API_URL;
 
 const getInitials = (user) => {
   const initials = `${user?.first_name?.[0] || ""}${user?.last_name?.[0] || ""}`;
@@ -53,13 +53,6 @@ const stringToColor = (value) => {
     color += `00${((hash >> (index * 8)) & 0xff).toString(16)}`.slice(-2);
   }
   return color;
-};
-
-const getProfileImage = (profilePic) => {
-  if (!profilePic) return "";
-  if (/^https?:\/\//i.test(profilePic)) return profilePic;
-  if (!API_URL) return profilePic;
-  return `${API_URL}/${profilePic.replace(/^\/+/, "")}`;
 };
 
 const formatDuration = (seconds, t) => {
@@ -376,6 +369,8 @@ export default function AdminUserDetailsDialog({
   loading,
   error,
   onRetry,
+  onLoadMore,
+  loadingMore,
   tab,
   onTabChange,
 }) {
@@ -388,7 +383,7 @@ export default function AdminUserDetailsDialog({
   const pointValue = Math.max(0, Math.min(100, Number(points.points) || 0));
   const dailyValue = Math.max(0, Math.min(100, Number(points.daily_score) || 0));
   const profileName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || t("common.unknownName");
-  const profileImage = getProfileImage(profile.profile_pic);
+  const profileImage = profileImageUrl(profile.profile_pic);
   const accountStatus = profile.account_status || "active";
 
   const tabs = [
@@ -398,6 +393,16 @@ export default function AdminUserDetailsDialog({
     { label: t("admin.userDetails.pointHistory"), count: summary.total_point_events ?? (detail?.point_history?.length || 0) },
     { label: t("admin.userDetails.violations"), count: summary.total_violations ?? (detail?.violations?.length || 0) },
   ];
+  const activeHistorySections = [
+    ["bookings"],
+    ["sessions"],
+    ["program_usage"],
+    ["point_history", "daily_scores"],
+    ["violations"],
+  ][tab] || [];
+  const canLoadMore = activeHistorySections.some(
+    (section) => detail?.pagination?.[section]?.has_more,
+  );
 
   return (
     <Dialog
@@ -576,6 +581,21 @@ export default function AdminUserDetailsDialog({
                     {tab === 4 && <UserViolations rows={detail.violations || []} t={t} locale={locale} />}
                   </Box>
                 </Box>
+                {canLoadMore && (
+                  <Box sx={{ display: "flex", justifyContent: "center", p: 1.5 }}>
+                    <Button
+                      variant="outlined"
+                      onClick={onLoadMore}
+                      disabled={loadingMore}
+                      startIcon={loadingMore ? <CircularProgress size={16} /> : undefined}
+                      sx={{ minHeight: 42, px: 3 }}
+                    >
+                      {loadingMore
+                        ? t("admin.userDetails.loadingMore")
+                        : t("admin.userDetails.loadMore")}
+                    </Button>
+                  </Box>
+                )}
               </Paper>
             </Box>
           ) : null}

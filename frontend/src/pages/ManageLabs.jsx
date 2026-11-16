@@ -272,7 +272,7 @@ export default function ManageLabs() {
   };
 
   const handleToggleStatus = async () => {
-    const newStatus = activeLab.status === "active" ? "disabled" : "active";
+    const newStatus = activeLab.status === "active" ? "inactive" : "active";
     try {
       await axios.put(`${API_URL}/admin/labs/${activeLab.id}/status`, {
         status: newStatus,
@@ -280,6 +280,7 @@ export default function ManageLabs() {
       fetchLabs();
     } catch (error) {
       console.error("Status toggle failed:", error);
+      alert(`${t("admin.operationFailed")}: ${error.response?.data?.detail || error.message}`);
     }
   };
 

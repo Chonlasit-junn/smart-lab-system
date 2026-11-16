@@ -1543,6 +1543,88 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertEqual(payload["policy_token"], "original-receipt")
 
 
+class AgentMaintenanceControlTests(unittest.TestCase):
+    def test_pause_hides_login_and_ends_session_without_cleanup(self):
+        info_bar = SimpleNamespace(
+            countdown_timer=SimpleNamespace(stop=Mock()),
+            hide=Mock(),
+        )
+        login_screen = SimpleNamespace(
+            is_authenticated=True,
+            focus_timer=SimpleNamespace(stop=Mock()),
+            hide=Mock(),
+        )
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.device_control_mode = "active"
+        instance.login_screen = login_screen
+        instance.info_bar = info_bar
+        instance.current_session_id = 21
+        instance.stop_and_send_logs = Mock()
+
+        changed = agent.SmartLabAgent._apply_device_control_status(instance, "maintenance")
+
+        self.assertTrue(changed)
+        self.assertEqual(instance.device_control_mode, "maintenance")
+        self.assertIsNone(instance.info_bar)
+        info_bar.countdown_timer.stop.assert_called_once()
+        info_bar.hide.assert_called_once()
+        instance.stop_and_send_logs.assert_called_once_with(
+            21,
+            end_reason="maintenance",
+            cleanup_session=False,
+        )
+        self.assertFalse(login_screen.is_authenticated)
+        login_screen.focus_timer.stop.assert_called_once()
+        login_screen.hide.assert_called_once()
+
+    def test_resume_restores_login_screen(self):
+        login_screen = SimpleNamespace(
+            focus_timer=SimpleNamespace(start=Mock()),
+            reset_and_show=Mock(),
+        )
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.device_control_mode = "maintenance"
+        instance.login_screen = login_screen
+
+        changed = agent.SmartLabAgent._apply_device_control_status(instance, "active")
+
+        self.assertTrue(changed)
+        self.assertEqual(instance.device_control_mode, "active")
+        login_screen.focus_timer.start.assert_called_once_with(1000)
+        login_screen.reset_and_show.assert_called_once_with()
+
+    def test_maintenance_end_reason_skips_session_cleanup(self):
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.current_session_id = 21
+        instance.info_bar = None
+        instance.monitor_timer = Mock()
+        instance.heartbeat_timer = Mock()
+        instance.booking_deadline_timer = Mock()
+        instance.policy_timer = Mock()
+        instance.usage_segments = []
+        instance.outbox = None
+        instance._pending_fallback_violations = []
+        instance.background_tasks = Mock()
+        cleanup = Mock()
+        instance.session_cleanup = cleanup
+        instance.violation_state = agent.ViolationState()
+        instance._close_current_activity = Mock()
+        instance.stop_browser_monitor = Mock()
+        instance._stop_window_visibility_monitor = Mock()
+
+        agent.SmartLabAgent.stop_and_send_logs(
+            instance,
+            21,
+            end_reason="maintenance",
+            cleanup_session=False,
+        )
+
+        cleanup.cleanup.assert_not_called()
+        self.assertIsNone(instance.session_cleanup)
+        self.assertIsNone(instance.current_session_id)
+        instance.background_tasks.submit.assert_called_once()
+
+
 class AgentUiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

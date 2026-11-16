@@ -32,6 +32,7 @@ TEST_TABLES = [
         "users",
         "roles",
         "user_roles",
+        "user_passport",
         "user_points",
         "user_daily_scores",
         "point_policies",
@@ -216,6 +217,63 @@ class AdminPointsPerformanceTests(unittest.TestCase):
         self.assertEqual(student_result["points"], points.MAX_POINTS)
         self.assertEqual(student_result["daily_score"], 80)
         self.assertEqual(student_result["point_request"]["status"], "pending")
+
+    def test_user_history_pages_return_distinct_rows_and_more_state(self):
+        student = self.students[0]
+        self.session.add_all([
+            models.UserDailyScore(
+                user_id=student.id,
+                score_date=self.today - timedelta(days=1),
+                score=79,
+            ),
+            models.UserDailyScore(
+                user_id=student.id,
+                score_date=self.today - timedelta(days=2),
+                score=78,
+            ),
+            models.PointLog(
+                user_id=student.id,
+                change=-1,
+                reason="no_show",
+                points_before=75,
+                points_after=74,
+                daily_score_before=80,
+                daily_score_after=79,
+                score_date=self.today,
+                created_at=self.now - timedelta(minutes=1),
+            ),
+            models.PointLog(
+                user_id=student.id,
+                change=1,
+                reason="daily_bonus",
+                points_before=74,
+                points_after=75,
+                daily_score_before=79,
+                daily_score_after=80,
+                score_date=self.today,
+                created_at=self.now - timedelta(minutes=2),
+            ),
+        ])
+        self.session.commit()
+
+        query = self.session.query(models.UserDailyScore).filter_by(user_id=student.id).order_by(
+            models.UserDailyScore.score_date.desc(),
+        )
+        first_scores, scores_have_more = points._page_query(query, 2, 0)
+        next_scores, later_scores_have_more = points._page_query(query, 2, 2)
+        first_logs = points._logs_response(student.id, self.session, 2, None)
+        next_logs = points._logs_response(student.id, self.session, 2, None, offset=2)
+
+        self.assertEqual(len(first_scores), 2)
+        self.assertTrue(scores_have_more)
+        self.assertEqual(len(next_scores), 1)
+        self.assertFalse(later_scores_have_more)
+        first_ids = {row["id"] for row in first_logs["data"]}
+        next_ids = {row["id"] for row in next_logs["data"]}
+        self.assertTrue(first_logs["has_more"])
+        self.assertTrue(next_ids)
+        self.assertTrue(first_ids.isdisjoint(next_ids))
+        self.assertFalse(next_logs["has_more"])
 
 
 if __name__ == "__main__":

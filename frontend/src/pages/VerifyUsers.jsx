@@ -33,6 +33,7 @@ import AdminAccountMenu from "../components/AdminAccountMenu";
 import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import { isPendingUser } from "./verifyUsersUtils";
 import { verticalScrollAreaSx } from "../utils/scrollAreaStyles";
+import { profileImageUrl } from "../utils/profileImageUrl.js";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -52,12 +53,6 @@ const stringToColor = (value) => {
 const getInitials = (user) => {
   const initials = `${user.first_name?.[0] || ""}${user.last_name?.[0] || ""}`;
   return initials.toUpperCase() || "U";
-};
-
-const getProfileImage = (profilePic) => {
-  if (!profilePic) return "";
-  if (/^https?:\/\//i.test(profilePic)) return profilePic;
-  return `${API_URL}/${profilePic.replace(/^\/+/, "")}`;
 };
 
 export default function VerifyUsers() {
@@ -426,7 +421,7 @@ export default function VerifyUsers() {
                   }}
                 >
                   {filteredUsers.map((user) => {
-                    const imageUrl = getProfileImage(user.profile_pic);
+                    const imageUrl = profileImageUrl(user.profile_pic);
                     const isProcessing = processingId === user.id;
                     return (
                       <Paper

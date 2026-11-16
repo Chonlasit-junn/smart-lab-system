@@ -141,6 +141,140 @@ class DeviceRegistrationTests(unittest.TestCase):
             any(dependency.call is require_admin_user for dependency in route.dependant.dependencies)
         )
 
+    def test_agent_control_poll_acknowledges_pause_and_resume(self):
+        registration = devices.register_device_as_admin(
+            devices.AdminDeviceRegister(
+                lab_id=self.lab.id,
+                device_id="device-control-001",
+                device_name="LAB-PC-CONTROL",
+                agent_version="1.2.0",
+            ),
+            self.admin,
+            self.session,
+        )
+        device = self.session.query(models.LabDevice).filter_by(
+            device_id=registration["device_id"],
+        ).one()
+
+        first_poll = devices.report_agent_control_state(
+            registration["device_id"],
+            registration["device_token"],
+            "active",
+            1,
+            self.session,
+        )
+        self.assertTrue(first_poll["acknowledged"])
+        self.assertEqual(device.agent_control_version, 1)
+
+        devices.update_lab_device(
+            device.id,
+            devices.LabDeviceUpdate(status="maintenance", maintenance_minutes=15),
+            self.admin,
+            self.session,
+        )
+        not_yet_paused = devices.report_agent_control_state(
+            registration["device_id"],
+            registration["device_token"],
+            "active",
+            1,
+            self.session,
+        )
+        self.assertFalse(not_yet_paused["acknowledged"])
+        self.assertEqual(device.agent_control_status, "active")
+
+        paused = devices.report_agent_control_state(
+            registration["device_id"],
+            registration["device_token"],
+            "maintenance",
+            1,
+            self.session,
+        )
+        self.assertTrue(paused["acknowledged"])
+        self.assertEqual(device.agent_control_status, "maintenance")
+        self.assertIsNotNone(device.maintenance_until)
+
+        devices.update_lab_device(
+            device.id,
+            devices.LabDeviceUpdate(status="active"),
+            self.admin,
+            self.session,
+        )
+        not_yet_resumed = devices.report_agent_control_state(
+            registration["device_id"],
+            registration["device_token"],
+            "maintenance",
+            1,
+            self.session,
+        )
+        self.assertFalse(not_yet_resumed["acknowledged"])
+        resumed = devices.report_agent_control_state(
+            registration["device_id"],
+            registration["device_token"],
+            "active",
+            1,
+            self.session,
+        )
+        self.assertTrue(resumed["acknowledged"])
+        self.assertEqual(device.agent_control_status, "active")
+        self.assertIsNone(device.maintenance_until)
+
+    def test_agent_control_rejects_old_agent_before_setting_maintenance(self):
+        registration = devices.register_device_as_admin(
+            devices.AdminDeviceRegister(
+                lab_id=self.lab.id,
+                device_id="device-control-old",
+                device_name="LAB-PC-OLD",
+            ),
+            self.admin,
+            self.session,
+        )
+        device = self.session.query(models.LabDevice).filter_by(
+            device_id=registration["device_id"],
+        ).one()
+
+        with self.assertRaises(HTTPException) as raised:
+            devices.update_lab_device(
+                device.id,
+                devices.LabDeviceUpdate(status="maintenance"),
+                self.admin,
+                self.session,
+            )
+
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(device.status, "active")
+
+    def test_device_list_resumes_every_expired_maintenance_lease(self):
+        registrations = [
+            devices.register_device_as_admin(
+                devices.AdminDeviceRegister(
+                    lab_id=self.lab.id,
+                    device_id=f"device-expired-{suffix}",
+                    device_name=f"LAB-PC-{suffix}",
+                ),
+                self.admin,
+                self.session,
+            )
+            for suffix in ("first", "second")
+        ]
+        expired_at = datetime.now(timezone.utc).replace(year=datetime.now(timezone.utc).year - 1)
+        for registration in registrations:
+            device = self.session.query(models.LabDevice).filter_by(
+                device_id=registration["device_id"],
+            ).one()
+            device.status = "maintenance"
+            device.maintenance_until = expired_at
+        self.session.commit()
+
+        devices.list_lab_devices(self.admin, self.session)
+
+        statuses = [
+            self.session.query(models.LabDevice).filter_by(
+                device_id=registration["device_id"],
+            ).one().status
+            for registration in registrations
+        ]
+        self.assertEqual(statuses, ["active", "active"])
+
     def test_admin_removal_revokes_device_and_preserves_historical_logs(self):
         registration = devices.register_device_as_admin(
             devices.AdminDeviceRegister(

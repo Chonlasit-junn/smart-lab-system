@@ -1,7 +1,9 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from cors_middleware import OriginCheckedCORSMiddleware
-from security_config import cors_origins
+from security_config import cors_origins, is_production
 
 # Fail closed on invalid production configuration before any database startup.
 allowed_origins = cors_origins()
@@ -27,7 +29,10 @@ app.add_middleware(
     expose_headers=["Retry-After", "Content-Disposition"],
 )
 
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
+if not is_production(os.environ):
+    # Local avatars are public only in development. Production uses signed
+    # profile-image routes or short-lived URLs from private Supabase storage.
+    app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
 
 app.include_router(auth.router)
 app.include_router(password_reset.router)

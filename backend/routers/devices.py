@@ -18,12 +18,17 @@ from device_registry import (
     clean_device_mac,
     clean_device_name,
     hash_device_token,
+    require_registered_device,
+    resume_expired_maintenance,
 )
 from routers.users import require_admin_user
 
 
 router = APIRouter(tags=["Lab Devices"])
 VALID_DEVICE_STATUSES = {"active", "maintenance", "revoked"}
+GATEKEEPER_DEVICE_PREFIX = "gatekeeper-"
+AGENT_CONTROL_VERSION = 1
+DEFAULT_MAINTENANCE_MINUTES = 30
 
 
 class EnrollmentCodeCreate(BaseModel):
@@ -43,6 +48,7 @@ class LabDeviceUpdate(BaseModel):
     status: Optional[str] = None
     lab_id: Optional[int] = None
     device_name: Optional[str] = None
+    maintenance_minutes: Optional[int] = Field(None, ge=5, le=240)
 
 
 def _utc_now() -> datetime:
@@ -62,6 +68,12 @@ def _serialize_device(device: models.LabDevice, lab: models.Lab) -> dict:
         "status": device.status,
         "agent_version": device.agent_version,
         "last_seen_at": device.last_seen_at,
+        "maintenance_until": device.maintenance_until,
+        "control_requested_at": device.control_requested_at,
+        "agent_control_status": device.agent_control_status,
+        "agent_control_ack_at": device.agent_control_ack_at,
+        "agent_control_version": device.agent_control_version,
+        "device_type": "gatekeeper" if device.device_id.startswith(GATEKEEPER_DEVICE_PREFIX) else "agent",
         "created_at": device.created_at,
         "updated_at": device.updated_at,
         "lab": {
@@ -102,6 +114,12 @@ def _provision_device(
         existing.agent_token_hash = hash_device_token(raw_device_token)
         existing.agent_version = resolved_version
         existing.last_seen_at = now
+        existing.maintenance_until = None
+        existing.control_requested_at = None
+        existing.control_requested_by = None
+        existing.agent_control_status = "active"
+        existing.agent_control_ack_at = None
+        existing.agent_control_version = 0
         device = existing
     else:
         device = models.LabDevice(
@@ -198,6 +216,11 @@ def list_lab_devices(
     ).filter(
         models.LabDevice.status != "revoked",
     ).order_by(models.Lab.code.asc(), models.LabDevice.device_name.asc()).all()
+    expired = False
+    for device, _lab in rows:
+        expired = resume_expired_maintenance(device) or expired
+    if expired:
+        db.commit()
     return {"data": [_serialize_device(device, lab) for device, lab in rows]}
 
 
@@ -205,7 +228,7 @@ def list_lab_devices(
 def update_lab_device(
     device_pk: int,
     payload: LabDeviceUpdate,
-    _admin: models.User = Depends(require_admin_user),
+    admin: models.User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
     device = db.query(models.LabDevice).filter(models.LabDevice.id == device_pk).first()
@@ -216,8 +239,28 @@ def update_lab_device(
         new_status = payload.status.strip().lower()
         if new_status not in VALID_DEVICE_STATUSES:
             raise HTTPException(status_code=422, detail="Invalid device status.")
-        device.status = new_status
+        if new_status == "maintenance":
+            if device.device_id.startswith(GATEKEEPER_DEVICE_PREFIX):
+                raise HTTPException(status_code=422, detail="Maintenance pause is only available for Agent workstations.")
+            if (device.agent_control_version or 0) < AGENT_CONTROL_VERSION:
+                raise HTTPException(status_code=409, detail="Update the Agent before requesting remote maintenance.")
+            device.status = "maintenance"
+            device.maintenance_until = _utc_now() + timedelta(
+                minutes=payload.maintenance_minutes or DEFAULT_MAINTENANCE_MINUTES,
+            )
+            device.control_requested_at = _utc_now()
+            device.control_requested_by = admin.id
+        elif new_status == "active":
+            if device.status != "active":
+                device.control_requested_at = _utc_now()
+                device.control_requested_by = admin.id
+            device.status = "active"
+            device.maintenance_until = None
         if new_status == "revoked":
+            device.status = "revoked"
+            device.maintenance_until = None
+            device.control_requested_at = _utc_now()
+            device.control_requested_by = admin.id
             # Keep the column non-null while making the old credential unusable.
             device.agent_token_hash = hash_device_token(secrets.token_urlsafe(32))
 
@@ -246,6 +289,43 @@ def update_lab_device(
     db.refresh(device)
     lab = db.query(models.Lab).filter(models.Lab.id == device.lab_id).first()
     return {"message": "Device updated successfully.", "device": _serialize_device(device, lab)}
+
+
+@router.post("/agent/control-state")
+def report_agent_control_state(
+    device_id: str = Form(...),
+    device_token: str = Form(...),
+    reported_status: str = Form("active"),
+    control_version: int = Form(..., ge=1),
+    db: Session = Depends(get_db),
+):
+    """Poll the Admin-controlled Agent mode and acknowledge it after applying."""
+    if reported_status not in {"active", "maintenance"}:
+        raise HTTPException(status_code=422, detail="Invalid reported Agent status.")
+
+    device = require_registered_device(
+        db,
+        device_id,
+        device_token,
+        allow_maintenance=True,
+    )
+    if device.device_id.startswith(GATEKEEPER_DEVICE_PREFIX):
+        raise HTTPException(status_code=403, detail="This device is not a Lab Agent.")
+
+    now = _utc_now()
+    device.last_seen_at = now
+    device.agent_control_version = control_version
+    if reported_status == device.status:
+        device.agent_control_status = reported_status
+        device.agent_control_ack_at = now
+    db.commit()
+    return {
+        "control_status": device.status,
+        "maintenance_until": device.maintenance_until,
+        "control_requested_at": device.control_requested_at,
+        "server_time": now,
+        "acknowledged": reported_status == device.status,
+    }
 
 
 @router.delete("/admin/lab-devices/{device_pk}")

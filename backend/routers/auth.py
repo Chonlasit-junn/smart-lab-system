@@ -108,15 +108,16 @@ def verify_otp(request: schemas.OTPVerify, db: Session = Depends(get_db)):
 
 @router.post("/register", dependencies=[Depends(otp_service.enforce_ip_rate_limit)])
 async def register(
-    email: str = Form(...),
-    otp: str = Form(...),
+    email: str = Form(..., min_length=3, max_length=254),
+    otp: str = Form(..., min_length=6, max_length=6),
+    # Keep password-policy failures on the localized validation path below.
     password: str = Form(...),
-    first_name: str = Form(...),
-    last_name: str = Form(...),
-    student_id: str = Form(None),
-    faculty: str = Form(None),
-    department: str = Form(None),
-    phone: str = Form(None),
+    first_name: str = Form(..., min_length=1, max_length=80),
+    last_name: str = Form(..., min_length=1, max_length=80),
+    student_id: str = Form(None, max_length=32),
+    faculty: str = Form(None, max_length=120),
+    department: str = Form(None, max_length=120),
+    phone: str = Form(None, max_length=32),
     face_image: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -124,8 +125,20 @@ async def register(
         validate_new_password(password)
     except ValueError:
         raise HTTPException(status_code=422, detail=PASSWORD_POLICY_ERROR) from None
+    first_name = first_name.strip()
+    last_name = last_name.strip()
+    if not first_name or not last_name:
+        raise HTTPException(status_code=422, detail="First and last name are required.")
+
     normalized_email = normalize_email(email)
-    if normalized_email.split("@")[-1] != "bumail.net":
+    domain = normalized_email.split("@")[-1]
+    if domain == "bumail.net":
+        student_id = (student_id or "").strip()
+        faculty = (faculty or "").strip()
+        department = (department or "").strip()
+        if not student_id or not faculty or not department:
+            raise HTTPException(status_code=422, detail="Student ID, faculty and department are required.")
+    else:
         try:
             phone = normalize_phone_number(phone)
         except ValueError:
@@ -180,7 +193,6 @@ async def register(
         else:
             new_user.profile_pic = profile_url
 
-        domain = normalized_email.split("@")[-1]
         role_name = "student" if domain == "bumail.net" else "guest"
         db.add(models.UserPoints(
             user_id=new_user.id,

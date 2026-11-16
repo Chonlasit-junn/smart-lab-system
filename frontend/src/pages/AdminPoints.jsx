@@ -104,6 +104,28 @@ const getRoleColor = (role) =>
     guest: { bgcolor: "var(--role-guest-bg)", color: "var(--role-guest-text)" },
   })[role] || { bgcolor: "var(--role-guest-bg)", color: "var(--role-guest-text)" };
 
+const DETAIL_HISTORY_FIELDS = [
+  "bookings",
+  "sessions",
+  "program_usage",
+  "point_history",
+  "daily_scores",
+  "violations",
+];
+
+function appendUniqueRows(existingRows = [], newRows = []) {
+  const seen = new Set(existingRows.map((row) => row.id ?? String(row.score_date)));
+  return [
+    ...existingRows,
+    ...newRows.filter((row) => {
+      const key = row.id ?? String(row.score_date);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
+  ];
+}
+
 const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
   const scores = userRows.map((user) => Math.max(0, Math.min(100, Number(user.points) || 0)));
   return {
@@ -141,6 +163,7 @@ export default function AdminPoints() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [userDetail, setUserDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailLoadingMore, setDetailLoadingMore] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [detailTab, setDetailTab] = useState(0);
   const [pointRequests, setPointRequests] = useState([]);
@@ -231,6 +254,7 @@ export default function AdminPoints() {
     setUserDetail(null);
     setDetailTab(0);
     setDetailError("");
+    setDetailLoadingMore(false);
     setDetailOpen(true);
 
     if (!token) {
@@ -268,12 +292,62 @@ export default function AdminPoints() {
     }
   };
 
+  const handleLoadMoreUserDetail = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token || !selectedUser || !userDetail || detailLoadingMore) return;
+
+    detailControllerRef.current?.abort();
+    const controller = new AbortController();
+    detailControllerRef.current = controller;
+    setDetailLoadingMore(true);
+    setDetailError("");
+
+    try {
+      const params = Object.fromEntries(
+        DETAIL_HISTORY_FIELDS.map((field) => [
+          `${field}_offset`,
+          userDetail.pagination?.[field]?.next_offset ?? userDetail[field]?.length ?? 0,
+        ]),
+      );
+      const response = await axios.get(
+        `${API_URL}/admin/users/${selectedUser.user_id}/details`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params,
+          signal: controller.signal,
+        },
+      );
+      if (detailControllerRef.current !== controller) return;
+      const nextPage = response.data || {};
+      setUserDetail((current) => {
+        if (!current) return current;
+        const merged = { ...current, pagination: nextPage.pagination || current.pagination };
+        for (const field of DETAIL_HISTORY_FIELDS) {
+          merged[field] = appendUniqueRows(current[field], nextPage[field]);
+        }
+        return merged;
+      });
+    } catch (requestError) {
+      if (axios.isCancel(requestError) || detailControllerRef.current !== controller) return;
+      const detail = requestError.response?.data?.detail;
+      setDetailError(
+        typeof detail === "string" ? detail : t("admin.loadUserDetailFailed"),
+      );
+    } finally {
+      if (detailControllerRef.current === controller) {
+        detailControllerRef.current = null;
+        setDetailLoadingMore(false);
+      }
+    }
+  };
+
   const handleCloseUserDetail = () => {
     detailControllerRef.current?.abort();
     detailControllerRef.current = null;
     setDetailOpen(false);
     setDetailError("");
     setDetailLoading(false);
+    setDetailLoadingMore(false);
   };
 
   const handlePointRequestAction = async (requestId, action) => {
@@ -1219,6 +1293,8 @@ export default function AdminPoints() {
         loading={detailLoading}
         error={detailError}
         onRetry={() => handleOpenUserDetail(selectedUser)}
+        onLoadMore={handleLoadMoreUserDetail}
+        loadingMore={detailLoadingMore}
         tab={detailTab}
         onTabChange={(_, nextTab) => setDetailTab(nextTab)}
       />

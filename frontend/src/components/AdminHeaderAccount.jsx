@@ -2,6 +2,7 @@ import { Avatar, Box, IconButton, Typography } from "@mui/material";
 import { Person } from "@mui/icons-material";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
+import { profileImageUrl } from "../utils/profileImageUrl.js";
 
 const ROLE_LABELS = {
   admin: "Admin",
@@ -26,7 +27,7 @@ function useAdminIdentity() {
   const role = ROLE_LABELS[String(rawRole || "").toLowerCase()] || rawRole || "Admin";
   const initial = name.trim().charAt(0).toUpperCase();
 
-  return { name, role, initial, profilePicture: profile?.profile_pic };
+  return { name, role, initial, profilePicture: profileImageUrl(profile?.profile_pic) };
 }
 
 export function AdminIdentityAvatar({ className, sx }) {

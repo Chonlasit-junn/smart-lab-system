@@ -1,8 +1,10 @@
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -64,6 +66,35 @@ class ProfileStorageBatchSigningTests(unittest.TestCase):
                 profile_storage.get_profile_image_urls(["profiles/1/avatar.jpg"]),
                 [None],
             )
+
+    def test_local_production_avatar_uses_short_lived_signed_url(self):
+        filename = "a" * 32 + ".jpg"
+        with tempfile.TemporaryDirectory() as upload_dir:
+            image_path = Path(upload_dir) / filename
+            image_path.write_bytes(b"jpeg")
+            with patch.object(profile_storage, "is_production", return_value=True), patch.object(
+                profile_storage, "UPLOAD_DIR", upload_dir,
+            ):
+                url = profile_storage.get_profile_image_urls([
+                    f"uploads/profiles/{filename}",
+                ])[0]
+
+                parts = urlsplit(url)
+                query = parse_qs(parts.query)
+                resolved = profile_storage.resolve_local_profile_image(
+                    filename,
+                    int(query["expires"][0]),
+                    query["signature"][0],
+                )
+                rejected = profile_storage.resolve_local_profile_image(
+                    filename,
+                    int(query["expires"][0]),
+                    "0" * 64,
+                )
+
+        self.assertEqual(parts.path, f"uploads/profiles/{filename}")
+        self.assertEqual(resolved, image_path)
+        self.assertIsNone(rejected)
 
 
 if __name__ == "__main__":

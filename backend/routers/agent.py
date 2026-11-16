@@ -150,8 +150,15 @@ def _require_session_device(
     device_id: Optional[str],
     device_token: Optional[str],
     current_user: Optional[models.User] = None,
+    *,
+    allow_maintenance: bool = False,
 ) -> models.LabDevice:
-    registered_device = require_registered_device(db, device_id, device_token)
+    registered_device = require_registered_device(
+        db,
+        device_id,
+        device_token,
+        allow_maintenance=allow_maintenance,
+    )
     if access_log.lab_device_id is not None:
         if registered_device.id != access_log.lab_device_id:
             raise HTTPException(status_code=403, detail="Workstation is not authorized for this session.")
@@ -445,7 +452,10 @@ def log_usage(
     ).first()
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
-    _require_session_device(db, access_log, device_id, device_token, current_user)
+    _require_session_device(
+        db, access_log, device_id, device_token, current_user,
+        allow_maintenance=True,
+    )
 
     try:
         logs = json.loads(usage_data)
@@ -738,8 +748,17 @@ def heartbeat(
     _require_active_session(access_log)
     registered_device = _require_session_device(
         db, access_log, device_id, device_token, current_user,
+        allow_maintenance=True,
     )
     registered_device.last_seen_at = utc_now()
+
+    if registered_device.status == "maintenance":
+        db.commit()
+        return {
+            "message": "Agent maintenance is active.",
+            "session_id": session_id,
+            "control_status": "maintenance",
+        }
 
     reported_mac = _clean_device_mac(device_mac)
     stored_mac = _clean_device_mac(access_log.device_mac)
@@ -797,7 +816,10 @@ def end_session(
     ).with_for_update().first()
     if not access_log:
         raise HTTPException(status_code=404, detail="Session not found.")
-    _require_session_device(db, access_log, device_id, device_token, current_user)
+    _require_session_device(
+        db, access_log, device_id, device_token, current_user,
+        allow_maintenance=True,
+    )
 
     cleaned_reason = (end_reason or "logout").strip().lower()
     if cleaned_reason not in VALID_END_REASONS:

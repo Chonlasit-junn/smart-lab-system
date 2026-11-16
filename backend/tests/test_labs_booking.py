@@ -68,6 +68,14 @@ class LabBookingLogicTests(unittest.TestCase):
                     with self.assertRaises(ValidationError):
                         model(**{**required, field: "x" * (max_length + 1)})
 
+    def test_lab_status_values_match_database_constraint(self):
+        for status in ("active", "inactive", "maintenance"):
+            with self.subTest(status=status):
+                schemas.LabStatusUpdate(status=status)
+
+        with self.assertRaises(ValidationError):
+            schemas.LabStatusUpdate(status="disabled")
+
     def test_schedule_text_fields_enforce_limits(self):
         payload = {
             "lab_id": 1,
