@@ -44,6 +44,7 @@ import { authConfig } from "../utils/auth";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
+import AdminHeaderAccount, { AdminIdentityAvatar } from "../components/AdminHeaderAccount";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import ResponsiveDataTable from "../components/ResponsiveDataTable";
@@ -354,36 +355,10 @@ export default function BlacklistManager() {
               sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box className="admin-user-summary" sx={{ textAlign: "right" }}>
-                <Typography
-                  variant="subtitle2"
-                  fontWeight="700"
-                  color="#1e293b"
-                >
-                  {currentUser?.name || "Admin"}
-                </Typography>
-                <Typography variant="caption" fontWeight="500" color="#94a3b8">
-                  {currentUser?.role || "Admin"}
-                </Typography>
-              </Box>
-              <IconButton
+              <AdminHeaderAccount
                 onClick={handleAvatarClick}
-                sx={{
-                  p: 0.8,
-                  "&:hover": { bgcolor: "#f1f5f9" },
-                }}
-              >
-                <Avatar
-                  sx={{
-                    bgcolor: "#0f172a",
-                    width: 36,
-                    height: 36,
-                    boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-                  }}
-                >
-                  <Person sx={{ fontSize: 20 }} />
-                </Avatar>
-              </IconButton>
+                buttonSx={{ "&:hover": { bgcolor: "#f1f5f9" } }}
+              />
 
               <Popover
                 anchorEl={anchorEl}
@@ -428,7 +403,7 @@ export default function BlacklistManager() {
                 {/* avatar + greeting */}
                 <Box sx={{ textAlign: "center", px: 3, pb: 3, pt: 0.5 }}>
                   <Box sx={{ position: "relative", display: "inline-block" }}>
-                    <Avatar
+                    <AdminIdentityAvatar
                       sx={{
                         bgcolor: "#0f172a",
                         width: 84,
@@ -437,9 +412,7 @@ export default function BlacklistManager() {
                         boxShadow:
                           "0 0 0 4px #eff6ff, 0 8px 20px rgba(59,130,246,0.25)",
                       }}
-                    >
-                      <Person sx={{ fontSize: 40 }} />
-                    </Avatar>
+                    />
                   </Box>
 
                   <Typography

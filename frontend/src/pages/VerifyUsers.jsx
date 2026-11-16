@@ -35,6 +35,7 @@ import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
+import AdminHeaderAccount from "../components/AdminHeaderAccount";
 import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import { isPendingUser } from "./verifyUsersUtils";
@@ -310,32 +311,10 @@ export default function VerifyUsers() {
               sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box
-                sx={{
-                  textAlign: "right",
-                  display: { xs: "none", sm: "block" },
-                }}
-              >
-                <Typography
-                  variant="subtitle2"
-                  fontWeight="700"
-                  color="#1e293b"
-                >
-                  {currentUser?.name || "Admin"}
-                </Typography>
-                <Typography variant="caption" fontWeight="500" color="#94a3b8">
-                  {currentUser?.role || "Admin"}
-                </Typography>
-              </Box>
-              <IconButton
+              <AdminHeaderAccount
                 onClick={(event) => setAnchorEl(event.currentTarget)}
-                aria-label={t("common.openMenu")}
-                sx={{ p: 0.8, "&:hover": { bgcolor: "#f1f5f9" } }}
-              >
-                <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}>
-                  <Person sx={{ fontSize: 20 }} />
-                </Avatar>
-              </IconButton>
+                buttonSx={{ "&:hover": { bgcolor: "#f1f5f9" } }}
+              />
               <Popover
                 anchorEl={anchorEl}
                 open={Boolean(anchorEl)}

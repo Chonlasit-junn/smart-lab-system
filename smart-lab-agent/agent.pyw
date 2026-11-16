@@ -7,6 +7,7 @@ import socket
 import threading
 import uuid
 import time
+import math
 import requests
 import pygetwindow as gw
 from datetime import datetime, timezone
@@ -51,6 +52,18 @@ def _utc_now():
 
 def _sync_backend_clock(server_time):
     return SERVER_CLOCK.sync(server_time)
+
+
+def _parse_booking_deadline(value):
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
+        return parsed.astimezone(timezone.utc)
+    except (OverflowError, TypeError, ValueError):
+        return None
 
 
 def _append_monitor_error_log(error_type):
@@ -105,7 +118,7 @@ def response_detail(response):
     return ""
 
 
-def _show_session_notice(title, message):
+def _show_session_notice(title, message, *, modal=True):
     dialog = QMessageBox()
     dialog.setIcon(QMessageBox.Icon.Warning)
     dialog.setWindowTitle(title)
@@ -114,7 +127,44 @@ def _show_session_notice(title, message):
     dialog.setWindowFlags(
         dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint
     )
-    dialog.exec()
+    if modal:
+        dialog.exec()
+        return None
+
+    dialog.setModal(False)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+    dialog.show()
+    dialog.raise_()
+    return dialog
+
+
+def _close_booking_warning_dialog(agent):
+    warning = getattr(agent, "booking_warning_dialog", None)
+    agent.booking_warning_dialog = None
+    if warning is not None:
+        try:
+            warning.close()
+        except RuntimeError:
+            pass
+
+
+def _lock_session_and_notify(agent, session_id, title, message):
+    _close_booking_warning_dialog(agent)
+
+    info_bar = getattr(agent, "info_bar", None)
+    if info_bar is not None:
+        info_bar.trigger_logout(show_dialog=False)
+    else:
+        agent.stop_and_send_logs(session_id, end_reason="logout")
+        overlay = getattr(agent, "overlay", None)
+        if overlay is not None:
+            overlay.reset_and_show()
+
+    agent.session_end_notice = _show_session_notice(
+        title,
+        message,
+        modal=False,
+    )
 
 
 def _with_device_credentials(payload):
@@ -404,11 +454,12 @@ class ViolationDialog(QDialog):
 
 # ── SessionInfoBar ────────────────────────────────────────────────────────────
 class SessionInfoBar(QWidget):
-    def __init__(self, email, overlay, session_id):
+    def __init__(self, email, overlay, session_id, booking_ends_at=None):
         super().__init__()
         self.email      = email
         self.overlay    = overlay
         self.session_id = session_id
+        self.booking_ends_at = _parse_booking_deadline(booking_ends_at)
         self._init_ui()
 
     def _init_ui(self):
@@ -419,7 +470,7 @@ class SessionInfoBar(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._expanded = False
-        self._compact_size = (56, 56)
+        self._compact_size = (210, 56)
         self._expanded_size = (340, 150)
         self.setFixedSize(*self._compact_size)
         self._position_on_screen()
@@ -458,6 +509,14 @@ class SessionInfoBar(QWidget):
         )
         self.status_label.hide()
         header.addWidget(self.status_label, 1)
+
+        self.countdown_label = QLabel()
+        self.countdown_label.setStyleSheet(
+            "color: #5eead4; font-family: 'Segoe UI'; font-size: 11px; "
+            "font-weight: bold; border: none; background: transparent;"
+        )
+        self.countdown_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.addWidget(self.countdown_label, 1)
 
         self.toggle_btn = QPushButton("⌄")
         self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -502,6 +561,33 @@ class SessionInfoBar(QWidget):
         self.details_widget.hide()
         inner.addWidget(self.details_widget)
         outer.addWidget(self.container)
+
+        self.countdown_timer = QTimer(self)
+        self.countdown_timer.timeout.connect(self._update_countdown)
+        self.countdown_timer.start(1000)
+        self._update_countdown()
+
+    def set_booking_deadline(self, value):
+        deadline = _parse_booking_deadline(value)
+        if deadline is None:
+            return False
+        self.booking_ends_at = deadline
+        self._update_countdown()
+        return True
+
+    def _update_countdown(self):
+        if self.booking_ends_at is None:
+            self.countdown_label.setText("เหลือเวลา --:--:--")
+            return
+
+        remaining = max(0, math.ceil((self.booking_ends_at - _utc_now()).total_seconds()))
+        if remaining == 0:
+            self.countdown_label.setText("หมดเวลา")
+            return
+
+        hours, remaining = divmod(remaining, 3600)
+        minutes, seconds = divmod(remaining, 60)
+        self.countdown_label.setText(f"เหลือ {hours:02d}:{minutes:02d}:{seconds:02d}")
 
     def _position_on_screen(self):
         screen = QApplication.primaryScreen()
@@ -607,6 +693,9 @@ class SessionInfoBar(QWidget):
                 allow_grace=False,
             )
             dlg.exec()
+        countdown_timer = getattr(self, "countdown_timer", None)
+        if countdown_timer is not None:
+            countdown_timer.stop()
         self.overlay.agent.stop_and_send_logs(
             self.session_id,
             end_reason="violation" if reason else "logout",
@@ -863,6 +952,7 @@ class LoginOverlay(QWidget):
                     result.get("email", self.email_input.text().strip()),
                     self,
                     session_id,
+                    booking_ends_at=result.get("booking_ends_at"),
                 )
                 self.info_bar.show()
                 self.agent.start_monitoring(
@@ -1318,6 +1408,7 @@ class SmartLabAgent:
         self.fetch_policy()
 
     def start_monitoring(self, session_id, info_bar, booking_ends_at=None):
+        _close_booking_warning_dialog(self)
         self.current_session_id = session_id
         self.info_bar = info_bar
         self.booking_ends_at = None
@@ -1337,6 +1428,8 @@ class SmartLabAgent:
         self.violation_grace_context = None
         self.violation_dialog_active = False
         self.session_cleanup = None
+        self.booking_warning_dialog = None
+        self.session_end_notice = None
         if SESSION_CLEANUP_ENABLED:
             try:
                 self.session_cleanup = SessionCleanupManager(
@@ -1358,42 +1451,73 @@ class SmartLabAgent:
         self.heartbeat_timer.start(30000)
         booking_timer = getattr(self, "booking_deadline_timer", None)
         if booking_timer is not None:
-            booking_timer.start(5000)
+            booking_timer.start(1000)
         self.policy_timer.start(POLICY_REFRESH_SECONDS * 1000)
 
     def _update_booking_deadline(self, value):
-        if not isinstance(value, str) or not value.strip():
-            return
-        try:
-            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-            if parsed.tzinfo is None or parsed.utcoffset() is None:
-                return
-            deadline = parsed.astimezone(timezone.utc)
-        except (OverflowError, TypeError, ValueError):
+        deadline = _parse_booking_deadline(value)
+        if deadline is None:
             return
 
         if deadline != getattr(self, "booking_ends_at", None):
             self.booking_ends_at = deadline
             self.booking_end_warning_shown = False
+        info_bar = getattr(self, "info_bar", None)
+        if info_bar is not None:
+            set_deadline = getattr(info_bar, "set_booking_deadline", None)
+            if callable(set_deadline):
+                set_deadline(value)
 
     def _check_booking_deadline(self):
         deadline = getattr(self, "booking_ends_at", None)
         if (
             not getattr(self, "current_session_id", None)
             or deadline is None
-            or getattr(self, "booking_end_warning_shown", False)
-            or getattr(self, "violation_dialog_active", False)
         ):
             return
 
         remaining = (deadline - _utc_now()).total_seconds()
-        if 0 < remaining <= 5 * 60:
+        if remaining <= 0:
+            session_id = self.current_session_id
             self.booking_end_warning_shown = True
-            _show_session_notice(
-                "ใกล้หมดเวลาจอง Lab",
-                "เหลือเวลาจองไม่เกิน 5 นาที เมื่อหมดเวลาระบบจะบันทึก Session "
-                "และกลับไปหน้าเข้าสู่ระบบ กรุณาบันทึกงานของคุณ",
+            for timer_name in ("monitor_timer", "heartbeat_timer", "booking_deadline_timer", "policy_timer"):
+                timer = getattr(self, timer_name, None)
+                if timer is not None:
+                    timer.stop()
+            _lock_session_and_notify(
+                self,
+                session_id,
+                "หมดเวลาจอง Lab",
+                "หมดเวลาจองแล้ว ระบบกำลังบันทึก Session "
+                "และกลับไปหน้าเข้าสู่ระบบ",
             )
+            return
+
+        if getattr(self, "violation_dialog_active", False):
+            return
+
+        if 0 < remaining <= 5 * 60:
+            if not getattr(self, "booking_end_warning_shown", False):
+                self.booking_end_warning_shown = True
+                self.booking_warning_dialog = _show_session_notice(
+                    "ใกล้หมดเวลาจอง Lab",
+                    "เหลือเวลาจองไม่เกิน 5 นาที เมื่อหมดเวลาระบบจะบันทึก Session "
+                    "และกลับไปหน้าเข้าสู่ระบบ กรุณาบันทึกงานของคุณ",
+                    modal=False,
+                )
+                if self.booking_warning_dialog is not None:
+                    warning_dialog_id = id(self.booking_warning_dialog)
+                    self.booking_warning_dialog.finished.connect(
+                        lambda _result, dialog_id=warning_dialog_id: SmartLabAgent._clear_booking_warning(
+                            self,
+                            dialog_id,
+                        )
+                    )
+
+    def _clear_booking_warning(self, dialog_id):
+        warning = getattr(self, "booking_warning_dialog", None)
+        if warning is not None and id(warning) == dialog_id:
+            self.booking_warning_dialog = None
 
     def send_heartbeat(self):
         session_id = self.current_session_id
@@ -1459,27 +1583,26 @@ class SmartLabAgent:
             booking_timer = getattr(self, "booking_deadline_timer", None)
             if booking_timer is not None:
                 booking_timer.stop()
-            if self.info_bar:
-                detail = result.get("detail", "") if isinstance(result, dict) else ""
-                if detail == "Session booking has ended.":
-                    _show_session_notice(
-                        "หมดเวลาจอง Lab",
-                        "หมดเวลาจองแล้ว ระบบกำลังบันทึก Session "
-                        "และจะกลับไปหน้าเข้าสู่ระบบ",
-                    )
-                elif detail == "Session access is no longer available.":
-                    _show_session_notice(
-                        "สิทธิ์ใช้งาน Session สิ้นสุดแล้ว",
-                        "บัญชีหรือสิทธิ์เข้าใช้ Lab เปลี่ยนแปลง ระบบกำลังบันทึก Session "
-                        "และจะกลับไปหน้าเข้าสู่ระบบ",
-                    )
-                else:
-                    _show_session_notice(
-                        "Session สิ้นสุดแล้ว",
-                        "ไม่สามารถใช้งาน Session นี้ต่อได้ ระบบกำลังบันทึกข้อมูล "
-                        "และจะกลับไปหน้าเข้าสู่ระบบ",
-                    )
-                self.info_bar.trigger_logout()
+            detail = result.get("detail", "") if isinstance(result, dict) else ""
+            if detail == "Session booking has ended.":
+                title = "หมดเวลาจอง Lab"
+                message = (
+                    "หมดเวลาจองแล้ว ระบบกำลังบันทึก Session "
+                    "และกลับไปหน้าเข้าสู่ระบบ"
+                )
+            elif detail == "Session access is no longer available.":
+                title = "สิทธิ์ใช้งาน Session สิ้นสุดแล้ว"
+                message = (
+                    "บัญชีหรือสิทธิ์เข้าใช้ Lab เปลี่ยนแปลง ระบบกำลังบันทึก Session "
+                    "และกลับไปหน้าเข้าสู่ระบบ"
+                )
+            else:
+                title = "Session สิ้นสุดแล้ว"
+                message = (
+                    "ไม่สามารถใช้งาน Session นี้ต่อได้ ระบบกำลังบันทึกข้อมูล "
+                    "และกลับไปหน้าเข้าสู่ระบบ"
+                )
+            _lock_session_and_notify(self, session_id, title, message)
         elif status is None:
             print("ส่ง heartbeat ไม่ได้: Server ไม่ตอบกลับ")
 
@@ -2344,6 +2467,7 @@ class SmartLabAgent:
         return delivered
 
     def stop_and_send_logs(self, session_id, end_reason="logout"):
+        _close_booking_warning_dialog(self)
         self.stop_browser_monitor()
         self._stop_window_visibility_monitor()
         self.monitor_timer.stop()

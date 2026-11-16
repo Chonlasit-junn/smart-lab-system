@@ -38,6 +38,7 @@ import { authConfig } from "../utils/auth";
 import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
+import AdminHeaderAccount from "../components/AdminHeaderAccount";
 import LoadError from "../components/LoadError";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import ResponsiveDataTable from "../components/ResponsiveDataTable";
@@ -52,7 +53,7 @@ const STATUS_LABELS = {
 
 export default function AdminDevices() {
   const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
+  const { logout } = useAuth();
   const { t } = useLanguage();
   const devicesControllerRef = useRef(null);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -187,13 +188,10 @@ export default function AdminDevices() {
               iconColor="#64748b"
             />
             <Divider className="admin-header-divider admin-devices-header-divider" orientation="vertical" flexItem sx={{ height: 30, my: "auto", bgcolor: "#e2e8f0" }} />
-            <Box className="admin-user-summary admin-devices-header-summary" sx={{ textAlign: "right" }}>
-              <Typography variant="subtitle2" fontWeight="700" color="#1e293b">{currentUser?.name || "Admin"}</Typography>
-              <Typography variant="caption" fontWeight="500" color="#94a3b8">{currentUser?.role || "Admin"}</Typography>
-            </Box>
-            <IconButton onClick={(event) => setAnchorEl(event.currentTarget)} sx={{ p: 0.8 }}>
-              <Avatar sx={{ bgcolor: "#0f172a", width: 36, height: 36 }}><Person sx={{ fontSize: 20 }} /></Avatar>
-            </IconButton>
+            <AdminHeaderAccount
+              summaryClassName="admin-devices-header-summary"
+              onClick={(event) => setAnchorEl(event.currentTarget)}
+            />
           </Box>
         </Box>
 

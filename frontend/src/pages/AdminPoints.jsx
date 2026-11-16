@@ -51,6 +51,7 @@ import AdminNavigation from "../components/AdminNavigation";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
+import AdminHeaderAccount from "../components/AdminHeaderAccount";
 import AdminModeSwitch from "../components/AdminModeSwitch";
 import ResponsiveDataTable from "../components/ResponsiveDataTable";
 import {
@@ -549,32 +550,10 @@ export default function AdminPoints() {
               sx={{ height: 30, my: "auto", bgcolor: "var(--border-light)" }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box
-                sx={{
-                  textAlign: "right",
-                  display: { xs: "none", sm: "block" },
-                }}
-              >
-                <Typography
-                  variant="subtitle2"
-                  fontWeight="700"
-                  color="var(--text-dark)"
-                >
-                  {currentUser?.name || "Admin"}
-                </Typography>
-                <Typography variant="caption" fontWeight="500" color="var(--text-muted)">
-                  {currentUser?.role || "Admin"}
-                </Typography>
-              </Box>
-              <IconButton
+              <AdminHeaderAccount
                 onClick={(event) => setAnchorEl(event.currentTarget)}
-                aria-label={t("common.openMenu")}
-                sx={{ p: 0.8, "&:hover": { bgcolor: "var(--surface-subtle)" } }}
-              >
-                <Avatar sx={{ bgcolor: "var(--text-dark)", color: "var(--brand-contrast)", width: 36, height: 36 }}>
-                  <Person sx={{ fontSize: 20 }} />
-                </Avatar>
-              </IconButton>
+                buttonSx={{ "&:hover": { bgcolor: "var(--surface-subtle)" } }}
+              />
               <Popover
                 anchorEl={anchorEl}
                 open={Boolean(anchorEl)}

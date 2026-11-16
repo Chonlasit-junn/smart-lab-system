@@ -64,8 +64,11 @@ is required. Environments that disable Windows PowerShell or UI Automation canno
 use website detection. The reader does not change execution policy, browser flags,
 permissions, clipboard, keyboard focus or security settings.
 
-Only the active tab in a foreground Chrome/Edge window is sampled, on the existing
-five-second monitor timer. Warning rechecks target the original browser window.
+The active tab in a foreground Windows browser is sampled on the existing
+five-second monitor timer. Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Arc, and
+other browsers with recognizable executable metadata or a browser product name
+are supported, with a Chromium/Firefox window-class fallback for browsers that
+use generic executable metadata. Warning rechecks target the original browser window.
 Only the domain is sent with violations; paths, queries, fragments and page titles
 are not sent as URL evidence. This is policy detection, not a network firewall or
 a record of all browser tabs/history. Brief visits between samples may be missed.

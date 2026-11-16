@@ -515,21 +515,23 @@ export default function AdminUserDetailsDialog({
           flex: "1 1 0%",
           height: "auto",
           minHeight: 0,
-          overflow: "hidden",
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehaviorY: "contain",
+          touchAction: "pan-y",
+          scrollbarWidth: "thin",
+          scrollbarColor: "var(--text-muted) var(--surface-subtle)",
         }}
       >
         <Box
           className="admin-user-details-scroll-area"
           sx={{
             p: { xs: 1.25, md: 4 },
-            height: "100%",
+            width: "100%",
             boxSizing: "border-box",
-            minHeight: 0,
-            overflowY: "auto",
-            overflowX: "hidden",
-            WebkitOverflowScrolling: "touch",
-            overscrollBehaviorY: "contain",
-            touchAction: "pan-y",
+            minWidth: 0,
+            minHeight: "max-content",
             pb: isMobile ? "calc(16px + env(safe-area-inset-bottom))" : undefined,
           }}
         >

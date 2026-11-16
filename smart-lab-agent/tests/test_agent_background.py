@@ -10,7 +10,8 @@ if str(AGENT_DIR) not in sys.path:
     sys.path.insert(0, str(AGENT_DIR))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QCoreApplication, QEventLoop, QTimer  # noqa: E402
+from PyQt6.QtCore import QEventLoop, QTimer  # noqa: E402
+from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from agent_background import BackgroundTaskRunner  # noqa: E402
 
@@ -18,7 +19,7 @@ from agent_background import BackgroundTaskRunner  # noqa: E402
 class BackgroundTaskRunnerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QCoreApplication.instance() or QCoreApplication([])
+        cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
         self.runner = BackgroundTaskRunner(max_threads=2)

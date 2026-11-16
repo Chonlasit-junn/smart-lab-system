@@ -78,16 +78,25 @@ class AgentHttpTests(unittest.TestCase):
         with patch.object(agent, "_show_session_notice") as show_notice:
             agent.SmartLabAgent._handle_heartbeat_result(instance, 7, {"status": 403}, None)
         instance.heartbeat_timer.stop.assert_called_once()
-        instance.info_bar.trigger_logout.assert_called_once()
-        show_notice.assert_called_once()
+        instance.info_bar.trigger_logout.assert_called_once_with(show_dialog=False)
+        self.assertFalse(show_notice.call_args.kwargs["modal"])
+        self.assertEqual(instance.session_end_notice, show_notice.return_value)
 
     def test_booking_expiry_shows_a_reason_before_returning_to_login(self):
+        events = []
+        info_bar = SimpleNamespace(
+            trigger_logout=Mock(side_effect=lambda **_kwargs: events.append("locked")),
+        )
         instance = SimpleNamespace(
             current_session_id=7,
             heartbeat_timer=SimpleNamespace(stop=Mock()),
-            info_bar=SimpleNamespace(trigger_logout=Mock()),
+            info_bar=info_bar,
         )
-        with patch.object(agent, "_show_session_notice") as show_notice:
+        with patch.object(
+            agent,
+            "_show_session_notice",
+            side_effect=lambda *_args, **_kwargs: events.append("notice"),
+        ) as show_notice:
             agent.SmartLabAgent._handle_heartbeat_result(
                 instance,
                 7,
@@ -97,9 +106,11 @@ class AgentHttpTests(unittest.TestCase):
 
         show_notice.assert_called_once_with(
             "หมดเวลาจอง Lab",
-            "หมดเวลาจองแล้ว ระบบกำลังบันทึก Session และจะกลับไปหน้าเข้าสู่ระบบ",
+            "หมดเวลาจองแล้ว ระบบกำลังบันทึก Session และกลับไปหน้าเข้าสู่ระบบ",
+            modal=False,
         )
-        instance.info_bar.trigger_logout.assert_called_once()
+        info_bar.trigger_logout.assert_called_once_with(show_dialog=False)
+        self.assertEqual(events, ["locked", "notice"])
 
     def test_booking_deadline_warns_once_with_five_minutes_remaining(self):
         deadline = datetime(2026, 11, 11, 10, 0, tzinfo=timezone.utc)
@@ -119,7 +130,37 @@ class AgentHttpTests(unittest.TestCase):
         show_notice.assert_called_once_with(
             "ใกล้หมดเวลาจอง Lab",
             "เหลือเวลาจองไม่เกิน 5 นาที เมื่อหมดเวลาระบบจะบันทึก Session และกลับไปหน้าเข้าสู่ระบบ กรุณาบันทึกงานของคุณ",
+            modal=False,
         )
+
+    def test_booking_deadline_locks_session_even_after_warning_was_shown(self):
+        deadline = datetime(2026, 11, 11, 10, 0, tzinfo=timezone.utc)
+        events = []
+        info_bar = SimpleNamespace(
+            trigger_logout=Mock(side_effect=lambda **_kwargs: events.append("locked")),
+        )
+        instance = SimpleNamespace(
+            current_session_id=7,
+            booking_ends_at=deadline,
+            booking_end_warning_shown=True,
+            violation_dialog_active=False,
+            info_bar=info_bar,
+        )
+
+        with patch.object(agent, "_utc_now", return_value=deadline + timedelta(seconds=1)), patch.object(
+            agent,
+            "_show_session_notice",
+            side_effect=lambda *_args, **_kwargs: events.append("notice"),
+        ) as show_notice:
+            agent.SmartLabAgent._check_booking_deadline(instance)
+
+        info_bar.trigger_logout.assert_called_once_with(show_dialog=False)
+        show_notice.assert_called_once_with(
+            "หมดเวลาจอง Lab",
+            "หมดเวลาจองแล้ว ระบบกำลังบันทึก Session และกลับไปหน้าเข้าสู่ระบบ",
+            modal=False,
+        )
+        self.assertEqual(events, ["locked", "notice"])
 
     def test_heartbeat_preserves_http_conflict_status(self):
         instance = SimpleNamespace(
@@ -1539,6 +1580,22 @@ class AgentUiTests(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual(bar.size().height(), bar._compact_size[1])
         self.assertEqual(bar.container.size().height(), bar._compact_size[1] - 8)
+        bar.countdown_timer.stop()
+        bar.close()
+
+    def test_session_info_bar_shows_remaining_booking_time(self):
+        now = datetime(2026, 11, 11, 9, 0, tzinfo=timezone.utc)
+        deadline = now + timedelta(hours=1, minutes=1, seconds=1)
+        with patch.object(agent, "_utc_now", return_value=now):
+            bar = agent.SessionInfoBar(
+                "qa@example.com",
+                None,
+                12,
+                booking_ends_at=deadline.isoformat(),
+            )
+
+        self.assertIn("เหลือ 01:01:01", bar.countdown_label.text())
+        bar.countdown_timer.stop()
         bar.close()
 
     def test_login_error_label_wraps_long_messages(self):

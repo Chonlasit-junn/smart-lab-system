@@ -6,7 +6,6 @@ import {
   Person,
 } from "@mui/icons-material";
 import {
-  Avatar,
   Box,
   Button,
   Divider,
@@ -18,12 +17,13 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
 import AdminNavigation from "./AdminNavigation";
+import AdminHeaderAccount from "./AdminHeaderAccount";
 import AdminModeSwitch from "./AdminModeSwitch";
 import AdminNotificationBell from "./AdminNotificationBell";
 
 export default function AdminShell({ title, children }) {
   const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
+  const { logout } = useAuth();
   const { t } = useLanguage();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -89,23 +89,10 @@ export default function AdminShell({ title, children }) {
               iconColor="#64748b"
             />
             <Divider orientation="vertical" flexItem className="admin-header-divider" />
-            <Box className="admin-user-summary">
-              <Typography variant="subtitle2" fontWeight="700">
-                {currentUser?.name || "Admin"}
-              </Typography>
-              <Typography variant="caption" fontWeight="500">
-                {currentUser?.role || "Admin"}
-              </Typography>
-            </Box>
-            <IconButton
+            <AdminHeaderAccount
               onClick={(event) => setAnchorEl(event.currentTarget)}
-              aria-label={t("common.profile")}
-              sx={{ p: 0.8 }}
-            >
-              <Avatar className="admin-avatar">
-                {currentUser?.initial || <Person sx={{ fontSize: 20 }} />}
-              </Avatar>
-            </IconButton>
+              buttonSx={{ p: 0.8 }}
+            />
           </Box>
         </Box>
 
