@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Box,
   Typography,
   Avatar,
   IconButton,
   Paper,
-  CircularProgress,
   Divider,
   Chip,
   GridLegacy as Grid,
@@ -36,6 +36,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
+import { getApiErrorMessage } from "../utils/apiErrorMessage";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { profileImageUrl } from "../utils/profileImageUrl.js";
 import { getPointReasonLabel } from "../utils/pointReason";
@@ -204,9 +205,7 @@ export default function Profile() {
         }));
       }
     } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
-      const message = typeof detail === "string" ? detail : t("user.pointRequestFailed");
-      window.alert(message);
+      window.alert(getApiErrorMessage(requestError, t, t("user.pointRequestFailed")));
     } finally {
       setPointRequestLoading(false);
     }
@@ -531,9 +530,7 @@ export default function Profile() {
         {/* content */}
         <div className="content-area page-content">
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
-              <CircularProgress />
-            </Box>
+            <PageContentLoadingState type="profile" />
           ) : error ? (
             <Box sx={{ textAlign: "center", mt: 10 }}>
               <Typography color="error">{error}</Typography>

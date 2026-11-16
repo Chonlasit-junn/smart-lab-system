@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import LoadError from "../components/LoadError";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Alert,
   Avatar,
@@ -24,6 +25,7 @@ import {
 } from "@mui/icons-material";
 import axios from "axios";
 import AdminNavigation from "../components/AdminNavigation";
+import { getApiErrorMessage } from "../utils/apiErrorMessage";
 import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
@@ -132,11 +134,6 @@ const BAN_LEVELS = [
     days: "ban_level_4_days",
   },
 ];
-
-const getErrorMessage = (requestError, fallback) => {
-  const detail = requestError.response?.data?.detail;
-  return typeof detail === "string" ? detail : fallback;
-};
 
 function PolicyNumberField({ field, value, onChange }) {
   const { t } = useLanguage();
@@ -262,7 +259,7 @@ export default function AdminPointPolicy() {
         t("admin.policySaved"),
       );
     } catch (requestError) {
-      setError(getErrorMessage(requestError, t("admin.savePolicyFailed")));
+      setError(getApiErrorMessage(requestError, t, t("admin.savePolicyFailed")));
       setSuccess("");
     } finally {
       setSaving(false);
@@ -451,16 +448,7 @@ export default function AdminPointPolicy() {
           )}
 
           {loadFailed ? <LoadError onRetry={fetchPolicy} /> : loading ? (
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                minHeight: 360,
-              }}
-            >
-              <CircularProgress aria-label={t("common.loading")} />
-            </Box>
+            <PageContentLoadingState type="policy" />
           ) : empty ? <Typography sx={{ py: 8, textAlign: "center" }} color="text.secondary">{t("common.noData")}</Typography> : (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {POINT_SECTIONS.map((section) => (

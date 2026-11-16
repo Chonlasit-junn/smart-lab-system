@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LoadError from "../components/LoadError";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Alert,
   Avatar,
   Box,
   Button,
   Chip,
-  CircularProgress,
   Divider,
   Fade,
   IconButton,
@@ -344,20 +344,7 @@ export default function VerifyUsers() {
               )}
 
               {loading ? (
-                <Paper
-                  className="surface-card"
-                  elevation={0}
-                  sx={{
-                    minHeight: 320,
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    borderRadius: 5,
-                    border: "1px solid #e2e8f0",
-                  }}
-                >
-                  <CircularProgress aria-label={t("common.loading")} />
-                </Paper>
+                <PageContentLoadingState type="verifyUsers" />
               ) : loadFailed ? <LoadError onRetry={fetchPendingUsers} /> : pendingUsers.length === 0 ? (
                 <Paper
                   className="surface-card empty-state"

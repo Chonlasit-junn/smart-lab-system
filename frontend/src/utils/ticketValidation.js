@@ -1,3 +1,5 @@
+import { getApiErrorMessage } from "./apiErrorMessage.js";
+
 export const TICKET_SUBJECT_MAX_LENGTH = 255;
 export const TICKET_MESSAGE_MAX_LENGTH = 5000;
 
@@ -20,8 +22,5 @@ export function getTicketErrorMessage(error, translate) {
     }
   }
 
-  if (typeof detail === 'string' && detail.trim() && detail.length <= 300) {
-    return detail;
-  }
-  return translate('common.ticketSendFailed');
+  return getApiErrorMessage(error, translate, translate('common.ticketSendFailed'));
 }

@@ -2,13 +2,13 @@
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Box,
   Typography,
   Avatar,
   IconButton,
   Paper,
-  CircularProgress,
   Table,
   TableBody,
   TableCell,
@@ -455,9 +455,7 @@ export default function Reserved() {
 
         <div className="content-area page-content">
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
-              <CircularProgress />
-            </Box>
+            <PageContentLoadingState type="reserved" />
           ) : (
             <Paper
               className="surface-card data-table-shell"

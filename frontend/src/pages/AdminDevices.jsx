@@ -30,7 +30,6 @@ import {
   DeleteOutline,
   ExpandMore,
   LocationOn,
-  LockOutlined,
   PeopleAlt,
   PauseCircleOutline,
   PlayArrow,
@@ -39,11 +38,13 @@ import {
 import axios from "axios";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
+import { getApiErrorMessage } from "../utils/apiErrorMessage";
 import { formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminAccountMenu from "../components/AdminAccountMenu";
 import LoadError from "../components/LoadError";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -130,7 +131,7 @@ export default function AdminDevices() {
       showNotice(t(nextStatus === "maintenance" ? "admin.pauseRequested" : "admin.resumeRequested"));
       await fetchData({ silent: true });
     } catch (requestError) {
-      showNotice(requestError.response?.data?.detail || t("admin.deviceSaveFailed"), "error");
+      showNotice(getApiErrorMessage(requestError, t, t("admin.deviceSaveFailed")), "error");
     } finally {
       setControllingDeviceId(null);
     }
@@ -148,7 +149,7 @@ export default function AdminDevices() {
     } catch (requestError) {
       const message = requestError.response?.status === 409
         ? t("admin.deviceRemoveActiveSession")
-        : requestError.response?.data?.detail || t("admin.deviceRemoveFailed");
+        : getApiErrorMessage(requestError, t, t("admin.deviceRemoveFailed"));
       showNotice(message, "error");
     } finally {
       setRemovingDeviceId(null);
@@ -268,27 +269,13 @@ export default function AdminDevices() {
             display: "grid",
             gridTemplateColumns: {
               xs: "minmax(0, 1fr)",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: isAgent ? "repeat(3, minmax(0, 1fr))" : "minmax(0, 1.4fr) minmax(0, 1fr)",
+              sm: isAgent ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)",
+              lg: isAgent ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)",
             },
             gap: 1.25,
             mt: 2,
           }}
         >
-          <Box sx={{ minWidth: 0, p: 1.25, border: "1px solid var(--border-light)", borderRadius: 2, bgcolor: "var(--surface-subtle)" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
-              <Typography variant="caption" color="text.secondary">{t("user.lab")}</Typography>
-              <LockOutlined sx={{ fontSize: 14, color: "text.secondary" }} />
-            </Box>
-            <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: "anywhere" }}>
-              {device.lab?.code
-                ? `${device.lab.code}${device.lab.name ? ` — ${device.lab.name}` : ""}`
-                : t("admin.unassignedLab")}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-              {t("admin.labAssignmentFixed")}
-            </Typography>
-          </Box>
           <Box sx={{ minWidth: 0, p: 1.25, border: "1px solid var(--border-light)", borderRadius: 2, bgcolor: "var(--surface-subtle)" }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
               {isAgent ? t("admin.agentVersion") : t("admin.lastSignal")}
@@ -452,9 +439,7 @@ export default function AdminDevices() {
         <Box className="content-area admin-content-area page-content admin-devices-content" sx={{ p: { xs: 2, md: 5 }, flex: 1 }}>
           {loadFailed && <LoadError onRetry={fetchData} />}
           {loading ? (
-            <Paper elevation={0} sx={{ py: 7, textAlign: "center", border: "1px solid #e2e8f0", borderRadius: 3 }}>
-              <CircularProgress size={28} aria-label={t("common.loading")} />
-            </Paper>
+            <PageContentLoadingState type="devices" />
           ) : (
             selectedLab ? (
               <Box>

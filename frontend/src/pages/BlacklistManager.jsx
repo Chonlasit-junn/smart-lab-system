@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import LoadError from "../components/LoadError";
+import { LoadingTableRows } from "../components/PageLoadingState";
 import {
   Box,
   Typography,
@@ -39,6 +40,7 @@ import {
 import axios from "axios";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
+import { getApiErrorMessage } from "../utils/apiErrorMessage";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
@@ -160,7 +162,7 @@ export default function BlacklistManager() {
       setOpenDialog(false);
       fetchBlacklist();
     } catch (err) {
-      setFormError(err.response?.data?.detail || t("admin.blacklistOperationFailed"));
+      setFormError(getApiErrorMessage(err, t, t("admin.blacklistOperationFailed")));
     } finally {
       savePendingRef.current = false;
       setSaving(false);
@@ -173,7 +175,7 @@ export default function BlacklistManager() {
       await axios.delete(`${API_URL}/admin/blacklist/${id}`, authConfig());
       fetchBlacklist();
     } catch (err) {
-      alert(err.response?.data?.detail || t("admin.deleteBlacklistFailed"));
+      alert(getApiErrorMessage(err, t, t("admin.deleteBlacklistFailed")));
     }
   };
 
@@ -440,15 +442,7 @@ export default function BlacklistManager() {
                     </TableHead>
                     <TableBody>
                       {loading ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            align="center"
-                            sx={{ py: 6, color: "#94a3b8", fontWeight: "500" }}
-                          >
-                            {t("common.loading")}
-                          </TableCell>
-                        </TableRow>
+                        <LoadingTableRows columns={5} rows={4} label={t("common.loading")} />
                       ) : loadFailed ? (
                         <TableRow><TableCell colSpan={5}><LoadError onRetry={fetchBlacklist} /></TableCell></TableRow>
                       ) : filtered.length === 0 ? (

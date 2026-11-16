@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Avatar,
   Box,
   Button,
   Chip,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -385,9 +385,7 @@ export default function MyTickets() {
 
         <div className="content-area page-content">
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
-              <CircularProgress />
-            </Box>
+            <PageContentLoadingState type="myTickets" />
           ) : (
             <Paper
               className="surface-card data-table-shell"

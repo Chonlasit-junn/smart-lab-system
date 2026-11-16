@@ -1,14 +1,3 @@
-export const reportDatePickerThai = {
-  previousMonth: "เดือนก่อนหน้า", nextMonth: "เดือนถัดไป",
-  openPreviousView: "มุมมองก่อนหน้า", openNextView: "มุมมองถัดไป",
-  calendarViewSwitchingButtonAriaLabel: (view) => view === "year" ? "เปลี่ยนเป็นมุมมองวัน" : "เปลี่ยนเป็นมุมมองปี",
-  cancelButtonLabel: "ยกเลิก", clearButtonLabel: "ล้าง", okButtonLabel: "ตกลง", todayButtonLabel: "วันนี้",
-  nextStepButtonLabel: "ถัดไป", datePickerToolbarTitle: "เลือกวันที่", dateTableLabel: "เลือกวันที่",
-  openDatePickerDialogue: (value) => value ? `เลือกวันที่ วันที่เลือกคือ ${value}` : "เลือกวันที่",
-  fieldClearLabel: "ล้าง", fieldDayPlaceholder: () => "DD", fieldMonthPlaceholder: () => "MM",
-  fieldYearPlaceholder: () => "YYYY", year: "ปี", month: "เดือน", day: "วัน", weekDay: "วันในสัปดาห์", empty: "ว่าง",
-};
-
 export const reportLocales = {
   th: {
     title: "รายงานการใช้งาน", description: "ดาวน์โหลดข้อมูล Agent เป็น Excel 4 Sheet โดยเลือกช่วงละไม่เกิน 31 วัน",

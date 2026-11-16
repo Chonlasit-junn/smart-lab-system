@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { PageContentLoadingState } from '../components/PageLoadingState';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, CircularProgress, Button, Chip, Pagination,
+  TableHead, TableRow, Button, Chip, Pagination,
   Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, TextField,
 } from '@mui/material';
 import { Send, Visibility } from '@mui/icons-material';
@@ -127,9 +128,7 @@ export default function TicketManager() {
       {/* ตารางแสดงข้อมูล */}
       <Paper className="admin-table-paper surface-card data-table-shell admin-ticket-list" elevation={0} sx={{ p: 4 }}>
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress aria-label={t("common.loading")} />
-          </Box>
+          <PageContentLoadingState type="ticketManager" />
         ) : (
           <>
           {loadError && <LoadError onRetry={fetchTickets} />}

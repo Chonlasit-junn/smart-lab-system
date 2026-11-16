@@ -28,7 +28,7 @@ export function otpErrorMessage(error, translations, fallback) {
     'Password must be 8-72 printable ASCII characters, include an uppercase letter and a number; symbols are optional and spaces are not allowed.',
   ].includes(detail)) return translations.passwordInvalid || fallback;
   const key = Object.hasOwn(errorKeys, detail) ? errorKeys[detail] : null;
-  return key ? translations[key] : typeof detail === 'string' ? detail : fallback;
+  return key ? translations[key] || fallback : fallback;
 }
 
 export function isOtpError(error) {

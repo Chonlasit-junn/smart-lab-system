@@ -21,9 +21,9 @@
         const startupViews = {
           '/booking': 'booking', '/reserved': 'table', '/history': 'table', '/my-tickets': 'table',
           '/profile': 'profile', '/admin': 'dashboard', '/admin/points': 'points',
-          '/admin/points/policy': 'form', '/admin/roles': 'roles', '/manage-labs': 'labs',
-          '/admin/devices': 'table', '/admin/reports': 'reports', '/verify-users': 'cards',
-          '/blacklist': 'table', '/ticket': 'table',
+          '/admin/points/policy': 'form', '/admin/roles': 'roles', '/manage-labs': 'cards',
+          '/admin/devices': 'cards', '/admin/reports': 'reports', '/verify-users': 'verifyUsers',
+          '/blacklist': 'blacklist', '/ticket': 'table',
         };
         document.documentElement.dataset.startupView = startupViews[path] || 'auth';
       })();
@@ -83,6 +83,13 @@
                   <div class="loading-card"><span class="loading-placeholder loading-card-image"></span><div class="loading-card-body"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder"></span><span class="loading-placeholder loading-line-short"></span></div></div>
                 </div>
               </div>
+              <div class="loading-startup-shape loading-startup-shape--verifyUsers">
+                <div class="loading-user-card-grid">
+                  <div class="loading-user-card"><div class="loading-user-card-heading"><span class="loading-placeholder loading-avatar"></span><div><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder loading-line-short"></span></div></div><div class="loading-user-card-fields"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div><div class="loading-user-card-actions"><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div></div>
+                  <div class="loading-user-card"><div class="loading-user-card-heading"><span class="loading-placeholder loading-avatar"></span><div><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder loading-line-short"></span></div></div><div class="loading-user-card-fields"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div><div class="loading-user-card-actions"><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div></div>
+                  <div class="loading-user-card"><div class="loading-user-card-heading"><span class="loading-placeholder loading-avatar"></span><div><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder loading-line-short"></span></div></div><div class="loading-user-card-fields"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div><div class="loading-user-card-actions"><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div></div>
+                </div>
+              </div>
               <div class="loading-startup-shape loading-startup-shape--table">
                 <div class="loading-table">
                   <div class="loading-table-toolbar"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder loading-filter"></span></div>
@@ -90,6 +97,15 @@
                   <div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div>
                   <div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div>
                   <div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div>
+                </div>
+              </div>
+              <div class="loading-startup-shape loading-startup-shape--blacklist">
+                <div class="loading-summary-action"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder loading-summary-button"></span></div>
+                <div class="loading-table">
+                  <div class="loading-table-toolbar"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder loading-filter"></span></div>
+                  <div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div>
+                  <div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div>
+                  <div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div>
                 </div>
               </div>
               <div class="loading-startup-shape loading-startup-shape--dashboard">
@@ -147,7 +163,12 @@
                 <div class="loading-table"><div class="loading-table-toolbar"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder loading-filter"></span></div><div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div><div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div><div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div></div>
               </div>
               <div class="loading-startup-shape loading-startup-shape--form">
-                <div class="loading-panel-stack"><div class="loading-form-panel"><div class="loading-panel-heading"><span class="loading-placeholder loading-line-title"></span></div><div class="loading-fields"><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span></div></div><div class="loading-form-panel"><div class="loading-panel-heading"><span class="loading-placeholder loading-line-title"></span></div><div class="loading-fields"><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span></div></div></div>
+                <div class="loading-panel-stack">
+                  <div class="loading-form-panel"><div class="loading-panel-heading"><span class="loading-placeholder loading-line-title"></span></div><div class="loading-fields"><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span></div></div>
+                  <div class="loading-form-panel"><div class="loading-panel-heading"><span class="loading-placeholder loading-line-title"></span></div><div class="loading-fields"><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span></div></div>
+                  <div class="loading-form-panel"><div class="loading-panel-heading"><span class="loading-placeholder loading-line-title"></span></div><div class="loading-fields"><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span></div></div>
+                  <div class="loading-policy-actions"><span class="loading-placeholder loading-policy-save"></span></div>
+                </div>
               </div>
               <div class="loading-startup-shape loading-startup-shape--labs">
                 <div class="loading-labs-layout"><div class="loading-room-list"><div class="loading-card"><span class="loading-placeholder loading-card-image"></span><div class="loading-card-body"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder"></span></div></div></div><div class="loading-panel-stack"><div class="loading-form-panel"><div class="loading-panel-heading"><span class="loading-placeholder loading-line-title"></span></div><div class="loading-fields"><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span><span class="loading-placeholder loading-field-input"></span></div></div><div class="loading-table"><div class="loading-table-toolbar"><span class="loading-placeholder loading-line-title"></span><span class="loading-placeholder loading-filter"></span></div><div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div><div class="loading-table-row"><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span><span class="loading-placeholder"></span></div></div></div></div>

@@ -46,7 +46,11 @@ function AdminRoute({ children }) {
 
 function ProfileRoute() {
   const { currentUser } = useAuth();
-  return currentUser?.roleName === "admin" ? <AdminProfile /> : <Profile />;
+  return currentUser?.roleName === "admin" ? (
+    <Suspense fallback={<PageLoadingState viewOverride="adminProfile" />}>
+      <AdminProfile />
+    </Suspense>
+  ) : <Profile />;
 }
 
 function RouteErrorBoundary({ children }) {

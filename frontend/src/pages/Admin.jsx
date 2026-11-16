@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LoadError from "../components/LoadError";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Box,
   Typography,
@@ -15,7 +16,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  CircularProgress,
   Divider,
 } from "@mui/material";
 import {
@@ -273,16 +273,7 @@ export default function Admin() {
 
         <Box className="content-area admin-content-area page-content" sx={{ p: 6, overflowY: "auto" }}>
           {loadFailed ? <LoadError onRetry={fetchDashboardData} /> : loading ? (
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                height: "50vh",
-              }}
-            >
-              <CircularProgress aria-label={t("common.loading")} />
-            </Box>
+            <PageContentLoadingState type="dashboard" />
           ) : empty ? <Typography sx={{ py: 8, textAlign: "center" }} color="text.secondary">{t("common.noData")}</Typography> : (
             <>
               {/* Summary cards link to the matching Admin pages. */}

@@ -3,7 +3,7 @@
 // ============================================================================
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LoadError from "../components/LoadError";
-import LoadingState from "../components/LoadingState";
+import { LoadingTableRows, PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Box,
   Typography,
@@ -62,7 +62,11 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
+import "dayjs/locale/th";
+import "dayjs/locale/en-gb";
 import { filterLabsBySearch } from "../utils/adminSearch";
+import { thaiDatePickerLocale } from "../utils/datePickerLocale";
+import { getApiErrorMessage } from "../utils/apiErrorMessage";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const TEXT_LIMITS = {
@@ -111,7 +115,7 @@ const getDayLabel = (day, t) => t(`admin.weekday${day}`);
 // 3. MAIN COMPONENT
 // ============================================================================
 export default function ManageLabs() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const labsControllerRef = useRef(null);
   const schedulesControllerRef = useRef(null);
 
@@ -239,7 +243,7 @@ export default function ManageLabs() {
       setNewLab({ name: "", code: "", capacity: 40, location: "" });
       fetchLabs();
     } catch (error) {
-      alert(error.response?.data?.detail || t("admin.createFailed"));
+      alert(getApiErrorMessage(error, t, t("admin.createFailed")));
     }
   };
 
@@ -249,7 +253,7 @@ export default function ManageLabs() {
       alert(t("admin.updateSucceeded"));
       fetchLabs();
     } catch (error) {
-      alert(error.response?.data?.detail || t("admin.updateFailed"));
+      alert(getApiErrorMessage(error, t, t("admin.updateFailed")));
     }
   };
 
@@ -267,7 +271,7 @@ export default function ManageLabs() {
       handleGoBack();
       fetchLabs();
     } catch (error) {
-      alert(`${t("admin.deleteFailed")}: ${error.response?.data?.detail || error.message}`);
+      alert(getApiErrorMessage(error, t, t("admin.deleteFailed")));
     }
   };
 
@@ -280,7 +284,7 @@ export default function ManageLabs() {
       fetchLabs();
     } catch (error) {
       console.error("Status toggle failed:", error);
-      alert(`${t("admin.operationFailed")}: ${error.response?.data?.detail || error.message}`);
+      alert(getApiErrorMessage(error, t, t("admin.operationFailed")));
     }
   };
 
@@ -386,7 +390,7 @@ export default function ManageLabs() {
       setOpenScheduleDialog(false);
       fetchSchedules(activeLab.id);
     } catch (error) {
-      alert(`${t("admin.operationFailed")}: ${error.response?.data?.detail || ""}`);
+      alert(getApiErrorMessage(error, t, t("admin.operationFailed")));
     }
   };
 
@@ -588,7 +592,7 @@ export default function ManageLabs() {
                   </Button>
                 </Box>
 
-                {loadFailed ? <LoadError onRetry={fetchLabs} /> : loading ? <LoadingState /> : labs.length === 0 ? (
+                {loadFailed ? <LoadError onRetry={fetchLabs} /> : loading ? <PageContentLoadingState type="labs" /> : labs.length === 0 ? (
                   <Paper className="surface-card empty-state" sx={{ p: 6, textAlign: "center", minHeight: 280 }}><Typography color="text.secondary">{t("common.noData")}</Typography></Paper>
                 ) : visibleLabs.length === 0 ? (
                   <Paper className="surface-card empty-state" sx={{ p: 6, textAlign: "center", minHeight: 280 }}><Typography color="text.secondary">{t("admin.noMatchingLabs")}</Typography></Paper>
@@ -1227,7 +1231,7 @@ export default function ManageLabs() {
                               {schedulesFailed ? (
                                 <TableRow><TableCell colSpan={6}><LoadError onRetry={() => fetchSchedules(activeLab.id)} /></TableCell></TableRow>
                               ) : schedulesLoading ? (
-                                <TableRow><TableCell colSpan={6}><LoadingState /></TableCell></TableRow>
+                                <LoadingTableRows columns={6} rows={3} label={t("common.loading")} />
                               ) : schedules.length === 0 ? (
                                 <TableRow>
                                   <TableCell
@@ -1590,7 +1594,11 @@ export default function ManageLabs() {
               />
             </Grid>
 
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <LocalizationProvider
+              dateAdapter={AdapterDayjs}
+              adapterLocale={language === "th" ? "th" : "en-gb"}
+              localeText={language === "th" ? thaiDatePickerLocale : undefined}
+            >
               <Grid item xs={6}>
                 <DatePicker
                   label={t("admin.validFrom")}

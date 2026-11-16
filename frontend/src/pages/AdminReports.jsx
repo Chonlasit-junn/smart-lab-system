@@ -12,7 +12,8 @@ import AdminShell from "../components/AdminShell";
 import LoadError from "../components/LoadError";
 import { useLanguage } from "../context/language-context.js";
 import { authConfig } from "../utils/auth";
-import { reportDatePickerThai, reportLocales } from "../utils/reportLocales";
+import { thaiDatePickerLocale } from "../utils/datePickerLocale";
+import { reportLocales } from "../utils/reportLocales";
 import { initialReportDates, reportDateError, reportErrorKey, saveReportBlob, usageReportParams } from "../utils/usageReport";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -139,7 +140,7 @@ export default function AdminReports() {
           <Paper component="form" onSubmit={download} elevation={0} className="surface-card" sx={{ p: { xs: 2, sm: 3 } }}>
             <Box component="fieldset" disabled={exporting || optionsLoading} sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}>
               <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={language === "th" ? "th" : "en-gb"}
-                localeText={language === "th" ? reportDatePickerThai : undefined}>
+                localeText={language === "th" ? thaiDatePickerLocale : undefined}>
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" }, gap: 2.5 }}>
                 <DatePicker disabled={exporting || optionsLoading} label={text.dateFrom} format="DD/MM/YYYY" value={filters.dateFrom}
                   onChange={(value) => { setFilters((current) => ({ ...current, dateFrom: value })); setNotice(null); }} slotProps={{ textField: { required: true } }} />

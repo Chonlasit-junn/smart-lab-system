@@ -43,6 +43,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import { useLanguage } from "../context/language-context.js";
+import { getApiErrorMessage } from "../utils/apiErrorMessage";
 import { buildBookingPayload } from "../utils/bookingPayload";
 import ExpandableHeaderSearch from "../components/ExpandableHeaderSearch";
 import {
@@ -361,11 +362,7 @@ export default function Booking() {
       });
       setSuccessDialogOpen(true);
     } catch (error) {
-      const detail = error.response?.data?.detail;
-      const errMsg =
-        (typeof detail === "string" ? detail : detail?.message) ||
-        t("user.bookingFailed");
-      alert(`${t("user.bookingFailed")}: ${errMsg}`);
+      alert(getApiErrorMessage(error, t, t("user.bookingFailed")));
     }
   };
 
@@ -395,12 +392,7 @@ export default function Booking() {
         }));
       }
     } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
-      const message =
-        typeof detail === "string"
-          ? detail
-            : t("user.pointRequestFailed");
-      alert(message);
+      alert(getApiErrorMessage(requestError, t, t("user.pointRequestFailed")));
     } finally {
       setPointRequestLoading(false);
     }

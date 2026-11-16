@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import LoadError from "../components/LoadError";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Alert,
   Avatar,
@@ -43,6 +44,7 @@ import {
 import axios from "axios";
 import AdminUserDetailsDialog from "../components/AdminUserDetailsDialog";
 import AdminNavigation from "../components/AdminNavigation";
+import { getApiErrorMessage } from "../utils/apiErrorMessage";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
@@ -278,11 +280,8 @@ export default function AdminPoints() {
       setUserDetail(response.data || null);
     } catch (requestError) {
       if (axios.isCancel(requestError) || detailControllerRef.current !== controller) return;
-      const detail = requestError.response?.data?.detail;
       setDetailError(
-        typeof detail === "string"
-          ? detail
-          : t("admin.loadUserDetailFailed"),
+        getApiErrorMessage(requestError, t, t("admin.loadUserDetailFailed")),
       );
     } finally {
       if (detailControllerRef.current === controller) {
@@ -329,9 +328,8 @@ export default function AdminPoints() {
       });
     } catch (requestError) {
       if (axios.isCancel(requestError) || detailControllerRef.current !== controller) return;
-      const detail = requestError.response?.data?.detail;
       setDetailError(
-        typeof detail === "string" ? detail : t("admin.loadUserDetailFailed"),
+        getApiErrorMessage(requestError, t, t("admin.loadUserDetailFailed")),
       );
     } finally {
       if (detailControllerRef.current === controller) {
@@ -369,11 +367,8 @@ export default function AdminPoints() {
       );
       await fetchPoints();
     } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
       setError(
-        typeof detail === "string"
-          ? detail
-          : t("admin.pointRequestActionFailed"),
+        getApiErrorMessage(requestError, t, t("admin.pointRequestActionFailed")),
       );
     } finally {
       setRequestActionId(null);
@@ -414,9 +409,8 @@ export default function AdminPoints() {
       );
       await fetchPoints();
     } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
       setError(
-        typeof detail === "string" ? detail : t("admin.testDeductionFailed"),
+        getApiErrorMessage(requestError, t, t("admin.testDeductionFailed")),
       );
     } finally {
       setTestDeductionId(null);
@@ -457,9 +451,8 @@ export default function AdminPoints() {
       );
       await fetchPoints();
     } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
       setError(
-        typeof detail === "string" ? detail : t("admin.testResetFailed"),
+        getApiErrorMessage(requestError, t, t("admin.testResetFailed")),
       );
     } finally {
       setTestResetId(null);
@@ -883,16 +876,7 @@ export default function AdminPoints() {
             </Box>
 
             {loadFailed ? <LoadError onRetry={fetchPoints} /> : loading ? (
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  minHeight: 280,
-                }}
-              >
-                <CircularProgress aria-label={t("common.loading")} />
-              </Box>
+              <PageContentLoadingState type="pointsTable" />
             ) : (
               <ResponsiveDataTable
                 className="admin-points-table-scroll"

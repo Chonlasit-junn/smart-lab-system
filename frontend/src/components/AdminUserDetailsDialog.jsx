@@ -1,5 +1,6 @@
 import React from "react";
 import LoadError from "./LoadError";
+import { PageContentLoadingState } from "./PageLoadingState";
 import {
   Avatar,
   Button,
@@ -543,9 +544,7 @@ export default function AdminUserDetailsDialog({
           {error && <LoadError onRetry={onRetry} />}
 
           {loading && !detail ? (
-            <Box sx={{ minHeight: 420, display: "flex", justifyContent: "center", alignItems: "center" }}>
-              <CircularProgress aria-label={t("common.loading")} />
-            </Box>
+            <PageContentLoadingState type="userDetails" />
           ) : detail ? (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5, minHeight: "max-content" }}>
               <Box sx={{ order: { xs: 2, md: 1 }, display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) minmax(0, 1fr)" }, gap: 2.5, flexShrink: 0 }}>

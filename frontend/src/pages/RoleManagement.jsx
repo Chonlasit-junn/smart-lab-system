@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LoadError from "../components/LoadError";
+import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Alert,
   Avatar,
   Box,
   Button,
   Chip,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -41,6 +41,7 @@ import axios from "axios";
 import { useAuth } from "../context/auth-context";
 import AdminNavigation from "../components/AdminNavigation";
 import { authConfig } from "../utils/auth";
+import { getApiErrorMessage } from "../utils/apiErrorMessage";
 import { formatDate } from "../utils/dateFormat";
 import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
@@ -60,11 +61,6 @@ const getRoleColor = (roleName) =>
   ROLE_COLORS[roleName] || { backgroundColor: "#ecfeff", color: "#0f766e" };
 
 const getRoleLabel = (role, t) => role?.display_name || role?.name || t("admin.noRoleAssigned");
-
-const getErrorMessage = (error, fallback) => {
-  const detail = error.response?.data?.detail;
-  return typeof detail === "string" ? detail : fallback;
-};
 
 function RoleChip({ role }) {
   const { t } = useLanguage();
@@ -187,7 +183,7 @@ export default function RoleManagement() {
       );
       setSuccess(t("admin.roleChanged"));
     } catch (requestError) {
-      setError(getErrorMessage(requestError, t("admin.unableToChangeRole")));
+      setError(getApiErrorMessage(requestError, t, t("admin.unableToChangeRole")));
     } finally {
       setSavingUserId(null);
     }
@@ -232,7 +228,7 @@ export default function RoleManagement() {
       setEditingRole(null);
       setSuccess(t("admin.roleNameSaved"));
     } catch (requestError) {
-      setError(getErrorMessage(requestError, t("admin.unableToSaveRoleName")));
+      setError(getApiErrorMessage(requestError, t, t("admin.unableToSaveRoleName")));
     } finally {
       setSavingRole(false);
     }
@@ -367,7 +363,7 @@ export default function RoleManagement() {
           </Box>
 
           {loadFailed ? <LoadError onRetry={fetchRoleData} /> : loading ? (
-            <Box sx={{ minHeight: 360, display: "grid", placeItems: "center" }}><CircularProgress aria-label={t("common.loading")} /></Box>
+            <PageContentLoadingState type="rolesTable" />
           ) : (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
               <Paper className="surface-card data-table-shell" elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0", overflow: "hidden" }}>
