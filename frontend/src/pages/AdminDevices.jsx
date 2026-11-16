@@ -247,28 +247,68 @@ export default function AdminDevices() {
     const isBusy = savingDeviceId === device.id
       || controllingDeviceId === device.id
       || removingDeviceId === device.id;
+    const deviceStatus = isAgent
+      ? controlView
+      : {
+        label: t(`common.${device.status}`),
+        color: device.status === "active" ? "success" : "default",
+      };
 
     return (
-      <Paper key={device.id} variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, borderRadius: 2.5, minWidth: 0 }}>
-        <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1, minWidth: 0 }}>
+      <Paper
+        key={device.id}
+        variant="outlined"
+        sx={{
+          p: { xs: 1.5, sm: 2.25 },
+          borderRadius: 3,
+          minWidth: 0,
+          bgcolor: "var(--card-bg)",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.25, minWidth: 0 }}>
+          <Avatar
+            sx={{
+              width: 38,
+              height: 38,
+              flexShrink: 0,
+              bgcolor: "var(--surface-neutral)",
+              color: "var(--text-muted)",
+            }}
+          >
+            {isAgent ? <Computer fontSize="small" /> : <ShieldOutlined fontSize="small" />}
+          </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography fontWeight={700} sx={{ overflowWrap: "anywhere" }}>{device.device_name}</Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
+            <Typography fontWeight={700} sx={{ lineHeight: 1.35, overflowWrap: "anywhere" }}>
+              {device.device_name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25, overflowWrap: "anywhere" }}>
               {device.device_id}
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
               {device.device_mac || t("common.noMac")}
             </Typography>
           </Box>
-          {isAgent ? (
-            <Chip size="small" color={controlView.color} label={controlView.label} sx={{ flexShrink: 0, maxWidth: "45%" }} />
-          ) : (
-            <Chip size="small" color={device.status === "active" ? "success" : "default"} label={t(`common.${device.status}`)} sx={{ flexShrink: 0 }} />
-          )}
+          <Chip
+            size="small"
+            color={deviceStatus.color}
+            label={deviceStatus.label}
+            sx={{ flexShrink: 0, maxWidth: { xs: "42%", sm: "none" }, ml: "auto" }}
+          />
         </Box>
 
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) minmax(0,1fr)" }, gap: 1.5, mt: 2 }}>
-          <Box sx={{ minWidth: 0 }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "minmax(0, 1fr)",
+              sm: "repeat(2, minmax(0, 1fr))",
+              lg: isAgent ? "repeat(3, minmax(0, 1fr))" : "minmax(0, 1.4fr) minmax(0, 1fr)",
+            },
+            gap: 1.25,
+            mt: 2,
+          }}
+        >
+          <Box sx={{ minWidth: 0, p: 1.25, border: "1px solid var(--border-light)", borderRadius: 2, bgcolor: "var(--surface-subtle)" }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>{t("user.lab")}</Typography>
             <FormControl size="small" fullWidth>
               <Select
@@ -283,7 +323,7 @@ export default function AdminDevices() {
               </Select>
             </FormControl>
           </Box>
-          <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ minWidth: 0, p: 1.25, border: "1px solid var(--border-light)", borderRadius: 2, bgcolor: "var(--surface-subtle)" }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
               {isAgent ? t("admin.agentVersion") : t("admin.lastSignal")}
             </Typography>
@@ -298,44 +338,58 @@ export default function AdminDevices() {
               </Typography>
             )}
           </Box>
+          {isAgent && (device.status === "maintenance" && device.maintenance_until ? (
+            <Box sx={{ minWidth: 0, p: 1.25, border: "1px solid var(--border-light)", borderRadius: 2, bgcolor: "var(--surface-subtle)" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                {t("admin.maintenanceUntil")}
+              </Typography>
+              <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                {formatDateTime(device.maintenance_until, t("common.locale"), { fallback: "" })}
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ minWidth: 0, p: 1.25, border: "1px solid var(--border-light)", borderRadius: 2, bgcolor: "var(--surface-subtle)" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                {t("admin.maintenanceDuration")}
+              </Typography>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={maintenanceDurations[device.id] || 30}
+                  onChange={(event) => setMaintenanceDurations((current) => ({
+                    ...current,
+                    [device.id]: Number(event.target.value),
+                  }))}
+                  inputProps={{ "aria-label": `${t("admin.maintenanceDuration")} ${device.device_name}` }}
+                >
+                  {MAINTENANCE_DURATIONS.map((minutes) => (
+                    <MenuItem key={minutes} value={minutes}>{minutes} {t("admin.minutes")}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          ))}
         </Box>
 
-        {isAgent && device.status === "maintenance" && device.maintenance_until && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-            {t("admin.maintenanceUntil")}: {formatDateTime(device.maintenance_until, t("common.locale"), { fallback: "" })}
-          </Typography>
-        )}
-
         {isAgent && Number(device.agent_control_version || 0) < 1 && (
-          <Alert severity="info" sx={{ mt: 1.5, py: 0 }}>
+          <Alert severity="info" sx={{ mt: 1.5, py: 0, borderRadius: 2 }}>
             {t("admin.agentUpdateForControl")}
           </Alert>
         )}
 
-        <Divider sx={{ my: 1.5 }} />
-        {isAgent && device.status !== "maintenance" && (
-          <Box sx={{ mb: 1.5 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-              {t("admin.maintenanceDuration")}
-            </Typography>
-            <FormControl size="small" fullWidth>
-              <Select
-                value={maintenanceDurations[device.id] || 30}
-                onChange={(event) => setMaintenanceDurations((current) => ({
-                  ...current,
-                  [device.id]: Number(event.target.value),
-                }))}
-                inputProps={{ "aria-label": `${t("admin.maintenanceDuration")} ${device.device_name}` }}
-              >
-                {MAINTENANCE_DURATIONS.map((minutes) => (
-                  <MenuItem key={minutes} value={minutes}>{minutes} {t("admin.minutes")}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-        )}
+        <Divider sx={{ my: 1.5, borderColor: "var(--border-light)" }} />
 
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, minmax(0, 1fr))" }, gap: 1 }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "repeat(2, minmax(0, 1fr))",
+              sm: `repeat(${isAgent ? 3 : 2}, minmax(112px, auto))`,
+            },
+            gap: 1,
+            width: { xs: "100%", sm: "fit-content" },
+            ml: { sm: "auto" },
+          }}
+        >
           {isAgent && (
             <Button
               size="small"
@@ -346,7 +400,7 @@ export default function AdminDevices() {
                 : device.status === "maintenance" ? <PlayArrow /> : <PauseCircleOutline />}
               disabled={isBusy || (device.status !== "maintenance" && Number(device.agent_control_version || 0) < 1)}
               onClick={() => handleAgentControl(device)}
-              sx={{ textTransform: "none", gridColumn: { xs: "span 2", sm: "auto" } }}
+              sx={{ textTransform: "none", minHeight: 40, gridColumn: { xs: "span 2", sm: "auto" } }}
             >
               {controllingDeviceId === device.id
                 ? t("admin.savingDevice")
@@ -358,7 +412,7 @@ export default function AdminDevices() {
             variant="outlined"
             disabled={isBusy}
             onClick={() => handleSaveDevice(device)}
-            sx={{ textTransform: "none" }}
+            sx={{ textTransform: "none", minHeight: 40 }}
           >
             {savingDeviceId === device.id ? t("admin.savingDevice") : t("admin.saveDevice")}
           </Button>
@@ -369,7 +423,7 @@ export default function AdminDevices() {
             startIcon={<DeleteOutline />}
             disabled={isBusy}
             onClick={() => setDeviceToRemove(device)}
-            sx={{ textTransform: "none" }}
+            sx={{ textTransform: "none", minHeight: 40 }}
           >
             {t("common.delete")}
           </Button>
@@ -383,8 +437,9 @@ export default function AdminDevices() {
     const labDevices = isGatekeeper ? lab.gatekeepers : lab.agents;
 
     return (
-      <Accordion key={kind} disableGutters defaultExpanded elevation={0} sx={{ borderTop: "1px solid #e2e8f0", "&:before": { display: "none" } }}>
-        <AccordionSummary expandIcon={<ExpandMore />} sx={{ px: 0, minHeight: 52, "& .MuiAccordionSummary-content": { my: 1 } }}>
+      <Paper key={kind} elevation={0} sx={{ px: { xs: 1.5, sm: 2.25 }, border: "1px solid var(--border-light)", borderRadius: 3, bgcolor: "var(--card-bg)" }}>
+      <Accordion disableGutters defaultExpanded elevation={0} sx={{ bgcolor: "transparent", "&:before": { display: "none" } }}>
+        <AccordionSummary expandIcon={<ExpandMore />} sx={{ px: 0, minHeight: 58, "& .MuiAccordionSummary-content": { my: 1 } }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             {isGatekeeper
               ? <ShieldOutlined fontSize="small" color="primary" />
@@ -392,10 +447,10 @@ export default function AdminDevices() {
             <Typography fontWeight={700}>
               {t(isGatekeeper ? "admin.gatekeeperSection" : "admin.labAgentsSection")}
             </Typography>
-            <Chip size="small" label={labDevices.length} />
+            <Chip size="small" label={labDevices.length} sx={{ fontWeight: 700 }} />
           </Box>
         </AccordionSummary>
-        <AccordionDetails sx={{ px: 0, pt: 0 }}>
+        <AccordionDetails sx={{ px: 0, pt: 0, pb: 2 }}>
           <Box sx={{ display: "grid", gap: 1.25 }}>
             {labDevices.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -405,6 +460,7 @@ export default function AdminDevices() {
           </Box>
         </AccordionDetails>
       </Accordion>
+      </Paper>
     );
   };
 
