@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -45,8 +45,9 @@ class AdminDeviceRegister(BaseModel):
 
 
 class LabDeviceUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     status: Optional[str] = None
-    lab_id: Optional[int] = None
     device_name: Optional[str] = None
     maintenance_minutes: Optional[int] = Field(None, ge=5, le=240)
 
@@ -97,7 +98,7 @@ def _provision_device(
     existing = db.query(models.LabDevice).filter(
         models.LabDevice.device_id == device_id,
     ).with_for_update().first()
-    if existing and existing.status != "revoked" and existing.lab_id != lab.id:
+    if existing and existing.lab_id != lab.id:
         raise HTTPException(
             status_code=409,
             detail="This device is already assigned to another Lab.",
@@ -263,24 +264,6 @@ def update_lab_device(
             device.control_requested_by = admin.id
             # Keep the column non-null while making the old credential unusable.
             device.agent_token_hash = hash_device_token(secrets.token_urlsafe(32))
-
-    if payload.lab_id is not None and payload.lab_id != device.lab_id:
-        active_session = db.query(models.LabAccessLog).filter(
-            models.LabAccessLog.lab_device_id == device.id,
-            models.LabAccessLog.session_status == "active",
-            models.LabAccessLog.exit_time.is_(None),
-        ).first()
-        if active_session:
-            raise HTTPException(
-                status_code=409,
-                detail="Cannot move a device while it has an active session.",
-            )
-        target_lab = db.query(models.Lab).filter(models.Lab.id == payload.lab_id).first()
-        if not target_lab:
-            raise HTTPException(status_code=404, detail="Target Lab not found.")
-        if target_lab.status != "active":
-            raise HTTPException(status_code=409, detail="Target Lab is not active.")
-        device.lab_id = target_lab.id
 
     if payload.device_name is not None:
         device.device_name = clean_device_name(payload.device_name) or device.device_name

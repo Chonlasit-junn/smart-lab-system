@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import httpx
 from fastapi import FastAPI, HTTPException
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
@@ -117,6 +118,43 @@ class DeviceRegistrationTests(unittest.TestCase):
             ).lab_id,
             self.lab.id,
         )
+
+    def test_registered_device_cannot_be_assigned_to_a_different_lab(self):
+        other_lab = models.Lab(name="Other Lab", code="LAB-OTHER", capacity=20, status="active")
+        self.session.add(other_lab)
+        self.session.commit()
+        registration = devices.register_device_as_admin(
+            devices.AdminDeviceRegister(
+                lab_id=self.lab.id,
+                device_id="device-fixed-lab",
+                device_name="LAB-PC-FIXED",
+            ),
+            self.admin,
+            self.session,
+        )
+
+        for status in ("active", "revoked"):
+            device = self.session.query(models.LabDevice).filter_by(
+                device_id=registration["device_id"],
+            ).one()
+            device.status = status
+            self.session.commit()
+            with self.assertRaises(HTTPException) as raised:
+                devices.register_device_as_admin(
+                    devices.AdminDeviceRegister(
+                        lab_id=other_lab.id,
+                        device_id=registration["device_id"],
+                        device_name="LAB-PC-FIXED",
+                    ),
+                    self.admin,
+                    self.session,
+                )
+            self.assertEqual(raised.exception.status_code, 409)
+            self.assertEqual(device.lab_id, self.lab.id)
+
+    def test_device_update_payload_rejects_lab_reassignment(self):
+        with self.assertRaises(ValidationError):
+            devices.LabDeviceUpdate.model_validate({"lab_id": self.lab.id})
 
     def test_admin_registration_route_requires_admin_dependency(self):
         route = next(

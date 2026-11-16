@@ -30,6 +30,7 @@ import {
   DeleteOutline,
   ExpandMore,
   LocationOn,
+  LockOutlined,
   PeopleAlt,
   PauseCircleOutline,
   PlayArrow,
@@ -57,12 +58,10 @@ export default function AdminDevices() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [selectedLabId, setSelectedLabId] = useState(null);
-  const [savingDeviceId, setSavingDeviceId] = useState(null);
   const [controllingDeviceId, setControllingDeviceId] = useState(null);
   const [removingDeviceId, setRemovingDeviceId] = useState(null);
   const [deviceToRemove, setDeviceToRemove] = useState(null);
   const [maintenanceDurations, setMaintenanceDurations] = useState({});
-  const [selectedLabByDevice, setSelectedLabByDevice] = useState({});
   const [notice, setNotice] = useState({ open: false, message: "", severity: "success" });
 
   const showNotice = (message, severity = "success") => {
@@ -114,31 +113,6 @@ export default function AdminDevices() {
     return () => window.clearInterval(intervalId);
   }, [fetchData]);
 
-  const handleSaveDevice = async (device) => {
-    try {
-      setSavingDeviceId(device.id);
-      await axios.put(
-        `${API_URL}/admin/lab-devices/${device.id}`,
-        {
-          lab_id: selectedLabByDevice[device.id] ?? device.lab?.id,
-          device_name: device.device_name,
-        },
-        authConfig(),
-      );
-      setSelectedLabByDevice((current) => {
-        const next = { ...current };
-        delete next[device.id];
-        return next;
-      });
-      showNotice(t("admin.deviceRegistered"));
-      await fetchData();
-    } catch (requestError) {
-      showNotice(requestError.response?.data?.detail || t("admin.deviceSaveFailed"), "error");
-    } finally {
-      setSavingDeviceId(null);
-    }
-  };
-
   const handleAgentControl = async (device) => {
     const nextStatus = device.status === "maintenance" ? "active" : "maintenance";
     try {
@@ -178,12 +152,6 @@ export default function AdminDevices() {
       showNotice(message, "error");
     } finally {
       setRemovingDeviceId(null);
-    }
-  };
-
-  const updateDevice = (deviceId, field, value) => {
-    if (field === "lab_id") {
-      setSelectedLabByDevice((current) => ({ ...current, [deviceId]: value }));
     }
   };
 
@@ -244,8 +212,7 @@ export default function AdminDevices() {
   const renderDeviceCard = (device, kind) => {
     const isAgent = kind === "agent";
     const controlView = isAgent ? getAgentControlView(device) : null;
-    const isBusy = savingDeviceId === device.id
-      || controllingDeviceId === device.id
+    const isBusy = controllingDeviceId === device.id
       || removingDeviceId === device.id;
     const deviceStatus = isAgent
       ? controlView
@@ -309,19 +276,18 @@ export default function AdminDevices() {
           }}
         >
           <Box sx={{ minWidth: 0, p: 1.25, border: "1px solid var(--border-light)", borderRadius: 2, bgcolor: "var(--surface-subtle)" }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>{t("user.lab")}</Typography>
-            <FormControl size="small" fullWidth>
-              <Select
-                value={selectedLabByDevice[device.id] ?? device.lab?.id ?? ""}
-                onChange={(event) => updateDevice(device.id, "lab_id", event.target.value)}
-                disabled={labs.length === 0 || isBusy}
-                inputProps={{ "aria-label": `${t("user.lab")} ${device.device_name}` }}
-              >
-                {labs.map((lab) => (
-                  <MenuItem key={lab.id} value={lab.id}>{lab.code} — {lab.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
+              <Typography variant="caption" color="text.secondary">{t("user.lab")}</Typography>
+              <LockOutlined sx={{ fontSize: 14, color: "text.secondary" }} />
+            </Box>
+            <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: "anywhere" }}>
+              {device.lab?.code
+                ? `${device.lab.code}${device.lab.name ? ` — ${device.lab.name}` : ""}`
+                : t("admin.unassignedLab")}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+              {t("admin.labAssignmentFixed")}
+            </Typography>
           </Box>
           <Box sx={{ minWidth: 0, p: 1.25, border: "1px solid var(--border-light)", borderRadius: 2, bgcolor: "var(--surface-subtle)" }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
@@ -382,8 +348,8 @@ export default function AdminDevices() {
           sx={{
             display: "grid",
             gridTemplateColumns: {
-              xs: "repeat(2, minmax(0, 1fr))",
-              sm: `repeat(${isAgent ? 3 : 2}, minmax(112px, auto))`,
+              xs: "minmax(0, 1fr)",
+              sm: `repeat(${isAgent ? 2 : 1}, minmax(140px, auto))`,
             },
             gap: 1,
             width: { xs: "100%", sm: "fit-content" },
@@ -400,22 +366,13 @@ export default function AdminDevices() {
                 : device.status === "maintenance" ? <PlayArrow /> : <PauseCircleOutline />}
               disabled={isBusy || (device.status !== "maintenance" && Number(device.agent_control_version || 0) < 1)}
               onClick={() => handleAgentControl(device)}
-              sx={{ textTransform: "none", minHeight: 40, gridColumn: { xs: "span 2", sm: "auto" } }}
+              sx={{ textTransform: "none", minHeight: 40 }}
             >
               {controllingDeviceId === device.id
                 ? t("admin.savingDevice")
                 : t(device.status === "maintenance" ? "admin.resumeAgent" : "admin.pauseAgent")}
             </Button>
           )}
-          <Button
-            size="small"
-            variant="outlined"
-            disabled={isBusy}
-            onClick={() => handleSaveDevice(device)}
-            sx={{ textTransform: "none", minHeight: 40 }}
-          >
-            {savingDeviceId === device.id ? t("admin.savingDevice") : t("admin.saveDevice")}
-          </Button>
           <Button
             size="small"
             variant="outlined"
