@@ -144,6 +144,7 @@ const buildSummary = (userRows, warningThreshold, pendingPointRequests = 0) => {
 
 export default function AdminPoints() {
   const PAGE_SIZE = 25;
+  const POINT_REQUESTS_PAGE_SIZE = 5;
   const { t } = useLanguage();
   const pointsControllerRef = useRef(null);
   const detailControllerRef = useRef(null);
@@ -169,9 +170,18 @@ export default function AdminPoints() {
   const [detailError, setDetailError] = useState("");
   const [detailTab, setDetailTab] = useState(0);
   const [pointRequests, setPointRequests] = useState([]);
+  const [pointRequestPage, setPointRequestPage] = useState(1);
   const [requestActionId, setRequestActionId] = useState(null);
   const [testDeductionId, setTestDeductionId] = useState(null);
   const [testResetId, setTestResetId] = useState(null);
+  const pointRequestPageCount = Math.max(
+    1,
+    Math.ceil(pointRequests.length / POINT_REQUESTS_PAGE_SIZE),
+  );
+  const visiblePointRequests = pointRequests.slice(
+    (Math.min(pointRequestPage, pointRequestPageCount) - 1) * POINT_REQUESTS_PAGE_SIZE,
+    Math.min(pointRequestPage, pointRequestPageCount) * POINT_REQUESTS_PAGE_SIZE,
+  );
 
   const fetchPoints = useCallback(async () => {
     const token = localStorage.getItem("access_token");
@@ -672,7 +682,7 @@ export default function AdminPoints() {
                 <Box
                   sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}
                 >
-                  {pointRequests.map((request) => (
+                  {visiblePointRequests.map((request) => (
                     <Box
                       key={request.id}
                       sx={{
@@ -743,6 +753,16 @@ export default function AdminPoints() {
                     </Box>
                   ))}
                 </Box>
+                {pointRequestPageCount > 1 && (
+                  <Pagination
+                    count={pointRequestPageCount}
+                    page={Math.min(pointRequestPage, pointRequestPageCount)}
+                    onChange={(_, nextPage) => setPointRequestPage(nextPage)}
+                    color="primary"
+                    size="small"
+                    sx={{ display: "flex", justifyContent: "center", mt: 1 }}
+                  />
+                )}
               </Box>
             </Alert>
           )}

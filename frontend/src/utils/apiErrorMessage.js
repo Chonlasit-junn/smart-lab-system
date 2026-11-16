@@ -12,6 +12,7 @@ const DETAIL_TRANSLATION_KEYS = {
   "Must book at least 2 hours in advance.": "user.requiresNotice",
   "Cannot book more than 2 days in advance.": "user.advanceBooking",
   "Time slot conflicts with a scheduled class.": "user.reservedForClass",
+  "You already have an upcoming reservation. Cancel it before booking another.": "user.upcomingBookingLimitReached",
   "Booking is unavailable while the account has an active penalty.": "user.bookingBlockedByPolicy",
   "Guest account must be approved before requesting points.": "user.pointRequestGuestApproval",
   "Admins do not need to request points.": "user.adminCannotRequestPoints",

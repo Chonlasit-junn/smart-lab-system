@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, time, date
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload
 from urllib.parse import unquote
 
@@ -459,6 +459,23 @@ def create_booking(
     # create duplicate bookings in different labs for the same slot.
     user = db.query(models.User).filter(models.User.id == current_user.id).with_for_update().first()
     if not user: raise HTTPException(status_code=404, detail="User not found.")
+
+    upcoming_booking = db.query(models.Booking).filter(
+        models.Booking.user_id == user.id,
+        models.Booking.status == "reserved",
+        or_(
+            models.Booking.booking_date > now.date(),
+            and_(
+                models.Booking.booking_date == now.date(),
+                models.Booking.start_time > now.time(),
+            ),
+        ),
+    ).first()
+    if upcoming_booking:
+        raise HTTPException(
+            status_code=409,
+            detail="You already have an upcoming reservation. Cancel it before booking another.",
+        )
 
     denial = account_denial(db, user.id)
     if denial is not None:

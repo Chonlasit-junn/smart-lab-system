@@ -88,6 +88,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QGraphicsDropShadowEffect, QMessageBox, QDialog)
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QFont, QColor
+from agent_instance import AgentInstanceGuard
 
 # Hugging Face Space อาจ sleep อยู่ — retry ให้อัตโนมัติ
 def post_with_retry(url, data=None, json_data=None, headers=None, retries=3, timeout=15):
@@ -950,6 +951,7 @@ class LoginOverlay(QWidget):
                 session_id = result["session_id"]
                 if getattr(self.agent, "device_control_mode", "active") == "maintenance":
                     self.hide()
+                    self.agent._remember_maintenance_session(session_id)
                     self.agent.stop_and_send_logs(
                         session_id,
                         end_reason="maintenance",
@@ -1042,9 +1044,15 @@ class SmartLabAgent:
         self.violation_state = ViolationState()
         self.violation_grace_context = None
         self.violation_dialog_active = False
+        self.violation_recheck_pending = False
+        self._maintenance_session_id = None
+        self._maintenance_violation_attempts = None
         self.session_cleanup = None
         self.monitor_timer  = QTimer()
         self.monitor_timer.timeout.connect(self.track_usage)
+        self.website_monitor_timer = QTimer()
+        self.website_monitor_timer.timeout.connect(self.track_website_usage)
+        self.website_monitor_timer.setInterval(1000)
         self.heartbeat_timer = QTimer()
         self.heartbeat_timer.timeout.connect(self.send_heartbeat)
         self.booking_deadline_timer = QTimer()
@@ -1354,6 +1362,7 @@ class SmartLabAgent:
 
             for timer_name in (
                 "monitor_timer",
+                "website_monitor_timer",
                 "heartbeat_timer",
                 "booking_deadline_timer",
                 "policy_timer",
@@ -1364,6 +1373,7 @@ class SmartLabAgent:
 
             session_id = self.current_session_id
             if session_id is not None:
+                self._remember_maintenance_session(session_id)
                 self.stop_and_send_logs(
                     session_id,
                     end_reason="maintenance",
@@ -1385,6 +1395,11 @@ class SmartLabAgent:
             overlay.reset_and_show()
         print("Agent กลับมาทำงานตามคำสั่ง Admin")
         return True
+
+    def _remember_maintenance_session(self, session_id):
+        self._maintenance_session_id = session_id
+        state = getattr(self, "violation_state", None)
+        self._maintenance_violation_attempts = getattr(state, "attempts", 0)
 
     @staticmethod
     def _has_process_rules(rules):
@@ -1434,7 +1449,14 @@ class SmartLabAgent:
         monitor = getattr(self, "browser_url_monitor", None)
         if needs_monitor and monitor is None:
             self.browser_url_monitor = BrowserURLMonitor()
+        if needs_monitor:
+            website_timer = getattr(self, "website_monitor_timer", None)
+            if website_timer is not None and not website_timer.isActive():
+                website_timer.start()
         elif not needs_monitor and monitor is not None:
+            website_timer = getattr(self, "website_monitor_timer", None)
+            if website_timer is not None:
+                website_timer.stop()
             self.stop_browser_monitor()
 
     def _set_policy(self, raw_rules, version, source):
@@ -1565,8 +1587,18 @@ class SmartLabAgent:
         getattr(self, "_usage_name_cache", {}).clear()
         self.violation_reported = False
         self.violation_state.reset()
+        if session_id == getattr(self, "_maintenance_session_id", None):
+            attempts = getattr(self, "_maintenance_violation_attempts", None)
+            if attempts is not None:
+                self.violation_state.attempts = min(
+                    self.violation_state.max_attempts,
+                    max(0, int(attempts)),
+                )
+        self._maintenance_session_id = None
+        self._maintenance_violation_attempts = None
         self.violation_grace_context = None
         self.violation_dialog_active = False
+        self.violation_recheck_pending = False
         self.session_cleanup = None
         self.booking_warning_dialog = None
         self.session_end_notice = None
@@ -1890,6 +1922,9 @@ class SmartLabAgent:
                 f"{context['reason']} (ตรวจพบซ้ำครั้งที่ {attempt.number})"
             )
             self.monitor_timer.stop()
+            website_timer = getattr(self, "website_monitor_timer", None)
+            if website_timer is not None:
+                website_timer.stop()
             self.violation_dialog_active = True
             try:
                 self._finalize_violation(final_context, show_dialog=True)
@@ -1899,6 +1934,9 @@ class SmartLabAgent:
 
         self.violation_dialog_active = True
         self.monitor_timer.stop()
+        website_timer = getattr(self, "website_monitor_timer", None)
+        if website_timer is not None:
+            website_timer.stop()
         chance_requested = False
         try:
             dialog = ViolationDialog(
@@ -1924,8 +1962,7 @@ class SmartLabAgent:
                 f"ให้โอกาสครั้งที่ {attempt.number} ถึง "
                 f"{grace_until.isoformat(timespec='seconds')}"
             )
-            if self.current_session_id and not self.violation_reported:
-                self.monitor_timer.start(5000)
+            self._resume_violation_monitors()
             return
 
         # The warning itself takes focus. Recheck EXE identity or the original
@@ -1936,8 +1973,7 @@ class SmartLabAgent:
             print(f"ตรวจโปรแกรมซ้ำไม่ได้: {exc}")
             still_present = True
         if not still_present:
-            if self.current_session_id and not self.violation_reported:
-                self.monitor_timer.start(5000)
+            self._resume_violation_monitors()
             return
 
         timeout_context = dict(context)
@@ -1957,6 +1993,7 @@ class SmartLabAgent:
             )
             return
 
+        self.violation_recheck_pending = True
         submitted = runner.submit(
             f"violation-recheck-{session_id}",
             lambda: self._violation_is_still_present(context),
@@ -1965,9 +2002,25 @@ class SmartLabAgent:
             ),
         )
         if not submitted:
+            self.violation_recheck_pending = False
             # A failed recheck submission must preserve the prior fail-closed
             # behavior rather than leave the monitor stopped.
             self._finalize_violation(timeout_context, show_dialog=False)
+
+    def _resume_violation_monitors(self):
+        if not self.current_session_id or self.violation_reported:
+            return
+        self.monitor_timer.start(5000)
+        if (
+            getattr(self, "browser_url_monitor", None) is not None
+            and any(
+                rule.get("match_type") == "website_domain"
+                for rule in self.policy_rules
+            )
+        ):
+            website_timer = getattr(self, "website_monitor_timer", None)
+            if website_timer is not None:
+                website_timer.start()
 
     def _handle_violation_recheck_result(
         self, session_id, context, timeout_context, result, error,
@@ -1986,9 +2039,9 @@ class SmartLabAgent:
     ):
         if self.current_session_id != session_id:
             return
+        self.violation_recheck_pending = False
         if not still_present:
-            if self.current_session_id and not self.violation_reported:
-                self.monitor_timer.start(5000)
+            self._resume_violation_monitors()
             return
         self._finalize_violation(timeout_context, show_dialog=False)
 
@@ -2473,6 +2526,50 @@ class SmartLabAgent:
                 print(f"ล้างสถานะ event หน้าต่างเก่าไม่สำเร็จ: {exc}")
         return match
 
+    def track_website_usage(self):
+        """Check the foreground browser independently of process scan cadence."""
+        try:
+            if (
+                not self.current_session_id
+                or self.violation_reported
+                or self.violation_dialog_active
+                or getattr(self, "violation_recheck_pending", False)
+            ):
+                return
+
+            if self.violation_state.is_grace_active(time.monotonic()):
+                return
+
+            monitor = getattr(self, "browser_url_monitor", None)
+            if monitor is None:
+                return
+            observation = monitor.poll()
+            matched_rule = (
+                find_website_match(self.policy_rules, observation["domain"])
+                if observation
+                else None
+            )
+            if matched_rule:
+                self._handle_violation_detection({
+                    "program_name": observation["domain"],
+                    "reason": f"ไม่อนุญาตให้เข้าเว็บไซต์: {observation['domain']}",
+                    "browser_domain": observation["domain"],
+                    "browser_hwnd": observation["hwnd"],
+                    "browser_pid": observation["pid"],
+                    "process_name": observation["process_name"],
+                    "exe_path": observation["exe_path"],
+                    "executable_identity": observation["executable_identity"],
+                    "detection_source": "browser_domain",
+                    "matched_rule": matched_rule,
+                })
+        except Exception as exc:
+            error_type = type(exc).__name__
+            now = time.monotonic()
+            last_error = getattr(self, "_last_track_usage_error", None)
+            if last_error is None or last_error[0] != error_type or now - last_error[1] >= 60:
+                _append_monitor_error_log(error_type)
+                self._last_track_usage_error = (error_type, now)
+
     def track_usage(self):
         try:
             if not self.current_session_id or self.violation_dialog_active:
@@ -2488,25 +2585,6 @@ class SmartLabAgent:
                 self._reset_process_scan_state()
 
             grace_active = self.violation_state.is_grace_active(now)
-            if not grace_active and any(
-                rule.get("match_type") == "website_domain" for rule in self.policy_rules
-            ):
-                if getattr(self, "browser_url_monitor", None) is None:
-                    self.browser_url_monitor = BrowserURLMonitor()
-                observation = self.browser_url_monitor.poll()
-                matched_rule = find_website_match(self.policy_rules, observation["domain"]) if observation else None
-                if matched_rule:
-                    self._handle_violation_detection({
-                        "program_name": observation["domain"],
-                        "reason": f"ไม่อนุญาตให้เข้าเว็บไซต์: {observation['domain']}",
-                        "browser_domain": observation["domain"],
-                        "browser_hwnd": observation["hwnd"], "browser_pid": observation["pid"],
-                        "process_name": observation["process_name"], "exe_path": observation["exe_path"],
-                        "executable_identity": observation["executable_identity"],
-                        "detection_source": "browser_domain", "matched_rule": matched_rule,
-                    })
-                    return
-
             process_scan_status = self._queue_process_scan(
                 shown_process_ids, grace_active,
             )
@@ -2579,21 +2657,22 @@ class SmartLabAgent:
         else:
             print("ไม่มีสถิติการใช้งานที่บันทึกได้")
 
-        try:
-            response = post_with_retry(
-                f"{API_URL}/agent/end-session",
-                data=_with_device_credentials({
-                    "session_id": session_id,
-                    "end_reason": end_reason,
-                }),
-                headers=_session_auth_headers(self),
-            )
-            print(f"End session response: {response.status_code if response is not None else 'Timeout'}")
-            if response is None or not 200 <= response.status_code < 300:
+        if end_reason != "maintenance":
+            try:
+                response = post_with_retry(
+                    f"{API_URL}/agent/end-session",
+                    data=_with_device_credentials({
+                        "session_id": session_id,
+                        "end_reason": end_reason,
+                    }),
+                    headers=_session_auth_headers(self),
+                )
+                print(f"End session response: {response.status_code if response is not None else 'Timeout'}")
+                if response is None or not 200 <= response.status_code < 300:
+                    delivered = False
+            except Exception as error:
+                print(f"ปิด Session ไม่ได้: {error}")
                 delivered = False
-        except Exception as error:
-            print(f"ปิด Session ไม่ได้: {error}")
-            delivered = False
         return delivered
 
     def _send_fallback_violation_logs(self, violations):
@@ -2659,15 +2738,16 @@ class SmartLabAgent:
                     event_id=segment.get("event_id"),
                 )
 
-            self._queue_outbox(
-                kind="end_session",
-                payload={
-                    "session_id": session_id,
-                    "end_reason": end_reason,
-                },
-                session_id=session_id,
-                event_id=f"end-session-{session_id}",
-            )
+            if end_reason != "maintenance":
+                self._queue_outbox(
+                    kind="end_session",
+                    payload={
+                        "session_id": session_id,
+                        "end_reason": end_reason,
+                    },
+                    session_id=session_id,
+                    event_id=f"end-session-{session_id}",
+                )
 
             def deliver_outbox():
                 fallback_delivered = True
@@ -2738,6 +2818,9 @@ class SmartLabAgent:
         self.current_session_id = None
 
     def stop_browser_monitor(self):
+        website_timer = getattr(self, "website_monitor_timer", None)
+        if website_timer is not None:
+            website_timer.stop()
         monitor = getattr(self, "browser_url_monitor", None)
         if monitor is not None:
             monitor.close()
@@ -2749,10 +2832,33 @@ def run_agent() -> int:
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    instance_guard = AgentInstanceGuard(app)
+    if not instance_guard.claim():
+        instance_guard.activate_existing()
+        return 0
+
     agent_logic  = SmartLabAgent()
     app.aboutToQuit.connect(agent_logic.stop_browser_monitor)
     app.aboutToQuit.connect(agent_logic._stop_window_visibility_monitor)
+    app.aboutToQuit.connect(instance_guard.close)
     login_screen = LoginOverlay(agent_logic)
+
+    def activate_agent_window():
+        if agent_logic.device_control_mode != "active":
+            return
+        if agent_logic.violation_dialog_active:
+            return
+        if agent_logic.current_session_id and agent_logic.info_bar is not None:
+            window = agent_logic.info_bar
+            window.show()
+            window.raise_()
+            window.activateWindow()
+            return
+        login_screen.showFullScreen()
+        login_screen.raise_()
+        login_screen.activateWindow()
+
+    instance_guard.set_activation_callback(activate_agent_window)
     login_screen.show()
     agent_logic.start_device_control_polling()
     return app.exec()

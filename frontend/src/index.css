@@ -2577,6 +2577,57 @@ textarea:focus-visible,
   }
 }
 
+@media (max-width: 900px) {
+  .history-booking-list.MuiTableContainer-root {
+    max-height: min(62vh, 680px) !important;
+    max-height: min(62dvh, 680px) !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    scrollbar-color: var(--text-muted) var(--surface-subtle);
+    scrollbar-width: thin;
+  }
+
+  .history-booking-list.MuiTableContainer-root::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .history-booking-list.MuiTableContainer-root::-webkit-scrollbar-thumb {
+    background-color: var(--text-muted);
+    border: 2px solid var(--surface-subtle);
+    border-radius: 999px;
+  }
+}
+
+@media (min-width: 901px) {
+  .history-booking-list.MuiTableContainer-root {
+    max-height: calc(100vh - 300px) !important;
+    max-height: calc(100dvh - 300px) !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    scrollbar-gutter: stable;
+    scrollbar-color: var(--text-muted) var(--surface-subtle);
+    scrollbar-width: thin;
+  }
+
+  .history-booking-list.MuiTableContainer-root::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .history-booking-list.MuiTableContainer-root::-webkit-scrollbar-track {
+    background: var(--surface-subtle);
+  }
+
+  .history-booking-list.MuiTableContainer-root::-webkit-scrollbar-thumb {
+    background-color: var(--text-muted);
+    border: 2px solid var(--surface-subtle);
+    border-radius: 999px;
+  }
+}
+
 @media (max-width: 768px) {
   .login-wrapper.login-page {
     width: 100%;

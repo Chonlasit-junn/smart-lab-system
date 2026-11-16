@@ -298,6 +298,18 @@ def report_agent_control_state(
     now = _utc_now()
     device.last_seen_at = now
     device.agent_control_version = control_version
+    if device.status == "maintenance" or reported_status == "maintenance":
+        # The Agent intentionally pauses its regular session heartbeat during
+        # maintenance. Its control-state poll keeps the in-progress booking
+        # recoverable until the Agent is resumed.
+        db.query(models.LabAccessLog).filter(
+            models.LabAccessLog.lab_device_id == device.id,
+            models.LabAccessLog.session_status == "active",
+            models.LabAccessLog.exit_time.is_(None),
+        ).update(
+            {models.LabAccessLog.last_heartbeat_at: now},
+            synchronize_session=False,
+        )
     if reported_status == device.status:
         device.agent_control_status = reported_status
         device.agent_control_ack_at = now

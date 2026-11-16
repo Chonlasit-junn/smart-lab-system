@@ -101,6 +101,8 @@ export default function Booking() {
   // Data States
   const [labs, setLabs] = useState([]);
   const [availability, setAvailability] = useState(null);
+  const [upcomingBooking, setUpcomingBooking] = useState(null);
+  const hasUpcomingBooking = Boolean(upcomingBooking);
   const [pointStatus, setPointStatus] = useState(null);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
@@ -174,6 +176,67 @@ export default function Booking() {
 
 
   useEffect(() => () => availabilityControllerRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!currentUser?.email) {
+      setUpcomingBooking(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const token = localStorage.getItem("access_token");
+    const { year, month, day, hour, minute } = getLabNowParts();
+    const today = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const currentTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+
+    setUpcomingBooking(null);
+    axios
+      .get(`${API_URL}/bookings/user/${encodeURIComponent(currentUser.email)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { scope: "upcoming", page: 1, page_size: 100 },
+        signal: controller.signal,
+      })
+      .then((response) => {
+        if (cancelled) return;
+        const bookings = Array.isArray(response.data?.data) ? response.data.data : [];
+        const nextBooking = bookings.filter((booking) => {
+          const bookingDate = String(booking.booking_date || "").slice(0, 10);
+          return booking.status === "reserved"
+            && (bookingDate > today
+              || (bookingDate === today && String(booking.start_time) > currentTime));
+        }).sort((left, right) => (
+          `${left.booking_date} ${left.start_time}`.localeCompare(`${right.booking_date} ${right.start_time}`)
+        ))[0] || null;
+        setUpcomingBooking(nextBooking);
+      })
+      .catch((error) => {
+        if (cancelled || axios.isCancel(error)) return;
+        console.error("[API Error] Failed to check upcoming bookings:", error);
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [currentUser?.email]);
+
+  useEffect(() => {
+    if (!upcomingBooking) return undefined;
+
+    const [year, month, day] = String(upcomingBooking.booking_date).slice(0, 10).split("-").map(Number);
+    const [hour, minute] = String(upcomingBooking.start_time).split(":").map(Number);
+    const timeUntilBookingStarts = getLabDateReference(year, month - 1, day, hour, minute)
+      - getLabNowReference();
+
+    if (!Number.isFinite(timeUntilBookingStarts) || timeUntilBookingStarts <= 0) {
+      setUpcomingBooking(null);
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => setUpcomingBooking(null), timeUntilBookingStarts);
+    return () => window.clearTimeout(timeout);
+  }, [upcomingBooking]);
 
   /**
    * Fetches availability for a specific lab room on a given date.
@@ -341,7 +404,7 @@ export default function Booking() {
    * Sends the booking payload to the backend API.
    */
   const handleConfirmBooking = async () => {
-    if (!selectedDate || !selectedTimeSlot) return;
+    if (!selectedDate || !selectedTimeSlot || hasUpcomingBooking) return;
 
     const dateStr = getFormattedDateString(
       currentYear,
@@ -359,6 +422,12 @@ export default function Booking() {
       const token = localStorage.getItem("access_token");
       await axios.post(`${API_URL}/bookings`, payload, {
         headers: { Authorization: `Bearer ${token}` },
+      });
+      const selectedSlotTime = SLOT_TIMES[selectedTimeSlot];
+      setUpcomingBooking({
+        booking_date: dateStr,
+        start_time: `${String(selectedSlotTime.hours).padStart(2, "0")}:${String(selectedSlotTime.minutes).padStart(2, "0")}`,
+        status: "reserved",
       });
       setSuccessDialogOpen(true);
     } catch (error) {
@@ -755,6 +824,19 @@ export default function Booking() {
           className="content-area page-content"
           style={{ position: "relative", overflowX: "hidden" }}
         >
+          {hasUpcomingBooking && (
+            <Alert
+              severity="info"
+              action={(
+                <Button color="inherit" size="small" onClick={() => navigate("/reserved")}>
+                  {t("user.manageReservations")}
+                </Button>
+              )}
+            >
+              {t("user.upcomingBookingLimitReached")}
+            </Alert>
+          )}
+
           {/* VIEW 1: ROOM SELECTION */}
           {!selectedRoom && (
             <Fade in={!selectedRoom} timeout={400}>
@@ -1301,7 +1383,7 @@ export default function Booking() {
                             const isTimeValid = timeStatus === "valid";
 
                             const isSelected = selectedTimeSlot === slotNumber;
-                            const isDisabled = !isAvailable || !isTimeValid;
+                            const isDisabled = !isAvailable || !isTimeValid || hasUpcomingBooking;
 
                             return (
                               <Grid item xs={12} sm={6} key={slotNumber}>
@@ -1502,6 +1584,7 @@ export default function Booking() {
                             currentUser &&
                             (pointsLoading ||
                               pointsError ||
+                              hasUpcomingBooking ||
                               !pointStatus?.booking_allowed),
                           )}
                           sx={{

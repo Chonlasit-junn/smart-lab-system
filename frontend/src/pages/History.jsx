@@ -438,7 +438,7 @@ export default function History() {
 
               {pastBookings.length > 0 ? (
                 <>
-                <ResponsiveDataTable>
+                <ResponsiveDataTable className="history-booking-list">
                   <Table sx={{ minWidth: 600 }}>
                     <TableHead>
                       <TableRow>

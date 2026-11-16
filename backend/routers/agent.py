@@ -35,6 +35,7 @@ VALID_END_REASONS = {
     "shutdown",
     "error",
     "admin",
+    "maintenance",
 }
 
 
@@ -97,7 +98,7 @@ def _same_session_identity(
 
 
 def _cleanup_stale_sessions(db: Session) -> int:
-    """Close sessions whose Agent has stopped sending heartbeats."""
+    """Close stale sessions and finish bookings whose scheduled time has ended."""
     now_utc = utc_now()
     stale_before_utc = now_utc - STALE_SESSION_AFTER
 
@@ -115,14 +116,24 @@ def _cleanup_stale_sessions(db: Session) -> int:
             ),
         ),
     )
-    return stale_filter.update(
-        {
-            models.LabAccessLog.session_status: "abandoned",
-            models.LabAccessLog.end_reason: "stale_cleanup",
-            models.LabAccessLog.exit_time: now_utc,
-        },
-        synchronize_session=False,
-    )
+    stale_sessions = stale_filter.all()
+    for access_log in stale_sessions:
+        access_log.session_status = "abandoned"
+        access_log.end_reason = "stale_cleanup"
+        access_log.exit_time = now_utc
+
+        booking = access_log.booking
+        if booking is None or booking.status not in {"reserved", "attended"}:
+            continue
+        booking_ends_at = datetime.combine(
+            booking.booking_date,
+            booking.end_time,
+        ).replace(tzinfo=LAB_TIMEZONE)
+        if booking_ends_at <= now_utc:
+            booking.status = "completed"
+            booking.checked_out_at = now_utc
+
+    return len(stale_sessions)
 
 
 def _require_active_session(access_log: models.LabAccessLog) -> None:
@@ -363,19 +374,40 @@ def start_session(
             detail="This device already has an active lab session.",
         )
 
+    if current_booking.status == "attended":
+        interrupted_session = db.query(models.LabAccessLog).filter(
+            models.LabAccessLog.booking_id == current_booking.id,
+            models.LabAccessLog.user_id == user.id,
+            models.LabAccessLog.session_status == "abandoned",
+            models.LabAccessLog.end_reason == "stale_cleanup",
+            or_(
+                models.LabAccessLog.lab_device_id == resolved_lab_device_id,
+                and_(
+                    models.LabAccessLog.lab_device_id.is_(None),
+                    func.lower(func.trim(models.LabAccessLog.device_mac)) == resolved_device_mac,
+                ),
+            ),
+        ).first()
+        if interrupted_session is None:
+            raise HTTPException(
+                status_code=403,
+                detail="An attended booking can only be resumed after an interrupted session.",
+            )
+
     registered_device.device_name = resolved_device_name
     registered_device.device_mac = resolved_device_mac
     registered_device.agent_version = (agent_version or "").strip()[:64] or registered_device.agent_version
     registered_device.last_seen_at = utc_now()
 
     now_utc = utc_now()
-    if current_booking.status != "reserved":
+    if current_booking.status not in {"reserved", "attended"}:
         raise HTTPException(
             status_code=403,
-            detail="A reserved Lab booking is required to start a new Agent session.",
+            detail="A reserved or interrupted attended Lab booking is required to start an Agent session.",
         )
-    current_booking.status = "attended"
-    current_booking.checked_in_at = now_utc
+    if current_booking.status == "reserved":
+        current_booking.status = "attended"
+        current_booking.checked_in_at = now_utc
 
     new_log = models.LabAccessLog(
         lab_id=lab.id,
@@ -824,6 +856,17 @@ def end_session(
     cleaned_reason = (end_reason or "logout").strip().lower()
     if cleaned_reason not in VALID_END_REASONS:
         raise HTTPException(status_code=422, detail="Invalid session end reason.")
+
+    if cleaned_reason == "maintenance":
+        _require_active_session(access_log)
+        access_log.last_heartbeat_at = utc_now()
+        db.commit()
+        return {
+            "message": "Session suspended for Agent maintenance.",
+            "session_id": session_id,
+            "session_status": access_log.session_status,
+            "end_reason": cleaned_reason,
+        }
 
     was_active = access_log.session_status == "active" and access_log.exit_time is None
     changed = False
