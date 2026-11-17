@@ -13,6 +13,7 @@ import pygetwindow as gw
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from agent_device import get_agent_data_dir, load_device_registration
+from agent_device import append_agent_diagnostic as _append_agent_diagnostic
 from agent_clock import ServerClock
 from agent_outbox import AgentOutbox
 from agent_recovery_task import ensure_recovery_task
@@ -63,20 +64,6 @@ def _parse_booking_deadline(value):
         return parsed.astimezone(timezone.utc)
     except (OverflowError, TypeError, ValueError):
         return None
-
-
-def _append_agent_diagnostic(file_name, detail):
-    """Persist a small, local-only diagnostic without recording app or user data."""
-    try:
-        log_path = get_agent_data_dir() / file_name
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        if log_path.exists() and log_path.stat().st_size > 64 * 1024:
-            log_path.write_text("", encoding="utf-8")
-        with log_path.open("a", encoding="utf-8") as log_file:
-            log_file.write(f"{_utc_now().isoformat(timespec='seconds')} {detail}\n")
-    except OSError:
-        # Diagnostics must never interrupt monitoring or session shutdown.
-        pass
 
 
 def _append_monitor_error_log(error_type):
@@ -160,10 +147,11 @@ def _lock_session_and_notify(agent, session_id, title, message):
     if info_bar is not None:
         info_bar.trigger_logout(show_dialog=False)
     else:
-        agent.stop_and_send_logs(session_id, end_reason="logout")
         overlay = getattr(agent, "overlay", None)
         if overlay is not None:
             overlay.reset_and_show()
+            overlay.repaint()
+        agent.stop_and_send_logs(session_id, end_reason="logout")
 
     agent.session_end_notice = _show_session_notice(
         title,
@@ -1296,6 +1284,7 @@ class SmartLabAgent:
     def start_device_control_polling(self):
         if not REGISTERED_DEVICE_ID or not DEVICE_TOKEN:
             return False
+        self._configure_recovery_task()
         self.device_control_timer.start(15_000)
         QTimer.singleShot(0, self.poll_device_control)
         return True
@@ -1379,7 +1368,6 @@ class SmartLabAgent:
                     self.recovery_session = None
                 else:
                     self._recover_interrupted_session()
-            self._configure_recovery_task()
 
     def _configure_recovery_task(self):
         if getattr(self, "_recovery_task_checked", True):
@@ -1392,11 +1380,10 @@ class SmartLabAgent:
     def _handle_recovery_task_setup(result, error):
         if error is not None:
             result = f"failed error={type(error).__name__}"
-        if result != "not_installed":
-            _append_agent_diagnostic("agent-recovery-task.log", str(result))
+        _append_agent_diagnostic("agent-recovery-task.log", str(result))
 
     def _recover_interrupted_session(self):
-        session_id, download_snapshot = self.recovery_session
+        session_id, download_snapshot, download_roots = self.recovery_session
         self.login_screen.reset_and_show()
         self.login_screen.repaint()
         queued = self._queue_outbox(
@@ -1409,7 +1396,10 @@ class SmartLabAgent:
             return
 
         if SESSION_CLEANUP_ENABLED:
-            self.session_cleanup = SessionCleanupManager(download_snapshot=download_snapshot)
+            self.session_cleanup = SessionCleanupManager(
+                download_snapshot=download_snapshot,
+                download_snapshot_roots=download_roots,
+            )
             self._cleanup_session()
         self.outbox.forget_session(session_id)
         self.recovery_session = None
@@ -1558,11 +1548,16 @@ class SmartLabAgent:
         if policy_token is not None and not isinstance(policy_token, str):
             raise ValueError("Backend policy token must be a string")
         if self.outbox is not None:
-            self.outbox.save_policy_cache(
-                "blacklist",
-                {"version": version or "unknown", "data": rules, "policy_token": policy_token},
-                version=version,
-            )
+            try:
+                self.outbox.save_policy_cache(
+                    "blacklist",
+                    {"version": version or "unknown", "data": rules, "policy_token": policy_token},
+                    version=version,
+                )
+            except Exception as error:
+                _append_agent_diagnostic(
+                    "monitor-errors.log", f"policy_cache_write_failed error={type(error).__name__}",
+                )
         result = {"rules": rules, "version": version}
         if policy_token:
             result["policy_token"] = policy_token
@@ -1599,6 +1594,10 @@ class SmartLabAgent:
 
         self.policy_token = result.get("policy_token")
         SmartLabAgent._sync_process_monitor(self)
+        _append_agent_diagnostic(
+            "agent-runtime.log", f"policy_loaded rules={len(self.policy_rules)} "
+            f"process_rules={sum(SmartLabAgent._has_process_rules([rule]) for rule in self.policy_rules)}",
+        )
         print(
             f"ดึง Blacklist สำเร็จ {len(self.policy_rules)} รายการ "
             f"(เวอร์ชัน {self.policy_version})"
@@ -1650,12 +1649,16 @@ class SmartLabAgent:
                 # Cleanup must never prevent a user from starting a Session.
                 self.session_cleanup = None
                 print(f"เตรียม Session Cleanup ไม่สำเร็จ: {e}")
+                _append_agent_diagnostic(
+                    "session-cleanup.log", f"initialization_failed error={type(e).__name__}",
+                )
             if self.session_cleanup is not None and self.outbox is not None and REGISTERED_DEVICE_ID:
                 try:
                     self.outbox.remember_session(
                         session_id,
                         REGISTERED_DEVICE_ID,
                         sorted(map(str, self.session_cleanup.download_snapshot)),
+                        sorted(map(str, self.session_cleanup.download_snapshot_roots)),
                     )
                 except Exception as error:
                     _append_agent_diagnostic(
@@ -2373,6 +2376,9 @@ class SmartLabAgent:
         self._process_scan_in_flight = False
         if error is not None:
             print(f"ตรวจรายการโปรแกรมไม่สำเร็จ: {error}")
+            _append_agent_diagnostic(
+                "monitor-errors.log", f"process_scan_failed error={type(error).__name__}",
+            )
             return
         if (
             snapshot["session_id"] != self.current_session_id
@@ -2690,89 +2696,11 @@ class SmartLabAgent:
         if booking_timer is not None:
             booking_timer.stop()
         self.policy_timer.stop()
-        self._close_current_activity(_utc_now())
-        summary = list(self.usage_segments)
-
-        print("\n--- บันทึกข้อมูลลง local outbox ---")
-        print(f"Data: {summary}")
-
-        if self.outbox is not None:
-            violations = list(self._pending_fallback_violations)
-            self._pending_fallback_violations.clear()
-            fallback_violations = []
-            for payload in violations:
-                if not self._queue_outbox(
-                    kind="violation",
-                    payload=payload,
-                    session_id=session_id,
-                    event_id=payload.get("event_id"),
-                ):
-                    fallback_violations.append(payload)
-            # Retry only segments that could not be saved to the outbox when
-            # their activity ended; already queued items may have been delivered.
-            for segment in summary:
-                self._queue_outbox(
-                    kind="usage",
-                    payload={
-                        "session_id": session_id,
-                        "usage_data": json.dumps([segment], ensure_ascii=False),
-                    },
-                    session_id=session_id,
-                    event_id=segment.get("event_id"),
-                )
-
-            if end_reason != "maintenance":
-                self._queue_outbox(
-                    kind="end_session",
-                    payload={
-                        "session_id": session_id,
-                        "end_reason": end_reason,
-                    },
-                    session_id=session_id,
-                    event_id=f"end-session-{session_id}",
-                )
-
-            def deliver_outbox():
-                fallback_delivered = True
-                if fallback_violations:
-                    fallback_delivered = self._send_fallback_violation_logs(fallback_violations)
-                # A normal session can accumulate more than ten checkpoint
-                # events. Drain bounded pages so end-session is not left
-                # behind its usage events in the durable queue.
-                for _ in range(10):
-                    self.flush_outbox(limit=100)
-                    if not self.outbox.has_pending_for_session(session_id):
-                        return not fallback_delivered
-                return True
-
-            def handle_outbox_delivery(pending, error):
-                if error is not None:
-                    print(f"ส่งข้อมูลจาก local outbox ไม่สำเร็จ: {error}")
-                elif pending:
-                    print("ยังมีข้อมูลรอส่ง จะ retry อัตโนมัติเมื่อ Internet กลับมา")
-
-            self.background_tasks.submit(
-                f"outbox-session-{session_id}",
-                deliver_outbox,
-                handle_outbox_delivery,
-            )
-        else:
-            violations = list(self._pending_fallback_violations)
-            self._pending_fallback_violations.clear()
-
-            def handle_fallback_delivery(delivered, error):
-                if error is not None:
-                    print(f"ส่งบันทึก Session ไม่สำเร็จ: {error}")
-
-            self.background_tasks.submit(
-                f"fallback-session-{session_id}",
-                lambda: self._send_fallback_session_logs(
-                    session_id,
-                    summary,
-                    end_reason,
-                    violations,
-                ),
-                handle_fallback_delivery,
+        try:
+            self._finish_session_reporting(session_id, end_reason)
+        except Exception as error:
+            _append_agent_diagnostic(
+                "session-cleanup.log", f"session_reporting_failed error={type(error).__name__}",
             )
 
         if cleanup_session:
@@ -2803,7 +2731,103 @@ class SmartLabAgent:
         self.booking_end_warning_shown = False
         self.current_session_id = None
 
+    def _finish_session_reporting(self, session_id, end_reason):
+        try:
+            self._close_current_activity(_utc_now())
+        except Exception as error:
+            _append_agent_diagnostic(
+                "session-cleanup.log", f"activity_close_failed error={type(error).__name__}",
+            )
+        summary = list(self.usage_segments)
 
+        print("\n--- บันทึกข้อมูลลง local outbox ---")
+        print(f"Data: {summary}")
+
+        if self.outbox is not None:
+            violations = list(self._pending_fallback_violations)
+            self._pending_fallback_violations.clear()
+            fallback_violations = []
+            for payload in violations:
+                if not self._queue_outbox(
+                    kind="violation",
+                    payload=payload,
+                    session_id=session_id,
+                    event_id=payload.get("event_id"),
+                ):
+                    fallback_violations.append(payload)
+            # Retry only segments that could not be saved to the outbox when
+            # their activity ended; already queued items may have been delivered.
+            for segment in summary:
+                self._queue_outbox(
+                    kind="usage",
+                    payload={
+                        "session_id": session_id,
+                        "usage_data": json.dumps([segment], ensure_ascii=False),
+                    },
+                    session_id=session_id,
+                    event_id=segment.get("event_id"),
+                )
+
+            end_queued = end_reason == "maintenance"
+            if not end_queued:
+                end_queued = self._queue_outbox(
+                    kind="end_session",
+                    payload={
+                        "session_id": session_id,
+                        "end_reason": end_reason,
+                    },
+                    session_id=session_id,
+                    event_id=f"end-session-{session_id}",
+                )
+
+            def deliver_outbox():
+                fallback_delivered = True
+                if fallback_violations:
+                    fallback_delivered = self._send_fallback_violation_logs(fallback_violations)
+                # A normal session can accumulate more than ten checkpoint
+                # events. Drain bounded pages so end-session is not left
+                # behind its usage events in the durable queue.
+                for _ in range(10):
+                    self.flush_outbox(limit=100)
+                    if not self.outbox.has_pending_for_session(session_id):
+                        break
+                else:
+                    return True
+                if not end_queued:
+                    fallback_delivered = self._send_fallback_session_logs(
+                        session_id, [], end_reason, [],
+                    ) and fallback_delivered
+                return not fallback_delivered
+
+            def handle_outbox_delivery(pending, error):
+                if error is not None:
+                    print(f"ส่งข้อมูลจาก local outbox ไม่สำเร็จ: {error}")
+                elif pending:
+                    print("ยังมีข้อมูลรอส่ง จะ retry อัตโนมัติเมื่อ Internet กลับมา")
+
+            self.background_tasks.submit(
+                f"outbox-session-{session_id}",
+                deliver_outbox,
+                handle_outbox_delivery,
+            )
+        else:
+            violations = list(self._pending_fallback_violations)
+            self._pending_fallback_violations.clear()
+
+            def handle_fallback_delivery(delivered, error):
+                if error is not None:
+                    print(f"ส่งบันทึก Session ไม่สำเร็จ: {error}")
+
+            self.background_tasks.submit(
+                f"fallback-session-{session_id}",
+                lambda: self._send_fallback_session_logs(
+                    session_id,
+                    summary,
+                    end_reason,
+                    violations,
+                ),
+                handle_fallback_delivery,
+            )
 
 def run_agent() -> int:
     """Start the Agent UI and return its Qt event-loop exit code."""
@@ -2838,7 +2862,11 @@ def run_agent() -> int:
 
     instance_guard.set_activation_callback(activate_agent_window)
     login_screen.show()
-    agent_logic.start_device_control_polling()
+    registered = agent_logic.start_device_control_polling()
+    _append_agent_diagnostic(
+        "agent-runtime.log", f"startup_ready version={AGENT_VERSION} registered={registered} "
+        f"cleanup_enabled={SESSION_CLEANUP_ENABLED}",
+    )
     return app.exec()
 
 

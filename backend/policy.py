@@ -143,11 +143,14 @@ def find_matching_rule(
 
     if not isinstance(executable_identity, dict):
         return None
-    original = normalize_process_name(
-        executable_identity.get("original_filename") or executable_identity.get("internal_name")
-    )
+    embedded_names = {
+        normalize_process_name(executable_identity.get("original_filename")),
+        normalize_process_name(executable_identity.get("internal_name")),
+    }
+    embedded_names.discard("")
     product = normalize_compact(executable_identity.get("product_name"))
     normalized_exe_path = normalize_path(exe_path)
+    aliases = {"starrail": {"starrail", "honkaistarrail"}}
 
     for rule in rules:
         if rule.get("enabled") is False:
@@ -167,12 +170,12 @@ def find_matching_rule(
         if match_type == "exe_path":
             expected.add(normalize_process_name(rule.get("app_name")))
         expected.discard("")
-        if original:
-            if original in expected:
-                return rule
-        elif product:
-            aliases = {"starrail": {"starrail", "honkaistarrail"}}
-            if any(product in aliases.get(name, {name}) for name in expected):
-                return rule
+        identity_names = set(expected)
+        for expected_name in expected:
+            identity_names.update(aliases.get(expected_name, ()))
+        if embedded_names.intersection(identity_names):
+            return rule
+        if not embedded_names and product in identity_names:
+            return rule
 
     return None

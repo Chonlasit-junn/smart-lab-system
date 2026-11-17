@@ -103,14 +103,18 @@ class AgentOutbox:
     def _now() -> datetime:
         return datetime.now(timezone.utc)
 
-    def remember_session(self, session_id: int, device_id: str, download_snapshot: list[str]) -> None:
+    def remember_session(
+        self, session_id: int, device_id: str,
+        download_snapshot: list[str], download_roots: list[str],
+    ) -> None:
+        snapshot = json.dumps({"files": download_snapshot, "roots": download_roots}, ensure_ascii=False)
         with self._lock, self._connect() as connection:
             connection.execute(
                 "INSERT OR REPLACE INTO session_recovery VALUES (1, ?, ?, ?)",
-                (session_id, device_id, json.dumps(download_snapshot, ensure_ascii=False)),
+                (session_id, device_id, snapshot),
             )
 
-    def interrupted_session(self, device_id: str) -> Optional[tuple[int, list[str]]]:
+    def interrupted_session(self, device_id: str) -> Optional[tuple[int, list[str], list[str]]]:
         with self._lock, self._connect() as connection:
             row = connection.execute(
                 "SELECT session_id, download_snapshot FROM session_recovery WHERE device_id = ?",
@@ -118,7 +122,12 @@ class AgentOutbox:
             ).fetchone()
         if row is None:
             return None
-        return int(row["session_id"]), json.loads(row["download_snapshot"])
+        snapshot = json.loads(row["download_snapshot"])
+        # Older agents saved file names without recording which roots were scanned.
+        # Treat those snapshots as unverified for file deletion after an upgrade.
+        if isinstance(snapshot, list):
+            return int(row["session_id"]), snapshot, []
+        return int(row["session_id"]), snapshot["files"], snapshot["roots"]
 
     def forget_session(self, session_id: int) -> None:
         with self._lock, self._connect() as connection:

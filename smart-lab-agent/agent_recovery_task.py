@@ -1,4 +1,4 @@
-"""Provision the visible per-user Agent Recovery task after device validation."""
+"""Provision the visible per-user Agent Recovery task for a locally registered device."""
 
 from __future__ import annotations
 
@@ -9,11 +9,15 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
 
 TASK_NAME = r"\Smart Lab Agent Recovery"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RECOVERY_EXECUTABLE = "SmartLabAgentRecovery.exe"
+TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+TASK_DESCRIPTION = "Reopen Smart Lab Agent if it stops in the Lab Windows account."
 
 
 def installed_recovery_executable() -> Path | None:
@@ -40,7 +44,7 @@ def installed_recovery_executable() -> Path | None:
     return executable
 
 
-def recovery_task_xml(executable: Path, account_sid: str, system_dir: Path) -> str:
+def _legacy_recovery_arguments(executable: Path) -> str:
     agent_literal = "'" + str(executable).replace("'", "''") + "'"
     check = (
         f"$agent = {agent_literal}; "
@@ -50,14 +54,16 @@ def recovery_task_xml(executable: Path, account_sid: str, system_dir: Path) -> s
         "Where-Object { $_.SessionId -eq $session -and $_.Path -eq $agent }; "
         "if (-not $running) { Start-Process -FilePath $agent }"
     )
-    arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -Command "' + check + '"'
-    powershell = system_dir / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    return '-NoProfile -NonInteractive -WindowStyle Hidden -Command "' + check + '"'
+
+
+def recovery_task_xml(executable: Path, account_sid: str) -> str:
     start = (datetime.now().astimezone() + timedelta(minutes=1)).isoformat(timespec="seconds")
     sid = escape(account_sid)
     return f"""<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+<Task version="1.2" xmlns="{TASK_NAMESPACE}">
   <RegistrationInfo>
-    <Description>Reopen Smart Lab Agent if it stops in the Lab Windows account.</Description>
+    <Description>{TASK_DESCRIPTION}</Description>
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger><UserId>{sid}</UserId></LogonTrigger>
@@ -80,16 +86,46 @@ def recovery_task_xml(executable: Path, account_sid: str, system_dir: Path) -> s
     <StartWhenAvailable>true</StartWhenAvailable>
   </Settings>
   <Actions Context="LabUser">
-    <Exec><Command>{escape(str(powershell))}</Command><Arguments>{escape(arguments)}</Arguments></Exec>
+    <Exec><Command>{escape(str(executable))}</Command></Exec>
   </Actions>
 </Task>
 """
+
+
+def _upgrade_task_xml(existing_xml, agent, helper, account_sid):
+    namespace = {"": TASK_NAMESPACE}
+    try:
+        task = ElementTree.fromstring(existing_xml)
+    except ElementTree.ParseError:
+        return None
+    if (
+        task.findtext("RegistrationInfo/Description", namespaces=namespace) != TASK_DESCRIPTION
+        or task.findtext("Principals/Principal/UserId", namespaces=namespace) != account_sid
+        or task.findtext("Settings/Enabled", namespaces=namespace) == "false"
+    ):
+        return None
+    actions = task.find("Actions", namespace)
+    if actions is None or len(actions) != 1:
+        return None
+    command = actions.find("Exec/Command", namespace)
+    arguments = actions.find("Exec/Arguments", namespace)
+    if (
+        command is None or Path(command.text or "").name.casefold() != "powershell.exe"
+        or arguments is None or arguments.text != _legacy_recovery_arguments(agent)
+    ):
+        return None
+    command.text = str(helper)
+    actions[0].remove(arguments)
+    return ElementTree.tostring(task, encoding="unicode", default_namespace=None)
 
 
 def ensure_recovery_task() -> str:
     executable = installed_recovery_executable()
     if executable is None:
         return "not_installed"
+    helper = executable.with_name(RECOVERY_EXECUTABLE)
+    if not helper.is_file():
+        return "recovery_executable_missing"
 
     system_dir = Path(os.environ["SystemRoot"]) / "System32"
     schtasks = str(system_dir / "schtasks.exe")
@@ -97,9 +133,7 @@ def ensure_recovery_task() -> str:
         stdin=subprocess.DEVNULL, capture_output=True, timeout=15,
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
-    existing = subprocess.run([schtasks, "/Query", "/TN", TASK_NAME], **run_options)
-    if existing.returncode == 0:
-        return "already_configured"
+    existing = subprocess.run([schtasks, "/Query", "/TN", TASK_NAME, "/XML"], **run_options)
 
     identity = subprocess.run(
         [str(system_dir / "whoami.exe"), "/user", "/fo", "csv", "/nh"], **run_options,
@@ -110,10 +144,22 @@ def ensure_recovery_task() -> str:
     if len(account) != 2 or not account[1].startswith("S-1-"):
         return "account_lookup_failed"
 
+    if existing.returncode == 0:
+        task_xml = _upgrade_task_xml(existing.stdout, executable, helper, account[1])
+        if task_xml is None:
+            return "already_configured"
+    else:
+        task_xml = recovery_task_xml(helper, account[1])
+
     with tempfile.TemporaryDirectory(prefix="smart-lab-recovery-") as temp_dir:
         xml_file = Path(temp_dir) / "task.xml"
-        xml_file.write_text(recovery_task_xml(executable, account[1], system_dir), encoding="utf-16")
+        xml_file.write_text(task_xml, encoding="utf-16")
+        command = [schtasks, "/Create", "/TN", TASK_NAME, "/XML", str(xml_file)]
+        if existing.returncode == 0:
+            command.append("/F")
         created = subprocess.run(
-            [schtasks, "/Create", "/TN", TASK_NAME, "/XML", str(xml_file)], **run_options,
+            command, **run_options,
         )
-    return "created" if created.returncode == 0 else f"create_failed_{created.returncode}"
+    if created.returncode:
+        return f"create_failed_{created.returncode}"
+    return "updated" if existing.returncode == 0 else "created"

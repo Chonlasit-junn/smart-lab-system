@@ -21,10 +21,12 @@ The Backend URL saved with the device credential is used by the Agent. `SMART_LA
 ## Recover the Agent after End task
 
 Install the Agent MSI, then start the Agent from the shared Windows account used
-in the Lab. After the registered Agent successfully checks its control state,
-it creates its recovery task for that account with normal privileges. It keeps
+in the Lab. The MSI-installed Agent creates the recovery task for that account
+with normal privileges when it finds a local device registration. It keeps
 an existing task as configured, including a task disabled by an administrator.
 See `%LOCALAPPDATA%\SmartLabAgent\agent-recovery-task.log` for setup results.
+`agent-runtime.log` in the same folder records startup, cleanup configuration,
+and the number of live policy rules loaded from the Backend.
 
 If the workstation policy prevents a standard user from creating tasks, the
 administrator can register the task with the companion script. Pass the shared
@@ -36,6 +38,10 @@ Windows account and use `-AgentPath` for a custom installation directory.
 
 The visible **Smart Lab Agent Recovery** task checks at sign-in and every minute
 while that account is signed in. It runs with that account's normal privileges.
+It starts the MSI's `SmartLabAgentRecovery.exe` directly. The Agent updates a
+matching enabled task previously created by the Agent. For a task created by
+an administrator, edit its action in Task Scheduler to run the installed
+`SmartLabAgentRecovery.exe` with an empty arguments field.
 The MSI creates the usual sign-in entry on its own. Admins can manage the
 recovery task in Windows Task Scheduler.
 
@@ -56,7 +62,9 @@ application is still present before ending the session.
 Session cleanup is enabled by default on the Agent MSI. When a Lab Session ends,
 the Agent shows its login lock first, then closes applications owned by the current
 Windows user, clears browser cookies, saved logins, history and session/cache data,
-and deletes only files newly created in Downloads during that Lab Session. Browser
+and deletes only files newly created in the Windows Downloads folder during that
+Lab Session, including when Windows redirects that folder to another drive.
+Deletion requires a successful pre-session scan of that same folder. Browser
 bookmarks, extensions and settings are preserved. Admin maintenance pauses skip
 cleanup. This is an Agent window lock, not the Windows secure sign-in screen.
 The Agent records cleanup counts and error categories in `session-cleanup.log`

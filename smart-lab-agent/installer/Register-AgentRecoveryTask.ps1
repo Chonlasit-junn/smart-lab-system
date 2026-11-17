@@ -13,19 +13,11 @@ if ($agentFile.PSIsContainer -or $agentFile.Name -ne 'SmartLabDevice.exe') {
     throw 'AgentPath must point to an installed SmartLabDevice.exe.'
 }
 
-$agentLiteral = "'" + $agentFile.FullName.Replace("'", "''") + "'"
-$checkCommand = @'
-$agent = __AGENT_PATH__
-if (-not (Test-Path -LiteralPath $agent -PathType Leaf)) { exit }
-$session = (Get-Process -Id $PID).SessionId
-$running = Get-Process -Name SmartLabDevice -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session -and $_.Path -eq $agent }
-if (-not $running) { Start-Process -FilePath $agent }
-'@
-$checkCommand = ($checkCommand -replace '\r?\n', '; ').Replace('__AGENT_PATH__', $agentLiteral)
-$powershellPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$action = New-ScheduledTaskAction -Execute $powershellPath -Argument (
-    '-NoProfile -NonInteractive -WindowStyle Hidden -Command "' + $checkCommand + '"'
-)
+$recoveryPath = Join-Path $agentFile.DirectoryName 'SmartLabAgentRecovery.exe'
+if (-not (Test-Path -LiteralPath $recoveryPath -PathType Leaf)) {
+    throw 'Install the Agent MSI that includes SmartLabAgentRecovery.exe first.'
+}
+$action = New-ScheduledTaskAction -Execute $recoveryPath
 $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $LabWindowsUser
 $recoveryTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
     -RepetitionInterval (New-TimeSpan -Minutes 1)

@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 import os
 
+from agent_device import append_agent_diagnostic
+
 
 def main() -> int:
     """Dispatch the requested entry point without duplicating the Qt runtime."""
@@ -23,9 +25,13 @@ def main() -> int:
 
         return register_main()
 
-    from agent import run_agent
+    try:
+        from agent import run_agent
 
-    return run_agent()
+        return run_agent()
+    except Exception as error:
+        append_agent_diagnostic("agent-runtime.log", f"startup_failed error={type(error).__name__}")
+        raise
 
 
 if __name__ == "__main__":

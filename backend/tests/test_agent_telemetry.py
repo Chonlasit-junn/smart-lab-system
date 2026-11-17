@@ -474,6 +474,14 @@ class AgentTelemetryTests(unittest.TestCase):
             self.deliver(process_name="notes.exe", window_title="Notes")
         self.assertEqual(self.db.query(models.UsageViolation).count(), 1)
 
+    def test_internal_name_matches_when_original_filename_is_different(self):
+        with patch.object(agent, "apply_point_event", return_value={}):
+            self.deliver(executable_identity=json.dumps({
+                "original_filename": "launcher.exe",
+                "internal_name": "blocked.exe",
+            }))
+        self.assertEqual(self.db.query(models.UsageViolation).count(), 1)
+
     def test_malformed_identity_is_rejected(self):
         for identity in ("[]", "bad-json", '{"original_filename": 1}', "x" * 4097):
             with self.subTest(identity=identity[:30]), self.assertRaises(HTTPException) as raised:

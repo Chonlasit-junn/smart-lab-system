@@ -12,6 +12,7 @@ import getpass
 import os
 import shutil
 import sqlite3
+import stat
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,9 @@ import psutil
 
 GRACEFUL_CLOSE_SECONDS = 10
 FORCE_CLOSE_WAIT_SECONDS = 3
+BROWSER_FILE_RETRY_SECONDS = 3
+DOWNLOAD_FILE_RETRY_SECONDS = 3
+DOWNLOADS_GUID = "{374DE290-123F-4565-9164-39C4925E467B}"
 
 # These processes belong to the Windows shell or desktop infrastructure. They
 # must remain alive so that the next Lab user still gets a usable desktop.
@@ -150,6 +154,80 @@ def _is_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _windows_downloads(user_home: Path) -> Path:
+    if os.name == "nt":
+        import winreg
+
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+            ) as key:
+                value, _ = winreg.QueryValueEx(key, DOWNLOADS_GUID)
+            if isinstance(value, str):
+                candidate = Path(os.path.expandvars(value))
+                if candidate.is_absolute() and candidate != Path(candidate.anchor) and candidate != user_home:
+                    return candidate
+        except OSError:
+            pass
+    return user_home / "Downloads"
+
+
+def _managed_edge_root(user_home: Path, local: Path, roaming: Path) -> Optional[Path]:
+    if os.name != "nt":
+        return None
+
+    import winreg
+
+    for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        try:
+            with winreg.OpenKey(hive, r"Software\Policies\Microsoft\Edge") as key:
+                configured, _ = winreg.QueryValueEx(key, "UserDataDir")
+        except OSError:
+            continue
+        if not isinstance(configured, str):
+            return None
+        for token, value in {
+            "profile": user_home,
+            "local_app_data": local,
+            "roaming_app_data": roaming,
+            "user_name": getpass.getuser(),
+        }.items():
+            configured = configured.replace("${" + token + "}", str(value))
+        root = Path(os.path.expandvars(configured))
+        if (
+            root.is_absolute() and "${" not in configured
+            and any(_is_within(root, base) for base in (user_home, local, roaming))
+            and (root / "Local State").is_file()
+        ):
+            return root
+        return None
+    return None
+
+
+def _download_files(root: Path):
+    def raise_error(error):
+        raise error
+
+    for directory, children, filenames in os.walk(root, onerror=raise_error, followlinks=False):
+        path = Path(directory)
+        # Windows junctions and symlinks can point outside the Downloads folder.
+        children[:] = [
+            name for name in children if not _is_reparse_point((path / name).lstat())
+        ]
+        for filename in filenames:
+            file = path / filename
+            info = file.lstat()
+            if stat.S_ISREG(info.st_mode) and not _is_reparse_point(info):
+                yield file
+
+
+def _is_reparse_point(info: os.stat_result) -> bool:
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
 def _record_error(report: CleanupReport, category: str) -> None:
     if category not in report.errors:
         report.errors.append(category)
@@ -167,6 +245,7 @@ class SessionCleanupManager:
         firefox_roots: Optional[Iterable[os.PathLike[str] | str]] = None,
         download_roots: Optional[Iterable[os.PathLike[str] | str]] = None,
         download_snapshot: Optional[Iterable[os.PathLike[str] | str]] = None,
+        download_snapshot_roots: Optional[Iterable[os.PathLike[str] | str]] = None,
         graceful_close_seconds: int = GRACEFUL_CLOSE_SECONDS,
     ) -> None:
         self.protected_pid = protected_pid or os.getpid()
@@ -188,25 +267,32 @@ class SessionCleanupManager:
             chromium_roots = (
                 local_app_data / "Google" / "Chrome" / "User Data",
                 local_app_data / "Microsoft" / "Edge" / "User Data",
+                local_app_data / "Microsoft" / "Edge Beta" / "User Data",
+                local_app_data / "Microsoft" / "Edge Dev" / "User Data",
+                local_app_data / "Microsoft" / "Edge SxS" / "User Data",
                 local_app_data / "BraveSoftware" / "Brave-Browser" / "User Data",
                 local_app_data / "Vivaldi" / "User Data",
                 roaming_app_data / "Opera Software",
             )
+            managed_edge = _managed_edge_root(self.user_home, local_app_data, roaming_app_data)
+            if managed_edge is not None:
+                chromium_roots = (*chromium_roots, managed_edge)
         if firefox_roots is None:
             firefox_roots = (
                 roaming_app_data / "Mozilla" / "Firefox" / "Profiles",
                 local_app_data / "Mozilla" / "Firefox" / "Profiles",
             )
         if download_roots is None:
-            download_roots = (self.user_home / "Downloads",)
+            download_roots = (_windows_downloads(self.user_home),)
 
-        self.chromium_roots = [_as_path(path) for path in chromium_roots]
+        self.chromium_roots = list(dict.fromkeys(_as_path(path) for path in chromium_roots))
         self.firefox_roots = [_as_path(path) for path in firefox_roots]
         self.download_roots = [_as_path(path) for path in download_roots]
         self.graceful_close_seconds = max(0, int(graceful_close_seconds))
+        self.download_snapshot_roots = {_as_path(path) for path in (download_snapshot_roots or ())}
         self.download_snapshot = (
-            self._snapshot_downloads()
-            if download_snapshot is None else {_as_path(path) for path in download_snapshot}
+            self._snapshot_downloads() if download_snapshot is None
+            else {_as_path(path) for path in download_snapshot}
         )
 
     def _snapshot_downloads(self) -> set[Path]:
@@ -215,11 +301,14 @@ class SessionCleanupManager:
             if not root.is_dir():
                 continue
             try:
+                resolved_root = root.resolve(strict=True)
+                if resolved_root in {Path(resolved_root.anchor), self.user_home.resolve()}:
+                    continue
                 snapshot.update(
                     path.resolve(strict=False)
-                    for path in root.rglob("*")
-                    if path.is_file()
+                    for path in _download_files(resolved_root)
                 )
+                self.download_snapshot_roots.add(resolved_root)
             except OSError:
                 continue
         return snapshot
@@ -382,7 +471,7 @@ class SessionCleanupManager:
                 child
                 for child in root.iterdir()
                 if child.is_dir()
-                and not child.is_symlink()
+                and not _is_reparse_point(child.lstat())
                 and child.name.casefold() not in {"system profile", "guest profile"}
             ]
         except OSError:
@@ -394,29 +483,36 @@ class SessionCleanupManager:
         root: Path,
         report: CleanupReport,
         category: str,
+        retry_until: float = 0,
     ) -> bool:
         if not _is_within(path, root):
             _record_error(report, category)
             return False
-        try:
-            if path.is_symlink() or path.is_file():
-                path.unlink()
-            elif path.is_dir():
-                shutil.rmtree(path)
-            else:
+        while True:
+            try:
+                if path.is_symlink() or path.is_file():
+                    path.unlink()
+                elif path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    return False
+                return True
+            except OSError as error:
+                if getattr(error, "winerror", None) in {32, 33} and time.monotonic() < retry_until:
+                    time.sleep(0.1)
+                    continue
+                _record_error(report, category)
                 return False
-            return True
-        except (OSError, shutil.Error):
-            _record_error(report, category)
-            return False
 
     def _clear_chromium_profile(
         self,
         profile: Path,
         report: CleanupReport,
+        retry_until: float,
     ) -> None:
         for relative_path in CHROMIUM_PROFILE_FILES + CHROMIUM_PROFILE_PATHS:
-            if self._remove_path(profile / relative_path, profile, report, "browser_data"):
+            category = "browser_history" if relative_path.startswith("History") else "browser_data"
+            if self._remove_path(profile / relative_path, profile, report, category, retry_until):
                 report.removed_browser_items += 1
         for directory_name in CHROMIUM_PROFILE_DIRECTORIES:
             if self._remove_path(profile / directory_name, profile, report, "browser_data"):
@@ -497,9 +593,10 @@ class SessionCleanupManager:
 
     def clear_browser_data(self, report: CleanupReport) -> None:
         """Remove login/session/history/cache data while preserving setup files."""
+        retry_until = time.monotonic() + BROWSER_FILE_RETRY_SECONDS
         for root in self.chromium_roots:
             for profile in self._profile_directories(root):
-                self._clear_chromium_profile(profile, report)
+                self._clear_chromium_profile(profile, report, retry_until)
 
         for root in self.firefox_roots:
             for profile in self._profile_directories(root):
@@ -507,15 +604,16 @@ class SessionCleanupManager:
 
     def clear_new_downloads(self, report: CleanupReport) -> None:
         """Delete only files that appeared after this Session started."""
+        retry_until = time.monotonic() + DOWNLOAD_FILE_RETRY_SECONDS
         for root in self.download_roots:
             if not root.is_dir():
                 continue
             try:
-                current_files = [
-                    path
-                    for path in root.rglob("*")
-                    if path.is_file()
-                ]
+                resolved_root = root.resolve(strict=True)
+                if resolved_root not in self.download_snapshot_roots:
+                    _record_error(report, "downloads_snapshot")
+                    continue
+                current_files = list(_download_files(resolved_root))
             except OSError:
                 _record_error(report, "downloads")
                 continue
@@ -523,7 +621,7 @@ class SessionCleanupManager:
             for path in current_files:
                 if path.resolve(strict=False) in self.download_snapshot:
                     continue
-                if self._remove_path(path, root, report, "downloads"):
+                if self._remove_path(path, resolved_root, report, "downloads", retry_until):
                     report.removed_downloads += 1
 
     def cleanup(self) -> CleanupReport:

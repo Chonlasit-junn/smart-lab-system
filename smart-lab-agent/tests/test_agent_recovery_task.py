@@ -10,32 +10,38 @@ import agent_recovery_task as recovery
 
 class AgentRecoveryTaskTests(unittest.TestCase):
     def test_xml_uses_interactive_account_and_repeats_each_minute(self):
-        executable = Path(r"C:\Lab's & Tools\SmartLabDevice.exe")
+        executable = Path(r"C:\Lab's & Tools\SmartLabAgentRecovery.exe")
         document = ElementTree.fromstring(
-            recovery.recovery_task_xml(executable, "S-1-5-21-123", Path(r"C:\Windows\System32"))
+            recovery.recovery_task_xml(executable, "S-1-5-21-123")
         )
         namespace = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
         self.assertEqual(document.findtext(".//t:Principal/t:UserId", namespaces=namespace), "S-1-5-21-123")
         self.assertEqual(document.findtext(".//t:LogonType", namespaces=namespace), "InteractiveToken")
         self.assertEqual(document.findtext(".//t:RunLevel", namespaces=namespace), "LeastPrivilege")
         self.assertEqual(document.findtext(".//t:Interval", namespaces=namespace), "PT1M")
-        self.assertIn("Lab''s & Tools", document.findtext(".//t:Arguments", namespaces=namespace))
+        self.assertEqual(document.findtext(".//t:Command", namespaces=namespace), str(executable))
+        self.assertIsNone(document.find(".//t:Arguments", namespace))
 
+    @patch.object(Path, "is_file", return_value=True)
     @patch.object(recovery, "installed_recovery_executable", return_value=Path("SmartLabDevice.exe"))
     @patch.dict(os.environ, {"SystemRoot": r"C:\Windows"})
     @patch.object(subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True)
     @patch.object(subprocess, "run")
-    def test_existing_task_is_left_alone(self, run, _installed):
-        run.return_value.returncode = 0
+    def test_existing_task_is_left_alone(self, run, _installed, _is_file):
+        run.side_effect = [
+            subprocess.CompletedProcess([], 0, stdout=b'<OtherTask />'),
+            subprocess.CompletedProcess([], 0, stdout=b'"LAB\\User","S-1-5-21-123"\r\n'),
+        ]
         self.assertEqual(recovery.ensure_recovery_task(), "already_configured")
-        run.assert_called_once()
-        self.assertEqual(run.call_args.args[0][1:], ["/Query", "/TN", recovery.TASK_NAME])
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[0].args[0][1:], ["/Query", "/TN", recovery.TASK_NAME, "/XML"])
 
+    @patch.object(Path, "is_file", return_value=True)
     @patch.object(recovery, "installed_recovery_executable", return_value=Path("SmartLabDevice.exe"))
     @patch.dict(os.environ, {"SystemRoot": r"C:\Windows"})
     @patch.object(subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True)
     @patch.object(subprocess, "run")
-    def test_creates_missing_task_without_overwrite(self, run, _installed):
+    def test_creates_missing_task_without_overwrite(self, run, _installed, _is_file):
         def handle_command(command, **_kwargs):
             if "/Query" in command:
                 return subprocess.CompletedProcess(command, 1)
@@ -50,3 +56,19 @@ class AgentRecoveryTaskTests(unittest.TestCase):
         run.side_effect = handle_command
         self.assertEqual(recovery.ensure_recovery_task(), "created")
         self.assertEqual(run.call_count, 3)
+
+    def test_updates_the_legacy_action_and_preserves_schedule(self):
+        agent = Path(r"C:\Lab & Tools\SmartLabDevice.exe")
+        helper = agent.with_name(recovery.RECOVERY_EXECUTABLE)
+        ns = {"": recovery.TASK_NAMESPACE}
+        sid = "S-1-5-21-123"
+        legacy = ElementTree.fromstring(recovery.recovery_task_xml(helper, sid))
+        legacy.find("Actions/Exec/Command", ns).text = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        args = ElementTree.SubElement(legacy.find("Actions/Exec", ns), f"{{{recovery.TASK_NAMESPACE}}}Arguments")
+        args.text = recovery._legacy_recovery_arguments(agent)
+        updated = ElementTree.fromstring(recovery._upgrade_task_xml(ElementTree.tostring(legacy), agent, helper, sid))
+        self.assertEqual(updated.findtext("Actions/Exec/Command", namespaces=ns), str(helper))
+        self.assertIsNone(updated.find("Actions/Exec/Arguments", ns))
+        self.assertEqual(ElementTree.tostring(updated.find("Triggers", ns)), ElementTree.tostring(legacy.find("Triggers", ns)))
+        ElementTree.SubElement(legacy.find("Settings", ns), f"{{{recovery.TASK_NAMESPACE}}}Enabled").text = "false"
+        self.assertIsNone(recovery._upgrade_task_xml(ElementTree.tostring(legacy), agent, helper, sid))

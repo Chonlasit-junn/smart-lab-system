@@ -70,6 +70,67 @@ class SessionCleanupProcessTests(unittest.TestCase):
 
 
 class SessionCleanupFileTests(unittest.TestCase):
+    def test_redirected_downloads_uses_windows_folder_and_preserves_existing_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            downloads = root / "Redirected"
+            downloads.mkdir()
+            old_file = downloads / "existing.txt"
+            old_file.touch()
+            with patch("agent_cleanup._windows_downloads", return_value=downloads):
+                manager = SessionCleanupManager(user_home=root, chromium_roots=[], firefox_roots=[])
+            new_file = downloads / "new.txt"
+            new_file.touch()
+            report = CleanupReport()
+            manager.clear_new_downloads(report)
+            self.assertTrue(old_file.exists())
+            self.assertFalse(new_file.exists())
+            self.assertEqual(report.removed_downloads, 1)
+
+    def test_recovery_does_not_delete_from_a_different_downloads_folder(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            new_root = root / "Different"
+            new_root.mkdir()
+            retained = new_root / "existing.txt"
+            retained.touch()
+            manager = SessionCleanupManager(
+                download_roots=[new_root], download_snapshot=[],
+                download_snapshot_roots=[root / "Original"],
+            )
+            report = CleanupReport()
+            manager.clear_new_downloads(report)
+            self.assertTrue(retained.exists())
+            self.assertEqual(report.errors, ["downloads_snapshot"])
+
+    def test_retries_edge_history_when_temporarily_locked(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile = root / "Profile 1"
+            profile.mkdir()
+            history = profile / "History"
+            history.touch()
+            locked = PermissionError("sharing violation")
+            locked.winerror = 32
+            original_unlink = Path.unlink
+            lock_errors = []
+
+            def unlink(path, *args, **kwargs):
+                if path == history and not lock_errors:
+                    lock_errors.append(locked)
+                    raise locked
+                return original_unlink(path, *args, **kwargs)
+
+            manager = SessionCleanupManager(chromium_roots=[root], firefox_roots=[], download_roots=[])
+            report = CleanupReport()
+            with patch.object(Path, "unlink", unlink):
+                manager.clear_browser_data(report)
+
+            self.assertEqual(lock_errors, [locked])
+            self.assertFalse(history.exists())
+            self.assertEqual(report.removed_browser_items, 1)
+            self.assertEqual(report.errors, [])
+
     def test_reopened_outbox_recovers_original_download_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -79,14 +140,20 @@ class SessionCleanupFileTests(unittest.TestCase):
             old_file.write_text("keep", encoding="utf-8")
             manager = SessionCleanupManager(download_roots=[downloads])
             db_path = str(root / "outbox.sqlite3")
-            AgentOutbox(db_path).remember_session(42, "device-a", list(map(str, manager.download_snapshot)))
+            AgentOutbox(db_path).remember_session(
+                42, "device-a", list(map(str, manager.download_snapshot)),
+                list(map(str, manager.download_snapshot_roots)),
+            )
             new_file = downloads / "session.txt"
             new_file.write_text("remove", encoding="utf-8")
 
             reopened = AgentOutbox(db_path)
             self.assertIsNone(reopened.interrupted_session("device-b"))
-            session_id, snapshot = reopened.interrupted_session("device-a")
-            recovered = SessionCleanupManager(download_roots=[downloads], download_snapshot=snapshot)
+            session_id, snapshot, roots = reopened.interrupted_session("device-a")
+            recovered = SessionCleanupManager(
+                download_roots=[downloads], download_snapshot=snapshot,
+                download_snapshot_roots=roots,
+            )
             recovered.clear_new_downloads(CleanupReport())
             reopened.forget_session(session_id)
 

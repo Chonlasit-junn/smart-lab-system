@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -23,6 +24,20 @@ def get_agent_data_dir() -> Path:
 
 def registration_path() -> Path:
     return get_agent_data_dir() / "device_registration.json"
+
+
+def append_agent_diagnostic(file_name: str, detail: str) -> None:
+    """Append bounded local diagnostics without including user or app data."""
+    try:
+        log_path = get_agent_data_dir() / file_name
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if log_path.exists() and log_path.stat().st_size > 64 * 1024:
+            log_path.write_text("", encoding="utf-8")
+        with log_path.open("a", encoding="utf-8") as log_file:
+            timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            log_file.write(f"{timestamp} {detail}\n")
+    except OSError:
+        pass
 
 
 def load_device_registration() -> Optional[dict[str, Any]]:

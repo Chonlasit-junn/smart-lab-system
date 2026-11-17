@@ -198,6 +198,39 @@ function ConvertTo-VdprojValue([string]$Value) {
     return $Value.Replace('\', '\\').Replace('"', '\"')
 }
 
+$recoveryFile = ""
+if ($Product -eq "Agent" -and -not $isQaAgent) {
+    $compiler = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+    $recoveryExe = Join-Path $payloadRoot 'SmartLabAgentRecovery.exe'
+    & $compiler /nologo /target:winexe /platform:x64 /optimize+ "/out:$recoveryExe" (Join-Path $PSScriptRoot 'AgentRecovery.cs')
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $recoveryExe -PathType Leaf)) {
+        throw 'Failed to build the Agent recovery executable.'
+    }
+    $escapedRecoveryPath = ConvertTo-VdprojValue $recoveryExe
+    $recoveryFile = @"
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+            {
+            "SourcePath" = "8:$escapedRecoveryPath"
+            "TargetName" = "8:SmartLabAgentRecovery.exe"
+            "Tag" = "8:"
+            "Folder" = "8:_11111111111111111111111111111111"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+"@
+}
+
 $productHash = [System.Security.Cryptography.MD5]::Create()
 try {
     $productIdentity = if ($Product -eq "Agent" -and -not $isQaAgent) {
@@ -219,6 +252,7 @@ $replacements = @{
     "__OUTPUT_MSI__" = ConvertTo-VdprojValue $msiPath
     "__APP_EXE_PATH__" = ConvertTo-VdprojValue $appExePath
     "__APP_EXE_NAME__" = $appExeName
+    "__RECOVERY_FILE__" = $recoveryFile
     "__PRODUCT_CODE__" = $productCode
     "__PACKAGE_CODE__" = $packageCode
     "__VERSION__" = $Version
@@ -574,6 +608,9 @@ try {
     }
 
     if ($Product -eq "Agent") {
+        if (-not $isQaAgent -and -not $fileKeysByName.ContainsKey('SmartLabAgentRecovery.exe')) {
+            throw 'The MSI is missing the Agent recovery executable.'
+        }
         $startupComponent = 'SmartLabAgentAutoStart'
         $startupRegistryKeyPath = 'SmartLabAgentAutoStartKeyPath'
         $startupRunEntry = if ($isQaAgent) { 'SmartLabAgentQA' } else { 'SmartLabAgent' }

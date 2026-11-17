@@ -655,6 +655,21 @@ class AgentPolicyTests(unittest.TestCase):
         self.assertEqual(result, {"rules": [], "version": "empty-policy"})
         instance.outbox.save_policy_cache.assert_called_once()
 
+    def test_valid_backend_policy_survives_a_cache_write_error(self):
+        instance = SimpleNamespace(outbox=Mock())
+        instance.outbox.save_policy_cache.side_effect = OSError("cache unavailable")
+        rule = {"id": 2, "app_name": "Blocked", "match_type": "process_name",
+                "match_value": "blocked", "enabled": True}
+        response = make_response(200, {"version": "active", "data": [rule]})
+
+        with patch.object(agent.requests, "get", return_value=response), patch.object(
+            agent, "_append_agent_diagnostic",
+        ) as diagnostic:
+            result = agent.SmartLabAgent._request_policy(instance)
+
+        self.assertEqual(result, {"rules": [rule], "version": "active"})
+        diagnostic.assert_called_once_with("monitor-errors.log", "policy_cache_write_failed error=OSError")
+
     def test_empty_cached_policy_does_not_enable_fallback(self):
         instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
         instance.info_bar = None
@@ -1502,6 +1517,34 @@ class AgentTelemetryTests(unittest.TestCase):
 
 
 class AgentMaintenanceControlTests(unittest.TestCase):
+    def test_registered_startup_schedules_recovery_before_the_control_poll(self):
+        instance = SimpleNamespace(
+            _configure_recovery_task=Mock(), device_control_timer=Mock(), poll_device_control=Mock(),
+        )
+        with patch.multiple(agent, REGISTERED_DEVICE_ID="registered", DEVICE_TOKEN="test-token"), patch.object(
+            agent.QTimer, "singleShot",
+            side_effect=lambda *_: instance._configure_recovery_task.assert_called_once_with(),
+        ):
+            self.assertTrue(agent.SmartLabAgent.start_device_control_polling(instance))
+
+    def test_session_cleanup_runs_when_reporting_raises(self):
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.current_session_id = 42
+        instance.monitor_timer = Mock()
+        instance.heartbeat_timer = Mock()
+        instance.policy_timer = Mock()
+        instance.violation_state = agent.ViolationState()
+        instance.outbox = None
+        instance._stop_window_visibility_monitor = Mock()
+        instance._finish_session_reporting = Mock(side_effect=RuntimeError)
+        instance._cleanup_session = Mock()
+
+        with patch.object(agent, "_append_agent_diagnostic"):
+            instance.stop_and_send_logs(42)
+
+        instance._cleanup_session.assert_called_once_with()
+        self.assertIsNone(instance.current_session_id)
+
     def test_window_close_requests_do_not_stop_agent(self):
         for window in (agent.LoginOverlay, agent.SessionInfoBar):
             with self.subTest(window=window.__name__):
@@ -1517,7 +1560,7 @@ class AgentMaintenanceControlTests(unittest.TestCase):
             repaint=Mock(),
         )
         instance.outbox = Mock()
-        instance.recovery_session = (42, ["old.txt"])
+        instance.recovery_session = (42, ["old.txt"], ["downloads"])
         instance._queue_outbox = Mock(return_value=True)
         instance._cleanup_session = Mock(side_effect=lambda: events.append("cleanup"))
         instance.retry_outbox = Mock()
@@ -1528,7 +1571,9 @@ class AgentMaintenanceControlTests(unittest.TestCase):
             instance._recover_interrupted_session()
 
         self.assertEqual(events, ["lock", "cleanup"])
-        cleanup_manager.assert_called_once_with(download_snapshot=["old.txt"])
+        cleanup_manager.assert_called_once_with(
+            download_snapshot=["old.txt"], download_snapshot_roots=["downloads"],
+        )
         instance._queue_outbox.assert_called_once_with(
             kind="end_session", payload={"session_id": 42, "end_reason": "stale_cleanup"},
             session_id=42, event_id="end-session-42",
@@ -1538,7 +1583,7 @@ class AgentMaintenanceControlTests(unittest.TestCase):
 
     def test_restart_in_admin_maintenance_skips_cleanup(self):
         instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
-        instance.recovery_session = (42, [])
+        instance.recovery_session = (42, [], [])
         instance.outbox = Mock()
         instance.maintenance_expiry_timer = Mock()
         instance._recover_interrupted_session = Mock()
@@ -1749,7 +1794,8 @@ class AgentUiTests(unittest.TestCase):
 
     def test_monitor_diagnostic_log_is_local_small_and_contains_no_raw_error(self):
         with tempfile.TemporaryDirectory() as temp_dir, patch.object(
-            agent, "get_agent_data_dir", return_value=Path(temp_dir),
+            sys.modules[agent._append_agent_diagnostic.__module__],
+            "get_agent_data_dir", return_value=Path(temp_dir),
         ):
             agent._append_monitor_error_log("RuntimeError")
             log_path = Path(temp_dir) / "monitor-errors.log"
