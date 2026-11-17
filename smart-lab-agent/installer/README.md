@@ -18,6 +18,34 @@ The MSI does not contain Admin credentials. The returned device token is saved f
 
 The Backend URL saved with the device credential is used by the Agent. `SMART_LAB_API_URL`, if set on the Windows account, intentionally overrides the saved URL.
 
+## Recover the Agent after End task
+
+Install the Agent MSI, then start the Agent from the shared Windows account used
+in the Lab. After the registered Agent successfully checks its control state,
+it creates its recovery task for that account with normal privileges. It keeps
+an existing task as configured, including a task disabled by an administrator.
+See `%LOCALAPPDATA%\SmartLabAgent\agent-recovery-task.log` for setup results.
+
+If the workstation policy prevents a standard user from creating tasks, the
+administrator can register the task with the companion script. Pass the shared
+Windows account and use `-AgentPath` for a custom installation directory.
+
+```powershell
+.\Register-AgentRecoveryTask.ps1 -LabWindowsUser 'LAB-PC\LabUser'
+```
+
+The visible **Smart Lab Agent Recovery** task checks at sign-in and every minute
+while that account is signed in. It runs with that account's normal privileges.
+The MSI creates the usual sign-in entry on its own. Admins can manage the
+recovery task in Windows Task Scheduler.
+
+The Agent ignores window-close requests on the login and session windows. When
+it restarts with an interrupted session, it shows its login lock, checks the
+device's control state, ends the stale session through the outbox, and cleans
+using the saved pre-session Downloads snapshot. A confirmed Admin maintenance
+pause skips cleanup. If the Backend is unreachable during recovery, the login
+window stays locked until the Agent can check the device state.
+
 ## Usage and violation delivery
 
 The Agent checkpoints a running application's usage every 30 seconds into its
@@ -31,6 +59,8 @@ Windows user, clears browser cookies, saved logins, history and session/cache da
 and deletes only files newly created in Downloads during that Lab Session. Browser
 bookmarks, extensions and settings are preserved. Admin maintenance pauses skip
 cleanup. This is an Agent window lock, not the Windows secure sign-in screen.
+The Agent records cleanup counts and error categories in `session-cleanup.log`
+in its local data directory (normally `%LOCALAPPDATA%\SmartLabAgent`).
 
 After a session starts, the Agent synchronizes UTC time from the Backend and
 advances that clock using Windows' monotonic timer. Changing the workstation's

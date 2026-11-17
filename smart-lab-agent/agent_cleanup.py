@@ -166,6 +166,7 @@ class SessionCleanupManager:
         chromium_roots: Optional[Iterable[os.PathLike[str] | str]] = None,
         firefox_roots: Optional[Iterable[os.PathLike[str] | str]] = None,
         download_roots: Optional[Iterable[os.PathLike[str] | str]] = None,
+        download_snapshot: Optional[Iterable[os.PathLike[str] | str]] = None,
         graceful_close_seconds: int = GRACEFUL_CLOSE_SECONDS,
     ) -> None:
         self.protected_pid = protected_pid or os.getpid()
@@ -203,7 +204,10 @@ class SessionCleanupManager:
         self.firefox_roots = [_as_path(path) for path in firefox_roots]
         self.download_roots = [_as_path(path) for path in download_roots]
         self.graceful_close_seconds = max(0, int(graceful_close_seconds))
-        self.download_snapshot = self._snapshot_downloads()
+        self.download_snapshot = (
+            self._snapshot_downloads()
+            if download_snapshot is None else {_as_path(path) for path in download_snapshot}
+        )
 
     def _snapshot_downloads(self) -> set[Path]:
         snapshot: set[Path] = set()
@@ -238,10 +242,19 @@ class SessionCleanupManager:
         return normalized in self._current_user_names() or account_name in self._current_user_names()
 
     def _candidate_processes(self) -> list[psutil.Process]:
+        # The one-file EXE runs under a separate PyInstaller bootloader process.
+        # Keep the Agent and its launch chain alive until cleanup finishes.
+        protected_pids = {self.protected_pid}
+        try:
+            protected_pids.update(
+                parent.pid for parent in psutil.Process(self.protected_pid).parents()
+            )
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
         candidates: list[psutil.Process] = []
         for process in psutil.process_iter(["pid", "name", "username"]):
             try:
-                if process.pid == self.protected_pid:
+                if process.pid in protected_pids:
                     continue
                 process_name = (process.info.get("name") or "").casefold()
                 if process_name in PROTECTED_PROCESS_NAMES:
@@ -344,11 +357,20 @@ class SessionCleanupManager:
             timeout=FORCE_CLOSE_WAIT_SECONDS,
         )
         report.closed_processes += len(gone)
+        force_stopped = []
         for process in still_alive:
             try:
                 process.kill()
-                report.force_closed_processes += 1
-            except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
+                force_stopped.append(process)
+            except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                continue
+            except psutil.AccessDenied:
+                _record_error(report, "process_close")
+
+        if force_stopped:
+            gone, still_alive = psutil.wait_procs(force_stopped, timeout=FORCE_CLOSE_WAIT_SECONDS)
+            report.force_closed_processes += len(gone)
+            if still_alive:
                 _record_error(report, "process_close")
 
     @staticmethod
@@ -507,7 +529,13 @@ class SessionCleanupManager:
     def cleanup(self) -> CleanupReport:
         """Run process, browser and session-download cleanup in safe order."""
         report = CleanupReport()
-        self.close_user_applications(report)
-        self.clear_browser_data(report)
-        self.clear_new_downloads(report)
+        for step, category in (
+            (self.close_user_applications, "process_close"),
+            (self.clear_browser_data, "browser_data"),
+            (self.clear_new_downloads, "downloads"),
+        ):
+            try:
+                step(report)
+            except (OSError, psutil.Error):
+                _record_error(report, category)
         return report

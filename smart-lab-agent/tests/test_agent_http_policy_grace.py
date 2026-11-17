@@ -1502,6 +1502,93 @@ class AgentTelemetryTests(unittest.TestCase):
 
 
 class AgentMaintenanceControlTests(unittest.TestCase):
+    def test_window_close_requests_do_not_stop_agent(self):
+        for window in (agent.LoginOverlay, agent.SessionInfoBar):
+            with self.subTest(window=window.__name__):
+                event = Mock()
+                window.closeEvent(None, event)
+                event.ignore.assert_called_once_with()
+
+    def test_restart_locks_before_cleaning_and_queues_end_for_stale_session(self):
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        events = []
+        instance.login_screen = SimpleNamespace(
+            reset_and_show=Mock(side_effect=lambda: events.append("lock")),
+            repaint=Mock(),
+        )
+        instance.outbox = Mock()
+        instance.recovery_session = (42, ["old.txt"])
+        instance._queue_outbox = Mock(return_value=True)
+        instance._cleanup_session = Mock(side_effect=lambda: events.append("cleanup"))
+        instance.retry_outbox = Mock()
+
+        with patch.object(agent, "SESSION_CLEANUP_ENABLED", True), patch.object(
+            agent, "SessionCleanupManager",
+        ) as cleanup_manager:
+            instance._recover_interrupted_session()
+
+        self.assertEqual(events, ["lock", "cleanup"])
+        cleanup_manager.assert_called_once_with(download_snapshot=["old.txt"])
+        instance._queue_outbox.assert_called_once_with(
+            kind="end_session", payload={"session_id": 42, "end_reason": "stale_cleanup"},
+            session_id=42, event_id="end-session-42",
+        )
+        instance.outbox.forget_session.assert_called_once_with(42)
+        self.assertIsNone(instance.recovery_session)
+
+    def test_restart_in_admin_maintenance_skips_cleanup(self):
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.recovery_session = (42, [])
+        instance.outbox = Mock()
+        instance.maintenance_expiry_timer = Mock()
+        instance._recover_interrupted_session = Mock()
+        instance._apply_device_control_status = Mock()
+        with patch.object(agent, "_sync_backend_clock", return_value=False):
+            instance._handle_device_control_result({
+                "status": 200, "control_status": "maintenance",
+            }, None)
+        instance._apply_device_control_status.assert_called_once_with("maintenance")
+        instance._recover_interrupted_session.assert_not_called()
+        instance.outbox.forget_session.assert_called_once_with(42)
+        self.assertIsNone(instance.recovery_session)
+
+    def test_confirmed_maintenance_expires_when_backend_is_unreachable(self):
+        now = datetime(2026, 11, 17, 2, tzinfo=timezone.utc)
+        login_screen = SimpleNamespace(
+            is_authenticated=False,
+            focus_timer=Mock(),
+            hide=Mock(),
+            reset_and_show=Mock(),
+        )
+        instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
+        instance.device_control_mode = "active"
+        instance.login_screen = login_screen
+        instance.info_bar = None
+        instance.current_session_id = None
+        instance._stop_window_visibility_monitor = Mock()
+        instance._last_device_control_error = None
+        instance.maintenance_expiry_timer = Mock()
+        instance.poll_device_control = Mock()
+
+        with patch.object(agent, "_sync_backend_clock", return_value=True), patch.object(
+            agent, "_utc_now", return_value=now,
+        ):
+            instance._handle_device_control_result({
+                "status": 200,
+                "control_status": "maintenance",
+                "server_time": now.isoformat(),
+                "maintenance_until": (now + timedelta(minutes=5)).isoformat(),
+            }, None)
+
+        self.assertEqual(instance.device_control_mode, "maintenance")
+        instance.maintenance_expiry_timer.start.assert_called_once_with(300_000)
+        instance._handle_device_control_result(None, RuntimeError("offline"))
+        instance.maintenance_expiry_timer.stop.assert_called_once()
+        instance._resume_after_maintenance_expiry()
+        self.assertEqual(instance.device_control_mode, "active")
+        login_screen.reset_and_show.assert_called_once_with()
+        instance.poll_device_control.assert_called_once_with()
+
     def test_pause_hides_login_and_ends_session_without_cleanup(self):
         info_bar = SimpleNamespace(
             countdown_timer=SimpleNamespace(stop=Mock()),

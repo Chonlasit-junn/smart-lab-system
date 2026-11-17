@@ -89,12 +89,40 @@ class AgentOutbox:
                     payload TEXT NOT NULL,
                     saved_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS session_recovery (
+                    slot INTEGER PRIMARY KEY CHECK(slot = 1),
+                    session_id INTEGER NOT NULL,
+                    device_id TEXT NOT NULL,
+                    download_snapshot TEXT NOT NULL
+                );
                 """
             )
 
     @staticmethod
     def _now() -> datetime:
         return datetime.now(timezone.utc)
+
+    def remember_session(self, session_id: int, device_id: str, download_snapshot: list[str]) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO session_recovery VALUES (1, ?, ?, ?)",
+                (session_id, device_id, json.dumps(download_snapshot, ensure_ascii=False)),
+            )
+
+    def interrupted_session(self, device_id: str) -> Optional[tuple[int, list[str]]]:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT session_id, download_snapshot FROM session_recovery WHERE device_id = ?",
+                (device_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return int(row["session_id"]), json.loads(row["download_snapshot"])
+
+    def forget_session(self, session_id: int) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute("DELETE FROM session_recovery WHERE session_id = ?", (session_id,))
 
     def enqueue(
         self,

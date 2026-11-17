@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from agent_device import get_agent_data_dir, load_device_registration
 from agent_clock import ServerClock
 from agent_outbox import AgentOutbox
+from agent_recovery_task import ensure_recovery_task
 from program_identity import program_usage_name, read_executable_identity
 from agent_policy import (
     DEFAULT_FALLBACK_RULES,
@@ -64,18 +65,22 @@ def _parse_booking_deadline(value):
         return None
 
 
-def _append_monitor_error_log(error_type):
+def _append_agent_diagnostic(file_name, detail):
     """Persist a small, local-only diagnostic without recording app or user data."""
     try:
-        log_path = get_agent_data_dir() / "monitor-errors.log"
+        log_path = get_agent_data_dir() / file_name
         log_path.parent.mkdir(parents=True, exist_ok=True)
         if log_path.exists() and log_path.stat().st_size > 64 * 1024:
             log_path.write_text("", encoding="utf-8")
         with log_path.open("a", encoding="utf-8") as log_file:
-            log_file.write(f"{_utc_now().isoformat(timespec='seconds')} {error_type}\n")
+            log_file.write(f"{_utc_now().isoformat(timespec='seconds')} {detail}\n")
     except OSError:
         # Diagnostics must never interrupt monitoring or session shutdown.
         pass
+
+
+def _append_monitor_error_log(error_type):
+    _append_agent_diagnostic("monitor-errors.log", error_type)
 
 
 prepare_qt_dll_search_path()
@@ -450,6 +455,9 @@ class ViolationDialog(QDialog):
 
 # ── SessionInfoBar ────────────────────────────────────────────────────────────
 class SessionInfoBar(QWidget):
+    def closeEvent(self, event):
+        event.ignore()
+
     def __init__(self, email, overlay, session_id, booking_ends_at=None):
         super().__init__()
         self.email      = email
@@ -705,6 +713,9 @@ class SessionInfoBar(QWidget):
 
 # ── LoginOverlay ──────────────────────────────────────────────────────────────
 class LoginOverlay(QWidget):
+    def closeEvent(self, event):
+        event.ignore()
+
     def __init__(self, agent):
         super().__init__()
         self.agent = agent
@@ -822,6 +833,9 @@ class LoginOverlay(QWidget):
 
     def handle_login(self):
         if getattr(self.agent, "device_control_mode", "active") != "active":
+            return
+        if getattr(self.agent, "recovery_session", None) is not None:
+            self._show_error("กำลังตรวจสอบ Session ที่ค้าง กรุณารอสักครู่")
             return
         if not self.login_btn.isEnabled():
             return
@@ -961,20 +975,20 @@ class LoginOverlay(QWidget):
                         cleanup_session=False,
                     )
                     return
-                self.is_authenticated = True
-                self.hide()
                 self.info_bar = SessionInfoBar(
                     result.get("email", self.email_input.text().strip()),
                     self,
                     session_id,
                     booking_ends_at=result.get("booking_ends_at"),
                 )
-                self.info_bar.show()
                 self.agent.start_monitoring(
                     session_id,
                     self.info_bar,
                     booking_ends_at=result.get("booking_ends_at"),
                 )
+                self.is_authenticated = True
+                self.hide()
+                self.info_bar.show()
             elif kind == "connection_error":
                 self._show_error("ไม่สามารถเชื่อมต่อ Server ได้ กรุณาตรวจสอบอินเทอร์เน็ต")
             elif kind == "approval_required":
@@ -1005,8 +1019,11 @@ class SmartLabAgent:
         self._outbox_flush_lock = threading.Lock()
         self._outbox_state_lock = threading.Lock()
         self._pending_fallback_violations = []
+        self.recovery_session = None
         try:
             self.outbox = AgentOutbox()
+            if REGISTERED_DEVICE_ID:
+                self.recovery_session = self.outbox.interrupted_session(REGISTERED_DEVICE_ID)
             self._outbox_has_pending = bool(self.outbox.pending_count())
             print(f"Agent outbox: {self.outbox.path}")
         except Exception as e:
@@ -1029,6 +1046,7 @@ class SmartLabAgent:
         self.device_control_mode = "active"
         self._device_control_poll_in_flight = False
         self._last_device_control_error = None
+        self._recovery_task_checked = False
         self.policy_rules = []
         self.policy_version = None
         self.policy_source = None
@@ -1064,6 +1082,10 @@ class SmartLabAgent:
         self.outbox_retry_timer.start(30_000)
         self.device_control_timer = QTimer()
         self.device_control_timer.timeout.connect(self.poll_device_control)
+        self.maintenance_expiry_timer = QTimer()
+        self.maintenance_expiry_timer.setSingleShot(True)
+        self.maintenance_expiry_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.maintenance_expiry_timer.timeout.connect(self._resume_after_maintenance_expiry)
         QTimer.singleShot(0, self.retry_outbox)
 
     def get_or_create_session_attempt(self, email):
@@ -1338,10 +1360,66 @@ class SmartLabAgent:
             return
 
         self._last_device_control_error = None
-        _sync_backend_clock(result.get("server_time"))
+        clock_synced = _sync_backend_clock(result.get("server_time"))
         requested_status = result.get("control_status")
         if requested_status in {"active", "maintenance"}:
+            self.maintenance_expiry_timer.stop()
+            deadline = _parse_booking_deadline(result.get("maintenance_until"))
+            if requested_status == "maintenance" and clock_synced and deadline is not None:
+                remaining_ms = math.ceil((deadline - _utc_now()).total_seconds() * 1000)
+                if remaining_ms <= 0:
+                    requested_status = "active"
+                elif remaining_ms <= 2_147_483_647:
+                    self.maintenance_expiry_timer.start(remaining_ms)
             self._apply_device_control_status(requested_status)
+            if getattr(self, "recovery_session", None) is not None:
+                if requested_status == "maintenance":
+                    # A confirmed Admin pause takes precedence over crash cleanup.
+                    self.outbox.forget_session(self.recovery_session[0])
+                    self.recovery_session = None
+                else:
+                    self._recover_interrupted_session()
+            self._configure_recovery_task()
+
+    def _configure_recovery_task(self):
+        if getattr(self, "_recovery_task_checked", True):
+            return
+        self._recovery_task_checked = self.background_tasks.submit(
+            "recovery-task-setup", ensure_recovery_task, self._handle_recovery_task_setup,
+        )
+
+    @staticmethod
+    def _handle_recovery_task_setup(result, error):
+        if error is not None:
+            result = f"failed error={type(error).__name__}"
+        if result != "not_installed":
+            _append_agent_diagnostic("agent-recovery-task.log", str(result))
+
+    def _recover_interrupted_session(self):
+        session_id, download_snapshot = self.recovery_session
+        self.login_screen.reset_and_show()
+        self.login_screen.repaint()
+        queued = self._queue_outbox(
+            kind="end_session",
+            payload={"session_id": session_id, "end_reason": "stale_cleanup"},
+            session_id=session_id,
+            event_id=f"end-session-{session_id}",
+        )
+        if not queued:
+            return
+
+        if SESSION_CLEANUP_ENABLED:
+            self.session_cleanup = SessionCleanupManager(download_snapshot=download_snapshot)
+            self._cleanup_session()
+        self.outbox.forget_session(session_id)
+        self.recovery_session = None
+        self.retry_outbox()
+
+    def _resume_after_maintenance_expiry(self):
+        # The server-issued lease has ended. Restore the login overlay even
+        # while offline; starting a Lab session still requires Backend approval.
+        if self._apply_device_control_status("active"):
+            self.poll_device_control()
 
     def _apply_device_control_status(self, requested_status):
         if requested_status not in {"active", "maintenance"}:
@@ -1572,6 +1650,17 @@ class SmartLabAgent:
                 # Cleanup must never prevent a user from starting a Session.
                 self.session_cleanup = None
                 print(f"เตรียม Session Cleanup ไม่สำเร็จ: {e}")
+            if self.session_cleanup is not None and self.outbox is not None and REGISTERED_DEVICE_ID:
+                try:
+                    self.outbox.remember_session(
+                        session_id,
+                        REGISTERED_DEVICE_ID,
+                        sorted(map(str, self.session_cleanup.download_snapshot)),
+                    )
+                except Exception as error:
+                    _append_agent_diagnostic(
+                        "session-cleanup.log", f"recovery_state_save_failed error={type(error).__name__}",
+                    )
         self._load_cached_policy()
         if self.policy_source is None:
             # Keep local protection active while the first server request runs.
@@ -2500,10 +2589,18 @@ class SmartLabAgent:
         cleanup = self.session_cleanup
         self.session_cleanup = None
         if cleanup is None:
+            reason = "initialization_failed" if SESSION_CLEANUP_ENABLED else "disabled_by_config"
+            _append_agent_diagnostic("session-cleanup.log", f"skipped reason={reason}")
             return
 
         try:
             report = cleanup.cleanup()
+            _append_agent_diagnostic(
+                "session-cleanup.log",
+                f"closed={report.closed_processes} forced={report.force_closed_processes} "
+                f"browser={report.removed_browser_items} downloads={report.removed_downloads} "
+                f"errors={','.join(report.errors) or 'none'}",
+            )
             print(
                 "Session Cleanup: "
                 f"ปิดโปรแกรม {report.closed_processes} รายการ, "
@@ -2517,6 +2614,7 @@ class SmartLabAgent:
             # Session delivery has already been queued before cleanup starts;
             # an unexpected cleanup error must not interrupt logout.
             print(f"Session Cleanup ล้มเหลว: {e}")
+            _append_agent_diagnostic("session-cleanup.log", f"failed error={type(e).__name__}")
 
     def _send_fallback_session_logs(
         self,
@@ -2682,6 +2780,13 @@ class SmartLabAgent:
         else:
             # Maintenance must not close apps, clear browser data, or remove files.
             self.session_cleanup = None
+        if isinstance(self.outbox, AgentOutbox):
+            try:
+                self.outbox.forget_session(session_id)
+            except Exception as error:
+                _append_agent_diagnostic(
+                    "session-cleanup.log", f"recovery_state_clear_failed error={type(error).__name__}",
+                )
         self.usage_segments = []
         self.current_activity_name = None
         self.current_activity_started_at = None
