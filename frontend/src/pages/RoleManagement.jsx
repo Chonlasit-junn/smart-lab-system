@@ -499,7 +499,7 @@ export default function RoleManagement() {
           <TextField label={t("admin.roleDisplayName")} value={displayName} onChange={(event) => setDisplayName(event.target.value)} fullWidth autoFocus inputProps={{ maxLength: 100 }} />
         </DialogContent>
         <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={() => setEditingRole(null)} disabled={savingRole} sx={{ textTransform: "none", color: "#64748b" }}>{t("common.cancel")}</Button>
+          <Button color="error" onClick={() => setEditingRole(null)} disabled={savingRole} sx={{ textTransform: "none" }}>{t("common.cancel")}</Button>
           <Button variant="contained" startIcon={<Save />} onClick={handleSaveRole} disabled={savingRole || !displayName.trim()} sx={{ textTransform: "none", borderRadius: 2.5, boxShadow: "none" }}>
             {savingRole ? t("admin.saving") : t("common.save")}
           </Button>

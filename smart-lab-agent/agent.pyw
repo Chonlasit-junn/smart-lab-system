@@ -309,13 +309,9 @@ DEBUG_MODE = (
     if _debug_override is not None
     else bool(BUILD_DEBUG_MODE)
 )
-WINDOWS_LOGOFF_ENABLED = os.getenv(
-    "SMART_LAB_AGENT_WINDOWS_LOGOFF",
-    "0",
-).strip().lower() in {"1", "true", "yes", "on"}
-# Keep workstation cleanup opt-in while it is being validated on Lab machines.
-# Set SMART_LAB_SESSION_CLEANUP=1 explicitly when this feature is ready.
-_cleanup_default = "0"
+# Session cleanup is enabled on shared Lab workstations; set this to 0 only
+# when a device needs temporary troubleshooting without cleanup.
+_cleanup_default = "1"
 SESSION_CLEANUP_ENABLED = os.getenv(
     "SMART_LAB_SESSION_CLEANUP",
     _cleanup_default,
@@ -697,12 +693,15 @@ class SessionInfoBar(QWidget):
         countdown_timer = getattr(self, "countdown_timer", None)
         if countdown_timer is not None:
             countdown_timer.stop()
+        # Put the Agent login lock on screen before cleanup closes applications
+        # and clears session data. Repaint now because cleanup runs synchronously.
+        self.hide()
+        self.overlay.reset_and_show()
+        self.overlay.repaint()
         self.overlay.agent.stop_and_send_logs(
             self.session_id,
             end_reason="violation" if reason else "logout",
         )
-        self.hide()
-        self.overlay.reset_and_show()
 
 
 # ── LoginOverlay ──────────────────────────────────────────────────────────────
@@ -2708,11 +2707,6 @@ class SmartLabAgent:
         print("\n--- บันทึกข้อมูลลง local outbox ---")
         print(f"Data: {summary}")
 
-        should_logoff = (
-            WINDOWS_LOGOFF_ENABLED
-            and not DEBUG_MODE
-            and end_reason == "violation"
-        )
         if self.outbox is not None:
             violations = list(self._pending_fallback_violations)
             self._pending_fallback_violations.clear()
@@ -2755,7 +2749,7 @@ class SmartLabAgent:
                     fallback_delivered = self._send_fallback_violation_logs(fallback_violations)
                 # A normal session can accumulate more than ten checkpoint
                 # events. Drain bounded pages so end-session is not left
-                # behind them when Windows logs off.
+                # behind its usage events in the durable queue.
                 for _ in range(10):
                     self.flush_outbox(limit=100)
                     if not self.outbox.has_pending_for_session(session_id):
@@ -2767,8 +2761,6 @@ class SmartLabAgent:
                     print(f"ส่งข้อมูลจาก local outbox ไม่สำเร็จ: {error}")
                 elif pending:
                     print("ยังมีข้อมูลรอส่ง จะ retry อัตโนมัติเมื่อ Internet กลับมา")
-                if should_logoff and error is None and not pending:
-                    os.system("shutdown /l /f")
 
             self.background_tasks.submit(
                 f"outbox-session-{session_id}",
@@ -2782,8 +2774,6 @@ class SmartLabAgent:
             def handle_fallback_delivery(delivered, error):
                 if error is not None:
                     print(f"ส่งบันทึก Session ไม่สำเร็จ: {error}")
-                if should_logoff and error is None and delivered:
-                    os.system("shutdown /l /f")
 
             self.background_tasks.submit(
                 f"fallback-session-{session_id}",

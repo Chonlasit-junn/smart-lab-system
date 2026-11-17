@@ -166,6 +166,7 @@ export default function NotificationBell({
             {t("common.notifications")}
           </Typography>
           <Button
+            color="error"
             size="small"
             startIcon={<DeleteSweep fontSize="small" />}
             onClick={handleClearNotifications}

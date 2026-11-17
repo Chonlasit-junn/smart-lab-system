@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import LoadError from "../components/LoadError";
+import ConfirmActionDialog from "../components/ConfirmActionDialog";
 import { LoadingTableRows } from "../components/PageLoadingState";
 import {
   Box,
@@ -68,6 +69,7 @@ export default function BlacklistManager() {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const [openDialog, setOpenDialog] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
@@ -169,14 +171,22 @@ export default function BlacklistManager() {
     }
   };
 
-  const handleDelete = async (id, appName) => {
-    if (!window.confirm(`${t("admin.confirmRemoveBlacklistItem")}: ${appName}?`)) return;
+  const handleDelete = async (id) => {
     try {
       await axios.delete(`${API_URL}/admin/blacklist/${id}`, authConfig());
       fetchBlacklist();
     } catch (err) {
       alert(getApiErrorMessage(err, t, t("admin.deleteBlacklistFailed")));
     }
+  };
+
+  const requestDelete = (id, appName) => {
+    setConfirmAction({
+      title: t("common.confirm"),
+      message: `${t("admin.confirmRemoveBlacklistItem")}: ${appName}?`,
+      confirmLabel: t("common.delete"),
+      onConfirm: () => handleDelete(id),
+    });
   };
 
   // --- derived data ---
@@ -578,7 +588,7 @@ export default function BlacklistManager() {
                               <IconButton
                                 size="small"
                                 onClick={() =>
-                                  handleDelete(item.id, item.app_name)
+                                  requestDelete(item.id, item.app_name)
                                 }
                                 sx={{
                                   color: "#ef4444",
@@ -704,9 +714,10 @@ export default function BlacklistManager() {
 
         <DialogActions sx={{ pb: 1, pr: 2, gap: 1 }}>
           <Button
+            color="error"
             disabled={saving}
             onClick={() => setOpenDialog(false)}
-            sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
+            sx={{ fontWeight: "600", textTransform: "none" }}
           >
             {t("common.cancel")}
           </Button>
@@ -717,17 +728,23 @@ export default function BlacklistManager() {
             disableElevation
             startIcon={isEditing ? <Save /> : <Add />}
             sx={{
-              bgcolor: "#ef4444",
               fontWeight: "600",
               borderRadius: 3,
               textTransform: "none",
-              "&:hover": { bgcolor: "#dc2626" },
             }}
           >
             {isEditing ? t("common.save") : t("admin.addProgram")}
           </Button>
         </DialogActions>
       </Dialog>
+      <ConfirmActionDialog
+        open={Boolean(confirmAction)}
+        title={confirmAction?.title}
+        message={confirmAction?.message}
+        confirmLabel={confirmAction?.confirmLabel}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={confirmAction?.onConfirm || (() => {})}
+      />
     </Box>
   );
 }

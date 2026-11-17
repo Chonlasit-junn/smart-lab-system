@@ -90,10 +90,6 @@ export const registerLocales = {
     otpNotConfigured: 'Email verification is unavailable. Please contact support.',
     selectFacultyFirst: 'Select a faculty first',
     faceCaptureAlt: 'Captured face image',
-    devSkipStep2: 'DEV: Skip to Step 2',
-    devSkipStep3: 'DEV: Skip to Step 3',
-    devSkipStep4: 'DEV: Skip to Step 4',
-    devGenerateFace: 'DEV: Generate mock face image',
     langToggle: 'English',
   },
   th: {
@@ -180,10 +176,6 @@ export const registerLocales = {
     otpNotConfigured: 'ระบบยืนยันอีเมลยังไม่พร้อม กรุณาติดต่อผู้ดูแล',
     selectFacultyFirst: 'กรุณาเลือกคณะก่อน',
     faceCaptureAlt: 'ภาพใบหน้าที่ถ่ายไว้',
-    devSkipStep2: 'DEV: ข้ามไปขั้นตอนที่ 2',
-    devSkipStep3: 'DEV: ข้ามไปขั้นตอนที่ 3',
-    devSkipStep4: 'DEV: ข้ามไปขั้นตอนที่ 4',
-    devGenerateFace: 'DEV: สร้างภาพใบหน้าจำลอง',
     langToggle: 'ภาษาไทย',
   },
 };

@@ -269,13 +269,29 @@ if ($UseVisualStudioAutomation) {
     # Isolated hidden IDE instance: do not attach to or close the user's IDE.
     $ideVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($devenv).FileMajorPart
     $dte = $null
+    function Invoke-VisualStudioAutomationCall([scriptblock]$Call) {
+        for ($attempt = 0; $attempt -lt 60; $attempt++) {
+            try {
+                return (& $Call)
+            } catch {
+                $comError = $_.Exception
+                while ($comError.InnerException -and $comError.HResult -ne -2147418111) {
+                    $comError = $comError.InnerException
+                }
+                if ($comError.HResult -ne -2147418111 -or $attempt -eq 59) {
+                    throw
+                }
+                Start-Sleep -Milliseconds 500
+            }
+        }
+    }
     try {
         $dte = New-Object -ComObject "VisualStudio.DTE.$ideVersion.0"
-        $dte.SuppressUI = $true
-        $dte.MainWindow.Visible = $false
-        $dte.Solution.Open($solutionPath)
-        $dte.Solution.SolutionBuild.SolutionConfigurations.Item('Release').Activate()
-        $dte.Solution.SolutionBuild.Build($true)
+        Invoke-VisualStudioAutomationCall { $dte.SuppressUI = $true }
+        Invoke-VisualStudioAutomationCall { $dte.MainWindow.Visible = $false }
+        Invoke-VisualStudioAutomationCall { $dte.Solution.Open($solutionPath) }
+        Invoke-VisualStudioAutomationCall { $dte.Solution.SolutionBuild.SolutionConfigurations.Item('Release').Activate() }
+        Invoke-VisualStudioAutomationCall { $dte.Solution.SolutionBuild.Build($true) }
         if ($dte.Solution.SolutionBuild.LastBuildInfo -ne 0) {
             throw "Visual Studio automation reported MSI build errors."
         }

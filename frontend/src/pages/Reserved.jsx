@@ -584,7 +584,9 @@ export default function Reserved() {
                                 label={
                                   row.status === "no_show"
                                     ? t("user.noShow")
-                                    : t("user.sessionCompleted")
+                                    : row.status === "cancelled"
+                                      ? t("user.cancelled")
+                                      : t("user.sessionCompleted")
                                 }
                                 size="small"
                                 variant="outlined"
@@ -632,7 +634,7 @@ export default function Reserved() {
         onClose={handleCloseCancelDialog}
         PaperProps={{ sx: { borderRadius: 3, p: 1, minWidth: "350px" } }}
       >
-        <DialogTitle sx={{ fontWeight: "600", color: "#0f172a" }}>
+        <DialogTitle sx={{ fontWeight: "600", color: "error.main" }}>
           {t("user.cancelReservation")}
         </DialogTitle>
         <DialogContent>
@@ -643,7 +645,8 @@ export default function Reserved() {
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button
             onClick={handleCloseCancelDialog}
-            sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
+            color="error"
+            sx={{ fontWeight: "600", textTransform: "none" }}
           >
             {t("user.keepReservation")}
           </Button>

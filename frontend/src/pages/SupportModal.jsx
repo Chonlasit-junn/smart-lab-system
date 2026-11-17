@@ -91,7 +91,7 @@ export default function SupportModal({ open, onClose }) {
         />
       </DialogContent>
       <DialogActions className="support-dialog-actions">
-        <Button onClick={onClose} color="inherit">
+        <Button onClick={onClose} color="error">
           <span className="support-button-label">{t('common.cancel')}</span>
         </Button>
         <Button onClick={handleSubmit} variant="contained" disabled={loading}>

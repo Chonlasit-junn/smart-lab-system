@@ -5,7 +5,7 @@ The MSI is built with Microsoft's **Visual Studio Installer Projects** extension
 - **Register This Computer** signs in with an Admin account, loads active Labs, and registers this computer to the selected Lab.
 - **Smart Lab Agent** uses that credential to report to the Backend and enforce the Lab policy.
 
-The MSI is per-machine and defaults to `Program Files\Smart Lab\Device Agent`; the setup wizard lets the installer choose another destination. It adds the Agent and registration shortcuts under **Start → Smart Lab**, plus an **Uninstall Smart Lab Agent** shortcut and a standard entry in Windows Apps/Programs. The installer also offers a checkbox to add both app shortcuts to the Desktop, selected by default. The Agent opens its login screen when a user signs in to Windows, so it can be used again after a policy-triggered Windows logoff. This is a desktop app, not a Windows service; the face scanner does not auto-start.
+The MSI is per-machine and defaults to `Program Files\Smart Lab\Device Agent`; the setup wizard lets the installer choose another destination. It adds the Agent and registration shortcuts under **Start → Smart Lab**, plus an **Uninstall Smart Lab Agent** shortcut and a standard entry in Windows Apps/Programs. The installer also offers a checkbox to add both app shortcuts to the Desktop, selected by default. The Agent opens at Windows sign-in and returns to its own full-screen login lock when a Lab Session ends. It does not log off Windows and is not a Windows service; the face scanner does not auto-start.
 
 ## Registering a Lab computer
 
@@ -24,6 +24,13 @@ The Agent checkpoints a running application's usage every 30 seconds into its
 SQLite outbox. On a crash, completed checkpoints survive; the most recent partial
 interval can still be lost. At the end of a warning, it checks whether the detected
 application is still present before ending the session.
+
+Session cleanup is enabled by default on the Agent MSI. When a Lab Session ends,
+the Agent shows its login lock first, then closes applications owned by the current
+Windows user, clears browser cookies, saved logins, history and session/cache data,
+and deletes only files newly created in Downloads during that Lab Session. Browser
+bookmarks, extensions and settings are preserved. Admin maintenance pauses skip
+cleanup. This is an Agent window lock, not the Windows secure sign-in screen.
 
 After a session starts, the Agent synchronizes UTC time from the Backend and
 advances that clock using Windows' monotonic timer. Changing the workstation's
@@ -146,10 +153,9 @@ device, and ban checks as regular sessions. The QA build does not bypass booking
 time or other access policies.
 The QA Agent writes monitor exception timestamps and exception types only to
 `%LOCALAPPDATA%\SmartLabAgentQA\SmartLabAgent\monitor-errors.log`.
-Agent build version is embedded from `-Version`. Windows logoff is disabled by
-default. Set `SMART_LAB_AGENT_WINDOWS_LOGOFF=1` to opt in to Windows logoff after
-a policy violation in non-debug builds. `SMART_LAB_AGENT_DEBUG` can still
-override debug behavior per Windows account.
+Agent build version is embedded from `-Version`. Windows logoff is not performed;
+the Agent ends its Lab Session and shows its own full-screen login lock instead.
+`SMART_LAB_AGENT_DEBUG` can still override debug behavior per Windows account.
 
 Gatekeeper registers a distinct `gatekeeper-…` device against its selected Lab
 and stores its credential in the current Windows user's LocalAppData. Migration

@@ -97,7 +97,12 @@ function AppContent() {
       },
       text: {
         primary: mode === "dark" ? "#F8FAFC" : "#17202A",
-        secondary: mode === "dark" ? "#CBD5E1" : "#52606D",
+        secondary: mode === "dark" ? "#DBE4EE" : "#52606D",
+      },
+      error: {
+        main: mode === "dark" ? "#F87171" : "#B42318",
+        dark: mode === "dark" ? "#EF4444" : "#912018",
+        contrastText: "#FFFFFF",
       },
       divider: mode === "dark" ? "#3A4758" : "#D8DDD8",
     },

@@ -3,6 +3,7 @@
 // ============================================================================
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LoadError from "../components/LoadError";
+import ConfirmActionDialog from "../components/ConfirmActionDialog";
 import { LoadingTableRows, PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Box,
@@ -135,6 +136,7 @@ export default function ManageLabs() {
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [schedulesFailed, setSchedulesFailed] = useState(false);
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
   const [newLab, setNewLab] = useState({
     name: "",
     code: "",
@@ -258,13 +260,6 @@ export default function ManageLabs() {
   };
 
   const handleDeleteLab = async () => {
-    if (
-      !window.confirm(
-        `${t("admin.confirmDeleteLabPrefix")} ${activeLab.code}?\n${t("admin.confirmDeleteLabSuffix")}`,
-      )
-    )
-      return;
-
     try {
       await axios.delete(`${API_URL}/admin/labs/${activeLab.id}`, authConfig());
       alert(t("admin.deleteSucceeded"));
@@ -273,6 +268,16 @@ export default function ManageLabs() {
     } catch (error) {
       alert(getApiErrorMessage(error, t, t("admin.deleteFailed")));
     }
+  };
+
+  const requestDeleteLab = () => {
+    if (!activeLab) return;
+    setConfirmAction({
+      title: t("common.confirm"),
+      message: `${t("admin.confirmDeleteLabPrefix")} ${activeLab.code}?\n${t("admin.confirmDeleteLabSuffix")}`,
+      confirmLabel: t("common.delete"),
+      onConfirm: handleDeleteLab,
+    });
   };
 
   const handleToggleStatus = async () => {
@@ -395,14 +400,21 @@ export default function ManageLabs() {
   };
 
   const handleDeleteSchedule = async (scheduleId) => {
-    if (!window.confirm(t("admin.deleteScheduleConfirmation")))
-      return;
     try {
       await axios.delete(`${API_URL}/admin/schedules/${scheduleId}`, authConfig());
       fetchSchedules(activeLab.id);
     } catch {
       alert(t("admin.deleteFailed"));
     }
+  };
+
+  const requestDeleteSchedule = (scheduleId) => {
+    setConfirmAction({
+      title: t("common.confirm"),
+      message: t("admin.deleteScheduleConfirmation"),
+      confirmLabel: t("common.delete"),
+      onConfirm: () => handleDeleteSchedule(scheduleId),
+    });
   };
 
   // ============================================================================
@@ -1042,7 +1054,7 @@ export default function ManageLabs() {
                             variant="outlined"
                             color="error"
                             startIcon={<Delete />}
-                            onClick={handleDeleteLab}
+                            onClick={requestDeleteLab}
                             sx={{
                               fontWeight: "600",
                               borderRadius: 3,
@@ -1323,7 +1335,7 @@ export default function ManageLabs() {
                                           bgcolor: "#fef2f2",
                                         }}
                                         onClick={() =>
-                                          handleDeleteSchedule(sch.id)
+                                          requestDeleteSchedule(sch.id)
                                         }
                                       >
                                         <Delete fontSize="small" />
@@ -1416,8 +1428,9 @@ export default function ManageLabs() {
         </DialogContent>
         <DialogActions sx={{ pb: 1, pr: 2 }}>
           <Button
+            color="error"
             onClick={() => setOpenCreateDialog(false)}
-            sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
+            sx={{ fontWeight: "600", textTransform: "none" }}
           >
             {t("common.cancel")}
           </Button>
@@ -1654,8 +1667,9 @@ export default function ManageLabs() {
         </DialogContent>
         <DialogActions sx={{ pb: 1, pr: 2 }}>
           <Button
+            color="error"
             onClick={() => setOpenScheduleDialog(false)}
-            sx={{ color: "#64748b", fontWeight: "600", textTransform: "none" }}
+            sx={{ fontWeight: "600", textTransform: "none" }}
           >
             {t("common.cancel")}
           </Button>
@@ -1674,6 +1688,14 @@ export default function ManageLabs() {
           </Button>
         </DialogActions>
       </Dialog>
+      <ConfirmActionDialog
+        open={Boolean(confirmAction)}
+        title={confirmAction?.title}
+        message={confirmAction?.message}
+        confirmLabel={confirmAction?.confirmLabel}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={confirmAction?.onConfirm || (() => {})}
+      />
     </Box>
   );
 }

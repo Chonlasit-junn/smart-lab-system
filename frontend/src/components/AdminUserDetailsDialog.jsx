@@ -35,6 +35,7 @@ import {
   ReportProblem,
 } from "@mui/icons-material";
 import { formatDate, formatDateTime } from "../utils/dateFormat";
+import { shouldDisplayPointLog } from "../utils/pointReason.js";
 import { profileImageUrl } from "../utils/profileImageUrl.js";
 import { useLanguage } from "../context/language-context.js";
 
@@ -297,10 +298,11 @@ function UserViolations({ rows, t, locale }) {
 }
 
 function UserPointHistory({ pointLogs, dailyScores, t, locale }) {
+  const visiblePointLogs = pointLogs.filter(shouldDisplayPointLog);
   return (
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.5fr) minmax(280px, 1fr)" }, gap: 3 }}>
       <Box>
-        {!pointLogs.length ? (
+        {!visiblePointLogs.length ? (
           <EmptyHistory icon={<History sx={{ fontSize: 52, mb: 1 }} />} title={t("admin.userDetails.noPointsHistory")} description={t("admin.userDetails.noPointsHistoryDescription")} />
         ) : (
           <ResponsiveDataTable sx={{ overflowX: "auto" }}>
@@ -314,7 +316,7 @@ function UserPointHistory({ pointLogs, dailyScores, t, locale }) {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {pointLogs.map((log) => (
+                {visiblePointLogs.map((log) => (
                   <TableRow key={log.id} sx={{ "& td": { borderBottom: "1px solid #f1f5f9" } }}>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDateTime(log.created_at, locale)}</TableCell>
                     <TableCell sx={{ maxWidth: 260, overflowWrap: "break-word" }}>

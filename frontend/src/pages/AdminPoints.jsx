@@ -35,8 +35,6 @@ import {
   Lock,
   Notifications,
   Refresh,
-  RemoveCircleOutline,
-  Restore,
   Search,
   Visibility,
   WarningAmber,
@@ -50,10 +48,6 @@ import { useLanguage } from "../context/language-context.js";
 import AdminNotificationBell from "../components/AdminNotificationBell";
 import AdminAccountMenu from "../components/AdminAccountMenu";
 import ResponsiveDataTable from "../components/ResponsiveDataTable";
-import {
-  buildTestPointEndpoint,
-  canRunTestPointAction,
-} from "./adminPointsTestUtils";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const DEFAULT_WARNING_THRESHOLD = 20;
@@ -172,8 +166,6 @@ export default function AdminPoints() {
   const [pointRequests, setPointRequests] = useState([]);
   const [pointRequestPage, setPointRequestPage] = useState(1);
   const [requestActionId, setRequestActionId] = useState(null);
-  const [testDeductionId, setTestDeductionId] = useState(null);
-  const [testResetId, setTestResetId] = useState(null);
   const pointRequestPageCount = Math.max(
     1,
     Math.ceil(pointRequests.length / POINT_REQUESTS_PAGE_SIZE),
@@ -382,90 +374,6 @@ export default function AdminPoints() {
       );
     } finally {
       setRequestActionId(null);
-    }
-  };
-
-  const handleTestDeduction = async (user) => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      setError(t("admin.testDeductionLoginRequired"));
-      return;
-    }
-    if (
-      !canRunTestPointAction(
-        user.points,
-        "deduct",
-        testDeductionId === user.user_id || testResetId === user.user_id,
-      )
-    )
-      return;
-    if (
-      !window.confirm(
-        `${t("admin.testDeductionConfirmPrefix")} ${user.name || `${t("common.user")} #${user.user_id}`} ${t("admin.testDeductionConfirmSuffix")}`,
-      )
-    ) {
-      return;
-    }
-
-    try {
-      setTestDeductionId(user.user_id);
-      setError("");
-      await axios.post(
-        buildTestPointEndpoint(API_URL, user.user_id, "deduct"),
-        null,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      await fetchPoints();
-    } catch (requestError) {
-      setError(
-        getApiErrorMessage(requestError, t, t("admin.testDeductionFailed")),
-      );
-    } finally {
-      setTestDeductionId(null);
-    }
-  };
-
-  const handleTestReset = async (user) => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      setError(t("admin.testResetLoginRequired"));
-      return;
-    }
-    if (
-      !canRunTestPointAction(
-        user.points,
-        "reset",
-        testDeductionId === user.user_id || testResetId === user.user_id,
-      )
-    )
-      return;
-    if (
-      !window.confirm(
-        `${t("admin.testResetConfirmPrefix")} ${user.name || `${t("common.user")} #${user.user_id}`} ${t("admin.testResetConfirmSuffix")}`,
-      )
-    ) {
-      return;
-    }
-
-    try {
-      setTestResetId(user.user_id);
-      setError("");
-      await axios.post(
-        buildTestPointEndpoint(API_URL, user.user_id, "reset"),
-        null,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      await fetchPoints();
-    } catch (requestError) {
-      setError(
-        getApiErrorMessage(requestError, t, t("admin.testResetFailed")),
-      );
-    } finally {
-      setTestResetId(null);
     }
   };
 
@@ -984,9 +892,6 @@ export default function AdminPoints() {
                         const dailyScore = Math.max(0, Math.min(100, Number(user.daily_score) || 0));
                         const scoreColor = getScoreColor(points, warningThreshold);
                         const roleColor = getRoleColor(user.role);
-                        const testActionBusy =
-                          testDeductionId === user.user_id ||
-                          testResetId === user.user_id;
                         return (
                           <TableRow
                             key={user.user_id}
@@ -1171,65 +1076,9 @@ export default function AdminPoints() {
                               <Box
                                 sx={{
                                   display: "flex",
-                                  flexDirection: "column",
-                                  alignItems: "flex-start",
-                                  gap: 0.75,
+                                  justifyContent: "flex-start",
                                 }}
                               >
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  color="error"
-                                  startIcon={<RemoveCircleOutline />}
-                                  disabled={
-                                    !canRunTestPointAction(
-                                      points,
-                                      "deduct",
-                                      testActionBusy,
-                                    )
-                                  }
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleTestDeduction(user);
-                                  }}
-                                  sx={{
-                                    borderRadius: 2.5,
-                                    textTransform: "none",
-                                    fontWeight: "600",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {testDeductionId === user.user_id
-                                    ? t("admin.reducingPoints")
-                                    : t("admin.reducePointsTest")}
-                                </Button>
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  color="success"
-                                  startIcon={<Restore />}
-                                  disabled={
-                                    !canRunTestPointAction(
-                                      points,
-                                      "reset",
-                                      testActionBusy,
-                                    )
-                                  }
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleTestReset(user);
-                                  }}
-                                  sx={{
-                                    borderRadius: 2.5,
-                                    textTransform: "none",
-                                    fontWeight: "600",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {testResetId === user.user_id
-                                    ? t("admin.resettingPoints")
-                                    : t("admin.resetPointsTest")}
-                                </Button>
                                 <Button
                                   size="small"
                                   variant="outlined"

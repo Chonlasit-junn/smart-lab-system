@@ -20,7 +20,6 @@ import {
   Computer,
   Refresh,
   Save,
-  Settings,
   WarningAmber,
 } from "@mui/icons-material";
 import axios from "axios";
@@ -596,35 +595,6 @@ export default function AdminPointPolicy() {
                       </Box>
                     </Paper>
                   ))}
-                </Box>
-              </Paper>
-
-              <Paper
-                className="surface-card surface-card--info"
-                elevation={0}
-                sx={{
-                  p: 2.5,
-                  borderRadius: 4,
-                  border: "1px solid #dbeafe",
-                  bgcolor: "#eff6ff",
-                }}
-              >
-                <Box
-                  sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}
-                >
-                  <Settings sx={{ color: "#2563eb", mt: 0.25 }} />
-                  <Box>
-                    <Typography
-                      variant="subtitle2"
-                      fontWeight="700"
-                      color="#1e3a8a"
-                    >
-                      {t("admin.policyScope")}
-                    </Typography>
-                    <Typography variant="body2" color="#1e40af">
-                      {t("admin.testActionsFixedPolicy")}
-                    </Typography>
-                  </Box>
                 </Box>
               </Paper>
 

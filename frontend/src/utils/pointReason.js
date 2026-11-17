@@ -11,3 +11,9 @@ export function getPointReasonLabel(reason, t) {
   const messageKey = POINT_REASON_MESSAGE_KEYS[reason];
   return messageKey ? t(messageKey) : reason || t("common.notSpecified");
 }
+
+export function shouldDisplayPointLog(log) {
+  const hasReason = Boolean(String(log?.reason ?? "").trim());
+  const change = Number(log?.change);
+  return !(Number.isFinite(change) && change === 0 && !hasReason);
+}

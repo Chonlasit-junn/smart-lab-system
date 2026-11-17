@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createNotificationStore } from './notificationStore.js';
+import { shouldDisplayPointLog } from './pointReason.js';
 
 export function readNotificationToken(email) {
   try {
@@ -35,10 +36,12 @@ export const notificationStore = createNotificationStore({
       }),
     ]);
 
-    const pointLogs = (pointsResponse.data?.data || []).map(log => ({
-      ...log,
-      notification_kind: 'point',
-    }));
+    const pointLogs = (pointsResponse.data?.data || [])
+      .filter(shouldDisplayPointLog)
+      .map(log => ({
+        ...log,
+        notification_kind: 'point',
+      }));
     const ticketReplies = (ticketsResponse.data?.data || []).map(reply => ({
       ...reply,
       notification_kind: 'ticket_reply',

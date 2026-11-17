@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LoadError from "../components/LoadError";
+import ConfirmActionDialog from "../components/ConfirmActionDialog";
 import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
   Alert,
@@ -65,6 +66,7 @@ export default function VerifyUsers() {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [processingId, setProcessingId] = useState(null);
   const [error, setError] = useState("");
+  const [confirmAction, setConfirmAction] = useState(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
   const fetchPendingUsers = useCallback(async () => {
@@ -107,13 +109,6 @@ export default function VerifyUsers() {
   useEffect(() => () => pendingUsersControllerRef.current?.abort(), []);
 
   const handleVerify = async (userId, action) => {
-    if (
-      action === "reject" &&
-      !window.confirm(t("admin.rejectUserConfirmation"))
-    ) {
-      return;
-    }
-
     try {
       setProcessingId(userId);
       setError("");
@@ -136,6 +131,19 @@ export default function VerifyUsers() {
     } finally {
       setProcessingId(null);
     }
+  };
+
+  const requestVerify = (userId, action) => {
+    if (action !== "reject") {
+      handleVerify(userId, action);
+      return;
+    }
+    setConfirmAction({
+      title: t("common.confirm"),
+      message: t("admin.rejectUserConfirmation"),
+      confirmLabel: t("admin.reject"),
+      onConfirm: () => handleVerify(userId, action),
+    });
   };
 
   const filteredUsers = useMemo(() => {
@@ -572,7 +580,7 @@ export default function VerifyUsers() {
                               color="error"
                               startIcon={<Cancel />}
                               disabled={isProcessing}
-                              onClick={() => handleVerify(user.id, "reject")}
+                              onClick={() => requestVerify(user.id, "reject")}
                               sx={{
                                 borderRadius: 3,
                                 fontWeight: "600",
@@ -591,7 +599,7 @@ export default function VerifyUsers() {
                               color="success"
                               startIcon={<CheckCircle />}
                               disabled={isProcessing}
-                              onClick={() => handleVerify(user.id, "approve")}
+                              onClick={() => requestVerify(user.id, "approve")}
                               sx={{
                                 borderRadius: 3,
                                 fontWeight: "600",
@@ -616,6 +624,14 @@ export default function VerifyUsers() {
           </Fade>
         </Box>
       </Box>
+      <ConfirmActionDialog
+        open={Boolean(confirmAction)}
+        title={confirmAction?.title}
+        message={confirmAction?.message}
+        confirmLabel={confirmAction?.confirmLabel}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={confirmAction?.onConfirm || (() => {})}
+      />
     </Box>
   );
 }

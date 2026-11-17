@@ -83,8 +83,8 @@
   --primary-blue-hover: var(--brand-hover);
 
   --text-dark: #f8fafc;
-  --text-gray: #cbd5e1;
-  --text-muted: #cbd5e1;
+  --text-gray: #dbe4ee;
+  --text-muted: #dbe4ee;
   --booking-calendar-disabled: #b7c4d3;
   --booking-calendar-disabled-bg: #1b2635;
   --booking-calendar-disabled-border: #3a4758;
@@ -93,7 +93,7 @@
   --focus-ring: #fbbf24;
   --success-color: #86efac;
   --warning-color: #fbbf24;
-  --danger-color: #fca5a5;
+  --danger-color: #f87171;
   --role-admin-bg: #4c1d95;
   --role-admin-text: #e9d5ff;
   --role-student-bg: #1e3a8a;
@@ -1388,6 +1388,16 @@ textarea:focus-visible,
 
 :root[data-theme="dark"] .app-layout .MuiTypography-body2:not(.theme-colored),
 :root[data-theme="dark"] .app-layout .MuiTypography-caption:not(.theme-colored) {
+  color: var(--text-gray) !important;
+}
+
+/* Keep secondary copy readable on dark surfaces in dialogs, popovers, and
+ * pages that render outside the main app layout. */
+:root[data-theme="dark"] .MuiTypography-body2:not(.theme-colored),
+:root[data-theme="dark"] .MuiTypography-caption:not(.theme-colored),
+:root[data-theme="dark"] .MuiDialogContentText-root:not(.theme-colored),
+:root[data-theme="dark"] .page-description,
+:root[data-theme="dark"] .page-meta {
   color: var(--text-gray) !important;
 }
 

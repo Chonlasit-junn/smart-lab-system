@@ -248,38 +248,6 @@ export default function Register() {
     }
   };
 
-  // [DEV ONLY] bypass handlers — removed automatically in production build
-  const bypassStep1 = () => {
-    setFormData(prev => ({ ...prev, email: 'dev.bypass@test.com' }));
-    setAccountType('general');
-    setError(''); setSuccess('');
-    setStep(2);
-  };
-  const bypassStep2 = () => {
-    setFormData(prev => ({ ...prev, otp: '123456' }));
-    setError(''); setSuccess('');
-    setStep(3);
-  };
-  const bypassStep3 = () => {
-    setFormData(prev => ({ ...prev, first_name: 'Dev', last_name: 'Bypass', password: 'Test@1234', phone: '0812345678', student_id: 'STU000001' }));
-    setConsentChecked(true);
-    setError(''); setSuccess('');
-    setStep(4);
-  };
-  const bypassStep4 = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 400; canvas.height = 400;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#e0e0e0'; ctx.fillRect(0, 0, 400, 400);
-    ctx.fillStyle = '#9e9e9e';
-    ctx.beginPath(); ctx.arc(200, 160, 80, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(200, 340, 120, Math.PI, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#757575'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('[DEV BYPASS FACE]', 200, 390);
-    canvas.toBlob((blob) => { setFaceImage(new File([blob], 'bypass_face.jpg', { type: 'image/jpeg' })); }, 'image/jpeg');
-    setImagePreview(canvas.toDataURL('image/jpeg'));
-  };
-
   // shared input styles
   const inputSx = {
     '& .MuiOutlinedInput-root': {
@@ -313,17 +281,6 @@ export default function Register() {
     borderRadius: '10px', textTransform: 'none', borderWidth: '1.5px', letterSpacing: '0.3px',
   };
 
-  // dev bypass button ที่แสดงใต้ทุก step (เฉพาะ non-production)
-  const DevBypass = ({ onClick, label }) =>
-    import.meta.env.DEV ? (
-      <Box sx={{ mt: 3, pt: 2, borderTop: '1px dashed #f59e0b' }}>
-        <Button fullWidth variant="outlined" size="small" onClick={onClick}
-          sx={{ color: '#d97706', borderColor: '#f59e0b', textTransform: 'none', fontWeight: '600', borderRadius: 2 }}>
-          ⚡ {label}
-        </Button>
-      </Box>
-    ) : null;
-
   // ---- step renders ----
 
   const renderStep1 = () => (
@@ -339,7 +296,6 @@ export default function Register() {
           {loading ? <CircularProgress size={24} color="inherit" /> : resendSeconds > 0 ? t.otpResendWait.replace('{seconds}', resendSeconds) : t.reqOtpBtn}
         </Button>
       </form>
-      <DevBypass onClick={bypassStep1} label={t.devSkipStep2} />
     </>
   );
 
@@ -360,7 +316,6 @@ export default function Register() {
           </Button>
         </Box>
       </form>
-      <DevBypass onClick={bypassStep2} label={t.devSkipStep3} />
     </>
   );
 
@@ -462,7 +417,6 @@ export default function Register() {
           {t.nextFaceSetup}
         </Button>
       </form>
-      <DevBypass onClick={bypassStep3} label={t.devSkipStep4} />
     </>
   );
 
@@ -542,7 +496,6 @@ export default function Register() {
         </Box>
 
       </form>
-      <DevBypass onClick={bypassStep4} label={t.devGenerateFace} />
     </>
   );
 

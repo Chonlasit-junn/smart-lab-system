@@ -1174,7 +1174,7 @@ class AgentTelemetryTests(unittest.TestCase):
             "process_name": "msedge.exe", "exe_path": r"C:\msedge.exe",
             "executable_identity": {"original_filename": "msedge.exe"},
         }
-        instance.track_usage()
+        instance.track_website_usage()
         context = instance._handle_violation_detection.call_args.args[0]
         self.assertEqual(context["browser_domain"], "example.com")
         self.assertEqual(context["detection_source"], "browser_domain")
@@ -1197,7 +1197,7 @@ class AgentTelemetryTests(unittest.TestCase):
         instance._handle_violation_detection = Mock()
 
         with patch.object(agent.gw, "getActiveWindow", return_value=None):
-            agent.SmartLabAgent.track_usage(instance)
+            agent.SmartLabAgent.track_website_usage(instance)
 
         instance.browser_url_monitor.poll.assert_called_once()
         instance._handle_violation_detection.assert_called_once()
@@ -1255,7 +1255,26 @@ class AgentTelemetryTests(unittest.TestCase):
             self.assertEqual(segment["duration"], 30)
             self.assertEqual(segment["name"], "Editor")
 
-    def test_violation_enqueue_failure_uses_fallback_even_with_an_outbox(self):
+    def test_logout_shows_agent_lock_before_cleanup_starts(self):
+        events = []
+        overlay = SimpleNamespace(
+            agent=SimpleNamespace(
+                stop_and_send_logs=Mock(side_effect=lambda *_args, **_kwargs: events.append("cleanup")),
+            ),
+            reset_and_show=Mock(side_effect=lambda: events.append("lock")),
+            repaint=Mock(side_effect=lambda: events.append("paint")),
+        )
+        info_bar = agent.SessionInfoBar.__new__(agent.SessionInfoBar)
+        info_bar.overlay = overlay
+        info_bar.session_id = 12
+        info_bar.countdown_timer = SimpleNamespace(stop=lambda: events.append("timer"))
+        info_bar.hide = lambda: events.append("hide")
+
+        agent.SessionInfoBar.trigger_logout(info_bar)
+
+        self.assertEqual(events, ["timer", "hide", "lock", "paint", "cleanup"])
+
+    def test_violation_enqueue_fallback_does_not_log_off_windows(self):
         instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
         instance.stop_browser_monitor = Mock()
         instance.monitor_timer = Mock()
@@ -1289,13 +1308,7 @@ class AgentTelemetryTests(unittest.TestCase):
         instance.violation_dialog_active = False
         call_order = []
 
-        with patch.object(agent, "DEBUG_MODE", False), patch.object(
-            agent, "WINDOWS_LOGOFF_ENABLED", True,
-        ), patch.object(
-            agent.os, "system", side_effect=lambda _command: call_order.append("logout"),
-        ) as logoff:
-            agent.SmartLabAgent.stop_and_send_logs(instance, 12, "violation")
-            logoff.assert_not_called()
+        agent.SmartLabAgent.stop_and_send_logs(instance, 12, "violation")
         deliver = instance.background_tasks.submit.call_args.args[1]
         handle_delivery = instance.background_tasks.submit.call_args.args[2]
 
@@ -1305,7 +1318,7 @@ class AgentTelemetryTests(unittest.TestCase):
 
         instance.flush_outbox.side_effect = lambda **_kwargs: call_order.append("outbox")
         with patch.object(agent, "post_with_retry", side_effect=record_post), patch.object(
-            agent.os, "system", side_effect=lambda _command: call_order.append("logout"),
+            agent.os, "system",
         ) as logoff:
             deliver()
             handle_delivery(True, None)
@@ -1313,9 +1326,9 @@ class AgentTelemetryTests(unittest.TestCase):
             handle_delivery(False, RuntimeError("end-session delivery failed"))
             logoff.assert_not_called()
             handle_delivery(False, None)
-            logoff.assert_called_once_with("shutdown /l /f")
+            logoff.assert_not_called()
 
-        self.assertEqual(call_order, ["violation", "outbox", "logout"])
+        self.assertEqual(call_order, ["violation", "outbox"])
         self.assertEqual(instance._pending_fallback_violations, [])
 
     def test_monitor_tick_checkpoints_an_unchanged_foreground_app(self):

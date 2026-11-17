@@ -613,7 +613,7 @@ export default function AdminDevices() {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>{t("admin.removeDeviceTitle")}</DialogTitle>
+        <DialogTitle sx={{ color: "error.main" }}>{t("admin.removeDeviceTitle")}</DialogTitle>
         <DialogContent>
           <Typography>{t("admin.removeDeviceConfirm")}</Typography>
           <Typography fontWeight={700} sx={{ mt: 1, overflowWrap: "break-word" }}>
@@ -624,7 +624,7 @@ export default function AdminDevices() {
           </Alert>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button disabled={removingDeviceId !== null} onClick={() => setDeviceToRemove(null)}>
+          <Button color="error" disabled={removingDeviceId !== null} onClick={() => setDeviceToRemove(null)}>
             {t("common.cancel")}
           </Button>
           <Button
