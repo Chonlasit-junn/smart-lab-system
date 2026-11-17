@@ -20,7 +20,6 @@ from routers.points import apply_point_event, mark_due_no_shows
 from routers.users import get_current_user
 from time_utils import LAB_TIMEZONE, as_utc, as_lab_naive, lab_now_naive, utc_now
 from utils import normalize_email
-from url_policy import normalize_domain
 
 router = APIRouter(tags=["Hardware Agent"])
 optional_agent_oauth2 = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
@@ -616,15 +615,6 @@ def log_violation(
     cleaned_program_name = program_name.strip()
     if not cleaned_program_name:
         raise HTTPException(status_code=422, detail="program_name is required.")
-    if browser_domain is not None:
-        domain = normalize_domain(browser_domain)
-        if not domain or domain != browser_domain or detection_source != "browser_domain":
-            raise HTTPException(status_code=422, detail="A canonical browser domain is required.")
-        cleaned_program_name = domain
-        window_title = None
-    elif detection_source == "browser_domain":
-        raise HTTPException(status_code=422, detail="browser_domain is required.")
-
     resolved_event_id = _clean_idempotency_key(event_id, "event_id")
     if resolved_event_id:
         existing = db.query(models.UsageViolation).filter(
@@ -640,6 +630,11 @@ def log_violation(
                 "message": "Violation already logged.",
                 "violation_id": existing.id,
             }
+
+    if browser_domain is not None or detection_source == "browser_domain":
+        # Drain obsolete website events from older Agents' outboxes without penalties.
+        return {"message": "Website violation ignored.", "ignored": True,
+                "reason": "website_policy_removed"}
 
     identity = {}
     if executable_identity:
@@ -693,7 +688,6 @@ def log_violation(
         exe_path=exe_path,
         window_title=window_title,
         executable_identity=identity,
-        browser_domain=browser_domain,
     )
     if matched_rule is None:
         raise HTTPException(
@@ -731,7 +725,7 @@ def log_violation(
             access_log.user_id,
             "forbidden_app",
             db,
-            note=f"ตรวจพบ{'เว็บไซต์' if browser_domain else 'โปรแกรม'}ต้องห้าม: {cleaned_program_name}",
+            note=f"ตรวจพบโปรแกรมต้องห้าม: {cleaned_program_name}",
             event_id=point_event_id,
             source_type="usage_violation",
             source_id=violation.id,

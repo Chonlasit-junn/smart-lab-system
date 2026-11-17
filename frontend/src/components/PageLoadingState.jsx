@@ -1,3 +1,4 @@
+import SmartLabLogo from "./SmartLabLogo";
 import { useLocation } from 'react-router-dom';
 import { TableCell, TableRow } from '@mui/material';
 import { useLanguage } from '../context/language-context.js';
@@ -25,7 +26,7 @@ function Placeholder({ className = '' }) {
 }
 
 function Brand() {
-  return <div className="loading-brand"><span className="loading-brand-mark" />Smart Lab</div>;
+  return <div className="loading-brand"><SmartLabLogo decorative />Smart Lab</div>;
 }
 
 function CardPlaceholder() {

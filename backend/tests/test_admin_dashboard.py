@@ -75,6 +75,11 @@ class AdminDashboardTests(unittest.TestCase):
         self.engine.dispose()
 
     def test_dashboard_returns_aggregate_counts_and_only_latest_ten_bookings(self):
+        self.session.add_all([
+            models.Ticket(user_id=self.student.id, subject="Open ticket", message="Test", status="open"),
+            models.Ticket(user_id=self.student.id, subject="Closed ticket", message="Test", status="closed"),
+        ])
+        self.session.commit()
         self.assertFalse(hasattr(admin_router, "mark_due_no_shows"))
         with patch.object(points, "mark_due_no_shows") as mark_due_no_shows:
             result = admin_router.get_dashboard_summary(self.admin, self.session)
@@ -83,6 +88,7 @@ class AdminDashboardTests(unittest.TestCase):
         self.assertEqual(data["total_requests"], 12)
         self.assertEqual(data["active_users"], 3)
         self.assertEqual(data["pending_approvals"], 1)
+        self.assertEqual(data["support_tickets"], 2)
         self.assertEqual(len(data["recent_reservations"]), 10)
         self.assertEqual(
             [booking["id"] for booking in data["recent_reservations"]],

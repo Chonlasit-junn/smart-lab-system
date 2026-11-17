@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LoadError from "../components/LoadError";
 import { PageContentLoadingState } from "../components/PageLoadingState";
@@ -22,7 +23,6 @@ import {
   Search,
   Person,
   Group,
-  Computer,
   PendingActions,
   SupportAgent,
   CameraAlt,
@@ -59,11 +59,7 @@ export default function Admin() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [empty, setEmpty] = useState(false);
   const dashboardControllerRef = useRef(null);
-  const [stats, setStats] = useState({
-    totalRequests: 0,
-    activeUsers: 0,
-    pendingApprovals: 0,
-  });
+  const [stats, setStats] = useState({});
   const [recentReservations, setRecentReservations] = useState([]);
   const [reservationSearch, setReservationSearch] = useState("");
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
@@ -92,9 +88,10 @@ export default function Admin() {
 
       setRecentReservations(dashboard.recent_reservations || []);
       setStats({
-        totalRequests: dashboard.total_requests ?? 0,
-        activeUsers: dashboard.active_users ?? 0,
-        pendingApprovals: dashboard.pending_approvals ?? 0,
+        totalRequests: dashboard.total_requests,
+        totalUsers: dashboard.active_users,
+        pendingApprovals: dashboard.pending_approvals,
+        supportTickets: dashboard.support_tickets,
       });
     } catch (error) {
       if (!axios.isCancel(error) && dashboardControllerRef.current === controller) setLoadFailed(true);
@@ -114,20 +111,20 @@ export default function Admin() {
   const STATS_DATA = [
     {
       label: t("admin.totalRequests"),
-      v: stats.totalRequests,
+      v: stats.totalRequests ?? "—",
       c: "#3b82f6",
       i: <Person />,
       path: "/admin/reports",
     },
-    { label: t("admin.activeUsers"), v: stats.activeUsers, c: "#10b981", i: <Group />, path: "/admin/roles" },
+    { label: t("admin.allUsers"), v: stats.totalUsers ?? "—", c: "#10b981", i: <Group />, path: "/admin/roles" },
     {
       label: t("admin.pendingUsersCard"),
-      v: stats.pendingApprovals,
+      v: stats.pendingApprovals ?? "—",
       c: "#f59e0b",
       i: <PendingActions />,
       path: "/verify-users",
     },
-    { label: t("admin.supportTickets"), v: 0, c: "#ef4444", i: <SupportAgent />, path: "/ticket" },
+    { label: t("admin.supportTickets"), v: stats.supportTickets ?? "—", c: "#ef4444", i: <SupportAgent />, path: "/ticket" },
   ];
 
   return (
@@ -156,18 +153,7 @@ export default function Admin() {
         }}
       >
         <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
-          <Box
-            className="admin-brand-mark"
-            sx={{
-              bgcolor: "#000",
-              p: 1,
-              borderRadius: 2.5,
-              display: "flex",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
-            }}
-          >
-            <Computer sx={{ color: "white", fontSize: 28 }} />
-          </Box>
+          <SmartLabLogo decorative />
           <Box>
             <Typography
               variant="h6"

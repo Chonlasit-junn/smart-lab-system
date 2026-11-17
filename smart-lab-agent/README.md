@@ -4,7 +4,7 @@
 
 - `smart_lab_device.py`: entry point ร่วมของ MSI; `--register` เปิดตัวลงทะเบียน
 - `agent.pyw` และ `agent_*.py`: หน้าจอ Agent, policy, outbox และงานเบื้องหลัง
-- `browser_url.py`, `program_identity.py`, `domain_normalization.py`: หลักฐานโปรแกรมและโดเมน
+- `program_identity.py`: หลักฐานยืนยันตัวโปรแกรมจากไฟล์ EXE
 - `register_device_gui.pyw`, `device_registration.py`: ลงทะเบียนเครื่องกับ Backend
 - `lab_setup.py`, `lab_setup.pyw`, `provision_device.py`: เครื่องมือตั้งค่า/เตรียมเครื่อง
 - `installer/`: สคริปต์ build, template และ [คู่มือติดตั้ง MSI](installer/README.md)

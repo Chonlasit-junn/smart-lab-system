@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import Webcam from 'react-webcam';
@@ -14,7 +15,6 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import AppRegistrationIcon from '@mui/icons-material/AppRegistration';
 import PasswordRequirements from '../components/PasswordRequirements.jsx';
 import { registerLocales, translateLocaleMessage } from '../utils/locales';
 import { BU_FACULTIES } from '../utils/buFaculties';
@@ -506,7 +506,7 @@ export default function Register() {
 
         {/* ฝั่งซ้าย: banner */}
         <div className="login-banner">
-          <AppRegistrationIcon sx={{ fontSize: 72, color: 'var(--banner-title)', mb: 2 }} />
+          <SmartLabLogo />
           <h2 className="login-banner-title">{t.bannerTitle}</h2>
           <p className="login-banner-subtitle">{t.bannerSub}</p>
         </div>

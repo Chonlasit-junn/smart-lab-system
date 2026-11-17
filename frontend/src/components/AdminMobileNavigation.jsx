@@ -1,5 +1,6 @@
+import SmartLabLogo from "./SmartLabLogo";
 import { useState } from "react";
-import { Computer, Menu as MenuIcon } from "@mui/icons-material";
+import { Menu as MenuIcon } from "@mui/icons-material";
 import { Box, IconButton, Typography } from "@mui/material";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
@@ -39,9 +40,7 @@ export default function AdminMobileNavigation() {
           />
           <Box className="sidebar admin-sidebar open admin-mobile-drawer">
             <Box className="sidebar-logo">
-              <Box className="admin-brand-mark">
-                <Computer sx={{ color: "white", fontSize: 28 }} />
-              </Box>
+              <SmartLabLogo decorative />
               <Box>
                 <Typography variant="h6" fontWeight="700" className="admin-brand-title">
                   Smart Lab

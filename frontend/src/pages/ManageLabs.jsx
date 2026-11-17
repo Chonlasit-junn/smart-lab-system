@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 // ============================================================================
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
@@ -446,18 +447,7 @@ export default function ManageLabs() {
         }}
       >
         <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
-          <Box
-            className="admin-brand-mark"
-            sx={{
-              bgcolor: "#000",
-              p: 1,
-              borderRadius: 2.5,
-              display: "flex",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
-            }}
-          >
-            <Computer sx={{ color: "white", fontSize: 28 }} />
-          </Box>
+          <SmartLabLogo decorative />
           <Box>
             <Typography
               variant="h6"

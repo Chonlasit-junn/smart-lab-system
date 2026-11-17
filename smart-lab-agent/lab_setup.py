@@ -383,9 +383,14 @@ def launch_qt(api_url: str, device_name: str) -> int:
             hero_layout = QVBoxLayout(hero)
             hero_layout.setContentsMargins(26, 22, 26, 22)
             hero_layout.setSpacing(6)
+            brand_row = QHBoxLayout()
+            brand_logo = QLabel()
+            brand_logo.setPixmap(QApplication.windowIcon().pixmap(32, 32))
+            brand_row.addWidget(brand_logo)
             eyebrow = QLabel("SMART LAB  /  WORKSTATION SETUP")
             eyebrow.setObjectName("eyebrow")
-            hero_layout.addWidget(eyebrow)
+            brand_row.addWidget(eyebrow, 1)
+            hero_layout.addLayout(brand_row)
             title = QLabel("ลงทะเบียนคอมพิวเตอร์เข้า Lab")
             title.setObjectName("heroTitle")
             hero_layout.addWidget(title)
@@ -667,8 +672,11 @@ def launch_qt(api_url: str, device_name: str) -> int:
             self.run_async(operation, completed)
 
     from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QIcon
+    from branding import logo_icon_path
 
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(logo_icon_path()))
     app.setStyle("Fusion")
     app.setStyleSheet(
         """

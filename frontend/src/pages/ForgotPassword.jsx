@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Alert, Box, Button, CircularProgress, IconButton, InputAdornment, TextField } from '@mui/material';
@@ -121,6 +122,7 @@ export default function ForgotPassword() {
     <Box className="login-wrapper login-page forgot-password-page">
       <div className="login-container">
         <div className="login-banner">
+          <SmartLabLogo />
           <h1 className="login-banner-title" style={{ whiteSpace: 'pre-line' }}>{loginText.bannerHeadline}</h1>
         </div>
         <div ref={panel} className="login-form-section" style={{ justifyContent: 'flex-start' }}>

@@ -7,7 +7,6 @@ import models
 from database import get_db
 from policy import DEFAULT_MATCH_TYPE, SUPPORTED_MATCH_TYPES, serialize_rule
 from routers.users import require_admin_user
-from url_policy import normalize_domain
 
 router = APIRouter(prefix="/admin/blacklist", tags=["Blacklist"])
 
@@ -47,7 +46,12 @@ def get_all(
     _admin: models.User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
-    apps = db.query(models.BlacklistedApp).order_by(models.BlacklistedApp.created_at.desc()).all()
+    apps = (
+        db.query(models.BlacklistedApp)
+        .filter(models.BlacklistedApp.match_type.in_(SUPPORTED_MATCH_TYPES))
+        .order_by(models.BlacklistedApp.created_at.desc())
+        .all()
+    )
     return {"data": [serialize_rule(app, include_created_at=True) for app in apps]}
 
 
@@ -69,10 +73,6 @@ def create(
 
     match_type = _validate_match_type(payload.match_type)
     match_value = _resolve_match_value(app_name, payload.match_value)
-    if match_type == "website_domain":
-        match_value = normalize_domain(match_value)
-        if not match_value:
-            raise HTTPException(status_code=422, detail="Enter a valid website domain.")
     db.add(
         models.BlacklistedApp(
             app_name=app_name,
@@ -94,7 +94,7 @@ def update(
     db: Session = Depends(get_db),
 ):
     app = db.query(models.BlacklistedApp).filter(models.BlacklistedApp.id == app_id).first()
-    if not app:
+    if not app or app.match_type not in SUPPORTED_MATCH_TYPES:
         raise HTTPException(status_code=404, detail="App not found.")
 
     if payload.app_name is not None:
@@ -121,12 +121,6 @@ def update(
         app.match_value = _resolve_match_value(app.app_name, payload.match_value)
     if payload.enabled is not None:
         app.enabled = payload.enabled
-    if app.match_type == "website_domain":
-        domain = normalize_domain(app.match_value)
-        if not domain:
-            db.rollback()
-            raise HTTPException(status_code=422, detail="Enter a valid website domain.")
-        app.match_value = domain
     db.commit()
     return {"message": "Blacklist rule updated."}
 
@@ -138,7 +132,7 @@ def delete(
     db: Session = Depends(get_db),
 ):
     app = db.query(models.BlacklistedApp).filter(models.BlacklistedApp.id == app_id).first()
-    if not app:
+    if not app or app.match_type not in SUPPORTED_MATCH_TYPES:
         raise HTTPException(status_code=404, detail="App not found.")
 
     db.delete(app)

@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 // ============================================================================
 // 1. IMPORTS & CONFIGURATION
 // ============================================================================
@@ -32,7 +33,6 @@ import {
   SupportAgent,
   ConfirmationNumber,
   Logout,
-  Computer,
   Person,
   Menu as MenuIcon,
   Close,
@@ -166,7 +166,7 @@ export default function Reserved() {
 
       <div className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-logo">
-          <Computer sx={{ fontSize: 40, color: "#1877f2" }} />
+          <SmartLabLogo decorative />
           <div>
             <Typography variant="h6" fontWeight="600" lineHeight={1.2}>
               Smart Lab
@@ -645,7 +645,7 @@ export default function Reserved() {
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button
             onClick={handleCloseCancelDialog}
-            color="error"
+            color="inherit"
             sx={{ fontWeight: "600", textTransform: "none" }}
           >
             {t("user.keepReservation")}
@@ -653,13 +653,12 @@ export default function Reserved() {
           <Button
             onClick={handleConfirmCancel}
             variant="contained"
+            color="error"
             sx={{
-              bgcolor: "#ef4444",
-              color: "white",
               fontWeight: "600",
               textTransform: "none",
               boxShadow: "none",
-              "&:hover": { bgcolor: "#dc2626", boxShadow: "none" },
+              "&:hover": { boxShadow: "none" },
             }}
           >
             {t("user.yesCancel")}

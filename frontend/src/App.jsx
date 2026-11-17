@@ -102,7 +102,7 @@ function AppContent() {
       error: {
         main: mode === "dark" ? "#F87171" : "#B42318",
         dark: mode === "dark" ? "#EF4444" : "#912018",
-        contrastText: "#FFFFFF",
+        contrastText: mode === "dark" ? "#1C0A0A" : "#FFFFFF",
       },
       divider: mode === "dark" ? "#3A4758" : "#D8DDD8",
     },

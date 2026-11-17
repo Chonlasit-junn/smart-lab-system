@@ -151,6 +151,8 @@ if ($usePrebuiltPayload) {
         $deviceBuildArgs = @(
             "-I", "-B", "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
             "--name", "SmartLabDevice",
+            "--icon", (Join-Path $repoRoot "frontend\public\smart-lab-logo.ico"),
+            "--add-data", "$(Join-Path $repoRoot 'frontend\public\smart-lab-logo.ico'):.",
             "--paths", $buildRoot,
             "--hidden-import", "agent_build_info",
             "--distpath", $payloadRoot,

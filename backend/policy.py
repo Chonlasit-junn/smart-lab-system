@@ -11,7 +11,6 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from time_utils import utc_now
 from utils import ALGORITHM, SECRET_KEY
-from url_policy import find_website_rule
 
 
 DEFAULT_MATCH_TYPE = "process_name"
@@ -21,7 +20,6 @@ SUPPORTED_MATCH_TYPES = frozenset(
         "process_name_or_title",
         "exe_path",
         "window_title",
-        "website_domain",
     }
 )
 
@@ -75,7 +73,9 @@ def serialize_rule(app: models.BlacklistedApp, include_created_at: bool = False)
 
 
 def get_policy_rules(db: Session, enabled_only: bool = True) -> list[dict[str, Any]]:
-    query = db.query(models.BlacklistedApp)
+    query = db.query(models.BlacklistedApp).filter(
+        models.BlacklistedApp.match_type.in_(SUPPORTED_MATCH_TYPES)
+    )
     if enabled_only:
         query = query.filter(models.BlacklistedApp.enabled.is_(True))
     apps = query.order_by(models.BlacklistedApp.id.asc()).all()
@@ -138,16 +138,11 @@ def find_matching_rule(
     exe_path: Optional[str] = None,
     window_title: Optional[str] = None,
     executable_identity: Optional[dict[str, str]] = None,
-    browser_domain: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Validate Agent evidence against the active policy rules."""
 
     if not isinstance(executable_identity, dict):
         return None
-    if browser_domain is not None:
-        if str(executable_identity.get("original_filename") or "").casefold() not in {"chrome.exe", "msedge.exe"}:
-            return None
-        return find_website_rule(rules, browser_domain)
     original = normalize_process_name(
         executable_identity.get("original_filename") or executable_identity.get("internal_name")
     )
@@ -164,7 +159,7 @@ def find_matching_rule(
             continue
 
         # Legacy mixed rules now use executable identity only. Titles remain telemetry.
-        if match_type in {"window_title", "website_domain"} or match_type not in SUPPORTED_MATCH_TYPES:
+        if match_type == "window_title" or match_type not in SUPPORTED_MATCH_TYPES:
             continue
         if match_type == "exe_path" and normalized_exe_path != normalize_path(match_value):
             continue

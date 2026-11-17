@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -412,9 +413,7 @@ export default function AdminDevices() {
     <Box className="app-layout admin-layout" sx={{ display: "flex", minHeight: "100vh", bgcolor: "#fcfdfe", fontFamily: "var(--font-family-ui)" }}>
       <Box className="sidebar admin-sidebar" sx={{ width: "var(--sidebar-width)", bgcolor: "#f0f7ff", borderRight: "1px solid #e2efff", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", zIndex: 10 }}>
         <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
-          <Box className="admin-brand-mark" sx={{ bgcolor: "#000", p: 1, borderRadius: 2.5, display: "flex", boxShadow: "0 4px 10px rgba(0,0,0,0.2)" }}>
-            <Computer sx={{ color: "white", fontSize: 28 }} />
-          </Box>
+          <SmartLabLogo decorative />
           <Box>
             <Typography variant="h6" fontWeight="700" sx={{ color: "#0f172a", letterSpacing: "-0.5px" }}>Smart Lab</Typography>
             <Typography variant="caption" sx={{ color: "#64748b", fontWeight: "400", display: "block", mt: -0.5 }}>{t("common.adminDashboard")}</Typography>

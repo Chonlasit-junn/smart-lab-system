@@ -17,6 +17,7 @@ os.environ["SQLALCHEMY_DATABASE_URL"] = "sqlite:///:memory:"
 
 import models  # noqa: E402
 from database import Base  # noqa: E402
+from policy import get_policy_rules  # noqa: E402
 from routers import blacklist  # noqa: E402
 
 
@@ -56,21 +57,26 @@ class BlacklistTests(unittest.TestCase):
         self.session.close()
         self.engine.dispose()
 
-    def test_website_creation_stores_only_a_normalized_domain(self):
-        blacklist.create(
-            blacklist.BlacklistCreate(app_name="Example site", match_type="website_domain",
-                                      match_value="https://EXAMPLE.com/path?private=1"),
-            self.admin, self.session,
+    def test_legacy_website_rows_are_excluded_from_admin_and_agent(self):
+        website = models.BlacklistedApp(
+            app_name="Old website",
+            match_type="website_domain",
+            match_value="example.com",
+            enabled=True,
         )
-        row = self.session.query(models.BlacklistedApp).filter_by(app_name="Example site").one()
-        self.assertEqual(row.match_type, "website_domain")
-        self.assertEqual(row.match_value, "example.com")
+        self.session.add(website)
+        self.session.commit()
 
-    def test_invalid_website_creation_is_rejected(self):
+        expected_ids = {self.rule.id, self.other_rule.id}
+        self.assertEqual({row["id"] for row in get_policy_rules(self.session)}, expected_ids)
+        admin_rules = blacklist.get_all(self.admin, self.session)["data"]
+        self.assertEqual({row["id"] for row in admin_rules}, expected_ids)
+
+    def test_website_creation_is_rejected(self):
         with self.assertRaises(HTTPException) as raised:
             blacklist.create(
                 blacklist.BlacklistCreate(app_name="Bad website", match_type="website_domain",
-                                          match_value="not a URL"), self.admin, self.session,
+                                          match_value="example.com"), self.admin, self.session,
             )
         self.assertEqual(raised.exception.status_code, 422)
         self.assertIsNone(self.session.query(models.BlacklistedApp).filter_by(app_name="Bad website").first())

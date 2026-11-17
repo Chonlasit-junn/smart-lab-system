@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 import React, { useState, useEffect, useRef } from "react";
 import { PageContentLoadingState } from "../components/PageLoadingState";
 import {
@@ -21,7 +22,6 @@ import {
   SupportAgent,
   ConfirmationNumber,
   Logout,
-  Computer,
   Menu as MenuIcon,
   Email,
   Phone,
@@ -251,7 +251,7 @@ export default function Profile() {
       {/* sidebar */}
       <div className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-logo">
-          <Computer sx={{ fontSize: 40, color: "#1877f2" }} />
+          <SmartLabLogo decorative />
           <div>
             <Typography variant="h6" fontWeight="600" lineHeight={1.2}>
               Smart Lab

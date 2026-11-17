@@ -40,6 +40,7 @@ def get_dashboard_summary(
     """Return only aggregate counts and the latest bookings for the dashboard."""
     total_requests = db.query(func.count(models.Booking.id)).scalar() or 0
     active_users = db.query(func.count(models.User.id)).scalar() or 0
+    support_tickets = db.query(func.count(models.Ticket.id)).scalar() or 0
     pending_approvals = (
         db.query(func.count(models.UserPassport.id))
         .filter(models.UserPassport.is_active.is_(False))
@@ -62,6 +63,7 @@ def get_dashboard_summary(
             "total_requests": total_requests,
             "active_users": active_users,
             "pending_approvals": pending_approvals,
+            "support_tickets": support_tickets,
             "recent_reservations": [
                 {
                     "id": booking.id,

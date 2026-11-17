@@ -7,8 +7,6 @@ that policy behavior can be tested without starting the Agent window.
 from __future__ import annotations
 
 from typing import Any, Optional
-from browser_url import normalize_domain
-from domain_normalization import domain_matches
 
 
 SUPPORTED_MATCH_TYPES = frozenset(
@@ -17,7 +15,6 @@ SUPPORTED_MATCH_TYPES = frozenset(
         "process_name_or_title",
         "exe_path",
         "window_title",
-        "website_domain",
     }
 )
 
@@ -112,6 +109,21 @@ def normalize_rules(raw_rules: Any) -> list[dict[str, Any]]:
     return rules
 
 
+def normalize_policy_payload(raw_rules: Any) -> list[dict[str, Any]]:
+    """Read current or cached policy, dropping retired website rules."""
+    if not isinstance(raw_rules, list):
+        raise ValueError("Backend policy data must be a list")
+    program_rules = [
+        rule for rule in raw_rules
+        if not isinstance(rule, dict)
+        or str(rule.get("match_type") or "").strip().casefold() != "website_domain"
+    ]
+    rules = normalize_rules(program_rules)
+    if program_rules and not rules:
+        raise ValueError("Backend returned an empty or invalid policy")
+    return rules
+
+
 def find_process_match(
     rules: list[dict[str, Any]],
     process_name: Any,
@@ -136,7 +148,7 @@ def find_process_match(
             continue
         match_type = rule["match_type"]
         match_value = rule["match_value"]
-        if match_type in {"window_title", "website_domain"}:
+        if match_type == "window_title" or match_type not in SUPPORTED_MATCH_TYPES:
             continue
         if match_type == "exe_path" and normalized_exe_path != normalize_path(match_value):
             continue
@@ -162,17 +174,4 @@ def find_window_match(
     window_title: Any,
 ) -> Optional[dict[str, Any]]:
     """Window titles are telemetry only, never grounds for a penalty."""
-    return None
-
-
-def find_website_match(rules, domain):
-    host = normalize_domain(domain)
-    if not host:
-        return None
-    for rule in rules:
-        if rule.get("enabled") is False or rule.get("match_type") != "website_domain":
-            continue
-        blocked = normalize_domain(rule.get("match_value"))
-        if blocked and domain_matches(host, blocked):
-            return rule
     return None

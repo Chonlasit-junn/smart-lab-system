@@ -16,12 +16,10 @@ from agent_device import get_agent_data_dir, load_device_registration
 from agent_clock import ServerClock
 from agent_outbox import AgentOutbox
 from program_identity import program_usage_name, read_executable_identity
-from browser_url import BrowserURLMonitor
 from agent_policy import (
     DEFAULT_FALLBACK_RULES,
     find_process_match,
-    find_website_match,
-    normalize_rules,
+    normalize_policy_payload,
 )
 from agent_violation import (
     DEFAULT_GRACE_SECONDS,
@@ -87,7 +85,8 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QPushButton, QFrame,
                              QGraphicsDropShadowEffect, QMessageBox, QDialog)
 from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QFont, QColor, QIcon
+from branding import logo_icon_path
 from agent_instance import AgentInstanceGuard
 
 # Hugging Face Space อาจ sleep อยู่ — retry ให้อัตโนมัติ
@@ -737,6 +736,11 @@ class LoginOverlay(QWidget):
         cl = QVBoxLayout(card)
         cl.setContentsMargins(45, 45, 45, 45)
 
+        logo = QLabel()
+        logo.setPixmap(QApplication.windowIcon().pixmap(68, 68))
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cl.addWidget(logo)
+
         title = QLabel("Smart Lab Access")
         title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
         title.setStyleSheet("color: #1e293b; border: none;")
@@ -1049,9 +1053,6 @@ class SmartLabAgent:
         self.session_cleanup = None
         self.monitor_timer  = QTimer()
         self.monitor_timer.timeout.connect(self.track_usage)
-        self.website_monitor_timer = QTimer()
-        self.website_monitor_timer.timeout.connect(self.track_website_usage)
-        self.website_monitor_timer.setInterval(1000)
         self.heartbeat_timer = QTimer()
         self.heartbeat_timer.timeout.connect(self.send_heartbeat)
         self.booking_deadline_timer = QTimer()
@@ -1361,7 +1362,6 @@ class SmartLabAgent:
 
             for timer_name in (
                 "monitor_timer",
-                "website_monitor_timer",
                 "heartbeat_timer",
                 "booking_deadline_timer",
                 "policy_timer",
@@ -1379,7 +1379,6 @@ class SmartLabAgent:
                     cleanup_session=False,
                 )
             else:
-                self.stop_browser_monitor()
                 self._stop_window_visibility_monitor()
 
             if overlay is not None:
@@ -1428,41 +1427,10 @@ class SmartLabAgent:
         elif not should_monitor and monitor is not None:
             self._stop_window_visibility_monitor()
 
-    def _sync_browser_monitor(self):
-        rules = getattr(self, "policy_rules", [])
-        grace_context = getattr(self, "violation_grace_context", None)
-        needs_monitor = bool(
-            getattr(self, "current_session_id", None)
-            and (
-                any(
-                    rule.get("match_type") == "website_domain"
-                    for rule in rules
-                )
-                or (
-                    grace_context
-                    and grace_context.get("detection_source")
-                    == "browser_domain"
-                )
-            )
-        )
-        monitor = getattr(self, "browser_url_monitor", None)
-        if needs_monitor and monitor is None:
-            self.browser_url_monitor = BrowserURLMonitor()
-        if needs_monitor:
-            website_timer = getattr(self, "website_monitor_timer", None)
-            if website_timer is not None and not website_timer.isActive():
-                website_timer.start()
-        elif not needs_monitor and monitor is not None:
-            website_timer = getattr(self, "website_monitor_timer", None)
-            if website_timer is not None:
-                website_timer.stop()
-            self.stop_browser_monitor()
-
     def _set_policy(self, raw_rules, version, source):
-        if not isinstance(raw_rules, list):
-            return False
-        rules = normalize_rules(raw_rules)
-        if raw_rules and not rules:
+        try:
+            rules = normalize_policy_payload(raw_rules)
+        except ValueError:
             return False
 
         changed = rules != self.policy_rules or version != self.policy_version
@@ -1506,11 +1474,7 @@ class SmartLabAgent:
         payload = response.json()
         raw_rules = payload.get("data") if isinstance(payload, dict) else None
         version = payload.get("version") if isinstance(payload, dict) else None
-        if not isinstance(raw_rules, list):
-            raise ValueError("Backend policy data must be a list")
-        rules = normalize_rules(raw_rules)
-        if raw_rules and not rules:
-            raise ValueError("Backend returned an empty or invalid policy")
+        rules = normalize_policy_payload(raw_rules)
 
         policy_token = payload.get("policy_token")
         if policy_token is not None and not isinstance(policy_token, str):
@@ -1542,7 +1506,6 @@ class SmartLabAgent:
             else:
                 self._use_fallback_policy()
             SmartLabAgent._sync_process_monitor(self)
-            SmartLabAgent._sync_browser_monitor(self)
             return
 
         if not isinstance(result, dict) or not self._set_policy(
@@ -1554,12 +1517,10 @@ class SmartLabAgent:
             if self.policy_source is None:
                 self._use_fallback_policy()
             SmartLabAgent._sync_process_monitor(self)
-            SmartLabAgent._sync_browser_monitor(self)
             return
 
         self.policy_token = result.get("policy_token")
         SmartLabAgent._sync_process_monitor(self)
-        SmartLabAgent._sync_browser_monitor(self)
         print(
             f"ดึง Blacklist สำเร็จ {len(self.policy_rules)} รายการ "
             f"(เวอร์ชัน {self.policy_version})"
@@ -1616,7 +1577,6 @@ class SmartLabAgent:
             # Keep local protection active while the first server request runs.
             self._use_fallback_policy()
         SmartLabAgent._sync_process_monitor(self)
-        SmartLabAgent._sync_browser_monitor(self)
         self.refresh_policy()
         self.monitor_timer.start(5000)
         self.heartbeat_timer.start(30000)
@@ -1880,7 +1840,6 @@ class SmartLabAgent:
             policy_version=context.get("policy_version"),
             policy_token=context.get("policy_token"),
             executable_identity=context.get("executable_identity"),
-            browser_domain=context.get("browser_domain"),
         )
         if self.info_bar:
             self.info_bar.trigger_logout(
@@ -1921,9 +1880,6 @@ class SmartLabAgent:
                 f"{context['reason']} (ตรวจพบซ้ำครั้งที่ {attempt.number})"
             )
             self.monitor_timer.stop()
-            website_timer = getattr(self, "website_monitor_timer", None)
-            if website_timer is not None:
-                website_timer.stop()
             self.violation_dialog_active = True
             try:
                 self._finalize_violation(final_context, show_dialog=True)
@@ -1933,9 +1889,6 @@ class SmartLabAgent:
 
         self.violation_dialog_active = True
         self.monitor_timer.stop()
-        website_timer = getattr(self, "website_monitor_timer", None)
-        if website_timer is not None:
-            website_timer.stop()
         chance_requested = False
         try:
             dialog = ViolationDialog(
@@ -1964,8 +1917,7 @@ class SmartLabAgent:
             self._resume_violation_monitors()
             return
 
-        # The warning itself takes focus. Recheck EXE identity or the original
-        # browser window rather than treating the warning as the active app.
+        # The warning takes focus, so recheck executable identity directly.
         try:
             still_present = self._violation_is_still_present(context)
         except Exception as exc:
@@ -2010,16 +1962,6 @@ class SmartLabAgent:
         if not self.current_session_id or self.violation_reported:
             return
         self.monitor_timer.start(5000)
-        if (
-            getattr(self, "browser_url_monitor", None) is not None
-            and any(
-                rule.get("match_type") == "website_domain"
-                for rule in self.policy_rules
-            )
-        ):
-            website_timer = getattr(self, "website_monitor_timer", None)
-            if website_timer is not None:
-                website_timer.start()
 
     def _handle_violation_recheck_result(
         self, session_id, context, timeout_context, result, error,
@@ -2050,10 +1992,6 @@ class SmartLabAgent:
             if context.get("matched_rule")
             else (self.policy_rules if policy_rules is None else policy_rules)
         )
-        if context.get("detection_source") == "browser_domain":
-            monitor = getattr(self, "browser_url_monitor", None)
-            observation = monitor.recheck(context) if monitor else None
-            return bool(observation and find_website_match(rules, observation["domain"]))
         if context.get("detection_source") == "window_title":
             return False
         target_process_id = context.get("process_id")
@@ -2107,7 +2045,6 @@ class SmartLabAgent:
         policy_version=None,
         policy_token=None,
         executable_identity=None,
-        browser_domain=None,
     ):
         if self.violation_reported or not self.current_session_id:
             return
@@ -2127,7 +2064,6 @@ class SmartLabAgent:
             "policy_version": policy_version,
             "policy_token": policy_token,
             "executable_identity": json.dumps(executable_identity or {}, ensure_ascii=False),
-            "browser_domain": browser_domain,
         }
 
         if self._queue_outbox(
@@ -2189,7 +2125,7 @@ class SmartLabAgent:
                     )
                 except Exception:
                     # Preserve the existing fail-closed behavior during a grace
-                    # recheck if process/browser state cannot be read.
+                    # recheck if process state cannot be read.
                     grace_present = True
             should_scan = not grace_present
 
@@ -2525,50 +2461,6 @@ class SmartLabAgent:
                 print(f"ล้างสถานะ event หน้าต่างเก่าไม่สำเร็จ: {exc}")
         return match
 
-    def track_website_usage(self):
-        """Check the foreground browser independently of process scan cadence."""
-        try:
-            if (
-                not self.current_session_id
-                or self.violation_reported
-                or self.violation_dialog_active
-                or getattr(self, "violation_recheck_pending", False)
-            ):
-                return
-
-            if self.violation_state.is_grace_active(time.monotonic()):
-                return
-
-            monitor = getattr(self, "browser_url_monitor", None)
-            if monitor is None:
-                return
-            observation = monitor.poll()
-            matched_rule = (
-                find_website_match(self.policy_rules, observation["domain"])
-                if observation
-                else None
-            )
-            if matched_rule:
-                self._handle_violation_detection({
-                    "program_name": observation["domain"],
-                    "reason": f"ไม่อนุญาตให้เข้าเว็บไซต์: {observation['domain']}",
-                    "browser_domain": observation["domain"],
-                    "browser_hwnd": observation["hwnd"],
-                    "browser_pid": observation["pid"],
-                    "process_name": observation["process_name"],
-                    "exe_path": observation["exe_path"],
-                    "executable_identity": observation["executable_identity"],
-                    "detection_source": "browser_domain",
-                    "matched_rule": matched_rule,
-                })
-        except Exception as exc:
-            error_type = type(exc).__name__
-            now = time.monotonic()
-            last_error = getattr(self, "_last_track_usage_error", None)
-            if last_error is None or last_error[0] != error_type or now - last_error[1] >= 60:
-                _append_monitor_error_log(error_type)
-                self._last_track_usage_error = (error_type, now)
-
     def track_usage(self):
         try:
             if not self.current_session_id or self.violation_dialog_active:
@@ -2693,7 +2585,6 @@ class SmartLabAgent:
 
     def stop_and_send_logs(self, session_id, end_reason="logout", *, cleanup_session=True):
         _close_booking_warning_dialog(self)
-        self.stop_browser_monitor()
         self._stop_window_visibility_monitor()
         self.monitor_timer.stop()
         self.heartbeat_timer.stop()
@@ -2807,20 +2698,13 @@ class SmartLabAgent:
         self.booking_end_warning_shown = False
         self.current_session_id = None
 
-    def stop_browser_monitor(self):
-        website_timer = getattr(self, "website_monitor_timer", None)
-        if website_timer is not None:
-            website_timer.stop()
-        monitor = getattr(self, "browser_url_monitor", None)
-        if monitor is not None:
-            monitor.close()
-            self.browser_url_monitor = None
 
 
 def run_agent() -> int:
     """Start the Agent UI and return its Qt event-loop exit code."""
 
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(logo_icon_path()))
     app.setQuitOnLastWindowClosed(False)
     instance_guard = AgentInstanceGuard(app)
     if not instance_guard.claim():
@@ -2828,7 +2712,6 @@ def run_agent() -> int:
         return 0
 
     agent_logic  = SmartLabAgent()
-    app.aboutToQuit.connect(agent_logic.stop_browser_monitor)
     app.aboutToQuit.connect(agent_logic._stop_window_visibility_monitor)
     app.aboutToQuit.connect(instance_guard.close)
     login_screen = LoginOverlay(agent_logic)

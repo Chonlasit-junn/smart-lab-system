@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LoadError from "../components/LoadError";
 import ConfirmActionDialog from "../components/ConfirmActionDialog";
@@ -18,7 +19,6 @@ import {
 import {
   Cancel,
   CheckCircle,
-  Computer,
   Email,
   PendingActions,
   PersonOutline,
@@ -185,18 +185,7 @@ export default function VerifyUsers() {
         }}
       >
         <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
-          <Box
-            className="admin-brand-mark"
-            sx={{
-              bgcolor: "#000",
-              p: 1,
-              borderRadius: 2.5,
-              display: "flex",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
-            }}
-          >
-            <Computer sx={{ color: "white", fontSize: 28 }} />
-          </Box>
+          <SmartLabLogo decorative />
           <Box>
             <Typography
               variant="h6"

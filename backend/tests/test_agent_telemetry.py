@@ -111,6 +111,13 @@ class AgentTelemetryTests(unittest.TestCase):
         self.assertEqual(points.call_args.kwargs["effective_at"], self.detected_at)
 
     def test_distinct_violations_across_sessions_each_create_a_point_event(self):
+        self.user.roles = [models.Role(name="student")]
+        self.db.flush()
+        self.deliver(event_id="violation-session-one")
+        self.session.session_status = "completed"
+        self.session.exit_time = self.detected_at
+        self.db.commit()
+
         second_session = models.LabAccessLog(
             user_id=self.user.id,
             lab_id=self.lab.id,
@@ -118,13 +125,12 @@ class AgentTelemetryTests(unittest.TestCase):
             access_type="manual",
             status="success",
             session_status="active",
-            entry_time=self.detected_at - timedelta(minutes=30),
+            entry_time=self.detected_at,
             device_mac="aa:bb:cc:dd:ee:ff",
         )
         self.db.add(second_session)
         self.db.commit()
 
-        self.deliver(event_id="violation-session-one")
         self.deliver(
             session_id=second_session.id,
             event_id="violation-session-two",
@@ -474,96 +480,19 @@ class AgentTelemetryTests(unittest.TestCase):
                 self.deliver(executable_identity=identity)
             self.assertEqual(raised.exception.status_code, 422)
 
-    def website_payload(self):
-        self.rule.match_type = "website_domain"
-        self.rule.match_value = "example.com"
-        self.db.commit()
-        with patch("policy.utc_now", return_value=self.detected_at - timedelta(minutes=1)):
-            self.policy = agent.get_agent_policy(self.db)
-        return dict(program_name="example.com", browser_domain="example.com",
-                    detection_source="browser_domain", process_name="msedge.exe",
-                    executable_identity=json.dumps({"original_filename": "msedge.exe"}))
-
-    def test_browser_domain_uses_existing_idempotent_point_delivery(self):
-        payload = self.website_payload()
-        self.db.delete(self.rule)
-        self.db.commit()
-        with patch.object(agent, "apply_point_event", return_value={}) as points:
-            self.deliver(**payload)
-            self.deliver(**payload)
-        self.assertEqual(points.call_count, 1)
-        row = self.db.query(models.UsageViolation).one()
-        self.assertEqual(row.program_name, "example.com")
-        self.assertEqual(row.detection_source, "browser_domain")
-        self.assertIsNone(row.window_title)
-
-    def test_browser_domain_requires_browser_identity_and_canonical_domain(self):
-        payload = self.website_payload()
-        for changes in (
-            {"browser_domain": "https://example.com/private?secret=1"},
-            {"browser_domain": "example.com.evil.com"},
-            {"browser_domain": None},
-            {"executable_identity": json.dumps({"original_filename": "notepad.exe"})},
-        ):
-            with self.subTest(changes=changes), patch.object(agent, "apply_point_event") as points:
-                with self.assertRaises(HTTPException) as raised:
-                    self.deliver(**(payload | changes))
-                self.assertEqual(raised.exception.status_code, 422)
-                points.assert_not_called()
-
-    def test_special_domains_pass_admin_policy_agent_and_violation_validation(self):
-        # All writes are to this fixture's in-memory SQLite database, never production.
-        from routers import blacklist
-        from url_policy import normalize_domain
-
-        for index, (entered, canonical, observed) in enumerate((
-            ("https://faß.de/private?secret=1", "xn--fa-hia.de", "https://faß.de/"),
-            ("ไทย.ไทย", "xn--o3cw4h.xn--o3cw4h", "https://ไทย.ไทย/"),
-            ("127.1", "127.0.0.1", "http://127.0.0.1/"),
-            ("https://[::ffff:192.0.2.1]:443/", "[::ffff:c000:201]", "http://[::ffff:c000:201]/"),
-        )):
-            with self.subTest(entered=entered):
-                blacklist.create(blacklist.BlacklistCreate(
-                    app_name=f"Offline domain {index}", match_type="website_domain", match_value=entered,
-                ), self.user, self.db)
-                row = self.db.query(models.BlacklistedApp).filter_by(app_name=f"Offline domain {index}").one()
-                self.assertEqual(row.match_value, canonical)
-                with patch("policy.utc_now", return_value=self.detected_at - timedelta(minutes=1)):
-                    self.policy = agent.get_agent_policy(self.db)
-                policy_rule = next(rule for rule in self.policy["data"] if rule["id"] == row.id)
-                self.assertEqual(policy_rule["match_type"], "website_domain")
-                self.assertEqual(policy_rule["match_value"], canonical)
-                self.assertEqual(normalize_domain(observed), canonical)
-                with patch.object(agent, "apply_point_event", return_value={}) as points:
-                    payload = dict(program_name=canonical, browser_domain=canonical,
-                                   event_id=f"offline-domain-{index}", detection_source="browser_domain",
-                                   process_name="msedge.exe",
-                                   executable_identity=json.dumps({"original_filename": "msedge.exe"}))
-                    self.deliver(**payload)
-                    self.deliver(**payload)
-                    self.assertEqual(points.call_count, 1)
-                violation = self.db.query(models.UsageViolation).filter_by(event_id=f"offline-domain-{index}").one()
-                self.assertEqual(violation.program_name, canonical)
-                self.assertEqual(violation.matched_rule_id, row.id)
-                self.assertIsNone(violation.window_title)
-
-    def test_unicode_domain_evidence_must_be_canonical_before_deducting_points(self):
-        payload = self.website_payload()
-        payload["browser_domain"] = "faß.de"
+    def test_obsolete_website_evidence_is_acknowledged_without_penalty(self):
         with patch.object(agent, "apply_point_event") as points:
-            with self.assertRaises(HTTPException) as raised:
-                self.deliver(**payload)
-            self.assertEqual(raised.exception.status_code, 422)
-            points.assert_not_called()
-
-    def test_ip_alias_evidence_must_be_canonical_before_deducting_points(self):
-        payload = self.website_payload()
-        payload["browser_domain"] = "127.1"
-        with patch.object(agent, "apply_point_event") as points:
-            with self.assertRaises(HTTPException) as raised:
-                self.deliver(**payload)
-            self.assertEqual(raised.exception.status_code, 422)
-            points.assert_not_called()
+            for evidence in (
+                {"browser_domain": "example.com", "detection_source": "browser_domain"},
+                {"detection_source": "browser_domain"},
+                {"browser_domain": "example.com"},
+            ):
+                with self.subTest(evidence=evidence):
+                    result = self.deliver(**evidence)
+                    self.assertTrue(result["ignored"])
+                    self.assertEqual(result["reason"], "website_policy_removed")
+        points.assert_not_called()
+        self.assertEqual(self.db.query(models.UsageViolation).count(), 0)
 
     def test_point_failure_rolls_back_the_violation_for_a_later_retry(self):
         with patch.object(agent, "apply_point_event", side_effect=RuntimeError("unavailable")):

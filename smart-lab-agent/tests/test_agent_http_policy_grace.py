@@ -618,23 +618,20 @@ class AgentPolicyTests(unittest.TestCase):
             result = operation()
         self.assertIsNone(result["scan"]["match"])
 
-    def test_website_only_policy_skips_process_scan(self):
+    def test_legacy_website_only_policy_is_accepted_as_empty(self):
         instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
-        instance.current_session_id = 42
-        instance.policy_rules = [{
+        instance.policy_rules = []
+        instance.policy_version = None
+        legacy_rules = [{
             "app_name": "Blocked site",
             "match_type": "website_domain",
             "match_value": "example.com",
             "enabled": True,
         }]
-        instance.violation_grace_context = None
-        instance._process_scan_pending_shown = {}
 
-        with patch.object(agent, "_visible_window_handles_by_pid") as enumerate_windows:
-            status = agent.SmartLabAgent._queue_process_scan(instance, set(), False)
-
-        self.assertIsNone(status)
-        enumerate_windows.assert_not_called()
+        self.assertTrue(instance._set_policy(legacy_rules, "legacy", "cache"))
+        self.assertEqual(instance.policy_rules, [])
+        self.assertEqual(instance.policy_source, "cache")
 
     def test_foreground_identity_cache_reuses_same_window_and_process(self):
         instance = agent.SmartLabAgent.__new__(agent.SmartLabAgent)
@@ -1151,58 +1148,6 @@ class AgentTelemetryTests(unittest.TestCase):
                                   exe=Mock(side_effect=agent.psutil.AccessDenied(123)))
         with patch.object(agent.psutil, "process_iter", return_value=[process]):
             self.assertFalse(instance._violation_is_still_present(self.warning_context(instance)))
-
-    def test_closed_or_unreadable_website_does_not_end_session(self):
-        instance = self.make_agent()
-        instance.browser_url_monitor = Mock()
-        rule = {"match_type": "website_domain", "match_value": "example.com"}
-        context = {"detection_source": "browser_domain", "matched_rule": rule}
-        for observation in (None, {"domain": "allowed.example"}):
-            instance.browser_url_monitor.recheck.return_value = observation
-            self.assertFalse(instance._violation_is_still_present(context))
-        instance.browser_url_monitor.recheck.return_value = {"domain": "sub.example.com"}
-        self.assertTrue(instance._violation_is_still_present(context))
-
-    def test_website_detection_enters_the_existing_warning_flow(self):
-        instance = self.make_agent()
-        instance.policy_rules = [{"match_type": "website_domain", "match_value": "example.com"}]
-        instance._find_new_process_match = Mock(return_value=None)
-        instance._handle_violation_detection = Mock()
-        instance.browser_url_monitor = Mock()
-        instance.browser_url_monitor.poll.return_value = {
-            "domain": "example.com", "hwnd": 42, "pid": 123,
-            "process_name": "msedge.exe", "exe_path": r"C:\msedge.exe",
-            "executable_identity": {"original_filename": "msedge.exe"},
-        }
-        instance.track_website_usage()
-        context = instance._handle_violation_detection.call_args.args[0]
-        self.assertEqual(context["browser_domain"], "example.com")
-        self.assertEqual(context["detection_source"], "browser_domain")
-
-    def test_website_detection_runs_while_process_scan_is_pending(self):
-        instance = self.make_agent()
-        instance.policy_rules = [
-            {"match_type": "process_name", "match_value": "blocked.exe"},
-            {"match_type": "website_domain", "match_value": "example.com"},
-        ]
-        instance._process_scan_in_flight = True
-        instance._process_scan_pending_shown = {}
-        instance._process_scan_generation = 0
-        instance.browser_url_monitor = Mock()
-        instance.browser_url_monitor.poll.return_value = {
-            "domain": "example.com", "hwnd": 42, "pid": 123,
-            "process_name": "msedge.exe", "exe_path": r"C:\msedge.exe",
-            "executable_identity": {"original_filename": "msedge.exe"},
-        }
-        instance._handle_violation_detection = Mock()
-
-        with patch.object(agent.gw, "getActiveWindow", return_value=None):
-            agent.SmartLabAgent.track_website_usage(instance)
-
-        instance.browser_url_monitor.poll.assert_called_once()
-        instance._handle_violation_detection.assert_called_once()
-        context = instance._handle_violation_detection.call_args.args[0]
-        self.assertEqual(context["browser_domain"], "example.com")
 
     def test_periodic_checkpoints_and_logout_do_not_overlap(self):
         instance = self.make_agent()

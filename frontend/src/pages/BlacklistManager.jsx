@@ -1,3 +1,4 @@
+import SmartLabLogo from "../components/SmartLabLogo";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import LoadError from "../components/LoadError";
 import ConfirmActionDialog from "../components/ConfirmActionDialog";
@@ -29,7 +30,6 @@ import {
 import {
   Search,
   Logout,
-  Computer,
   Person,
   Add,
   Save,
@@ -100,7 +100,7 @@ export default function BlacklistManager() {
         signal: controller.signal,
       });
       if (blacklistControllerRef.current !== controller) return;
-      setBlacklist(res.data.data || []);
+      setBlacklist((res.data.data || []).filter((rule) => rule.match_type !== "website_domain"));
     } catch (err) {
       if (!axios.isCancel(err) && blacklistControllerRef.current === controller) {
         setLoadFailed(true);
@@ -229,18 +229,7 @@ export default function BlacklistManager() {
         }}
       >
         <Box className="sidebar-logo" sx={{ p: 4, display: "flex", gap: 2, alignItems: "center" }}>
-          <Box
-            className="admin-brand-mark"
-            sx={{
-              bgcolor: "#000",
-              p: 1,
-              borderRadius: 2.5,
-              display: "flex",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
-            }}
-          >
-            <Computer sx={{ color: "white", fontSize: 28 }} />
-          </Box>
+          <SmartLabLogo decorative />
           <Box>
             <Typography
               variant="h6"
@@ -519,7 +508,7 @@ export default function BlacklistManager() {
                                     {item.app_name || t("admin.unknownProgram")}
                                   </Typography>
                                   <Chip
-                                    label={t(item.match_type === "website_domain" ? "admin.websiteRule" : "admin.programRule")}
+                                    label={t("admin.programRule")}
                                     size="small"
                                     sx={{
                                       bgcolor: "#fef2f2",
@@ -654,7 +643,6 @@ export default function BlacklistManager() {
             sx={{ mt: 1 }}
           >
             <MenuItem value="process_name">{t("admin.programRule")}</MenuItem>
-            <MenuItem value="website_domain">{t("admin.websiteRule")}</MenuItem>
             {["process_name_or_title", "exe_path", "window_title"].includes(formData.match_type) && (
               <MenuItem value={formData.match_type}>{t("admin.legacyRule")}: {formData.match_type}</MenuItem>
             )}
@@ -675,7 +663,7 @@ export default function BlacklistManager() {
             sx={{ mt: 1, "& .MuiOutlinedInput-root": { borderRadius: 3 } }}
           />
           <TextField
-            label={t(formData.match_type === "website_domain" ? "admin.websiteDomain" : "admin.executableMatch")}
+            label={t("admin.executableMatch")}
             disabled={saving}
             fullWidth
             size="small"
@@ -684,8 +672,8 @@ export default function BlacklistManager() {
               setFormData({ ...formData, match_value: e.target.value });
               setFormError("");
             }}
-            helperText={t(formData.match_type === "website_domain" ? "admin.websiteDomainHint" : "admin.executableMatchHint")}
-            placeholder={formData.match_type === "website_domain" ? "example.com" : "StarRail.exe"}
+            helperText={t("admin.executableMatchHint")}
+            placeholder={"StarRail.exe"}
           />
           <TextField
             label={t("admin.description")}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from typing import Any, Callable, Optional
 
@@ -39,6 +40,8 @@ class GatekeeperRegistrationDialog(ctk.CTkToplevel):
         self._closed = False
 
         self.title("Smart Lab — Register Gatekeeper")
+        if os.name == "nt":
+            self.iconbitmap(parent.brand_icon_path)
         self.geometry("560x570")
         self.resizable(False, False)
         self.transient(parent)
@@ -50,6 +53,9 @@ class GatekeeperRegistrationDialog(ctk.CTkToplevel):
         ctk.CTkLabel(
             frame,
             text="ลงทะเบียนกล้อง Gatekeeper",
+            image=parent.brand_image,
+            compound="left",
+            padx=8,
             font=ctk.CTkFont(size=23, weight="bold"),
         ).pack(anchor="w", padx=22, pady=(22, 4))
         ctk.CTkLabel(

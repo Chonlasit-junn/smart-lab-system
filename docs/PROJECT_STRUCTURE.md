@@ -10,7 +10,7 @@
 | `frontend/` | React/Vite, components, pages และ static assets; เป็น Root Directory ของ Vercel |
 | `smart-lab-agent/` | Agent, ตัวลงทะเบียนเครื่อง และเครื่องมือสร้าง MSI |
 | `gatekeeper/` | ตัวสแกนกล้องและการลงทะเบียนกล้อง |
-| `scripts/` | เครื่องมือตรวจสอบร่วม เช่น domain contract ข้ามสามระบบ |
+| `scripts/` | เครื่องมือสำหรับดูแลโปรเจกต์ |
 | `tests/fixtures/` | ข้อมูลทดสอบกลาง; tests เฉพาะระบบอยู่ใน `<ระบบ>/tests/` |
 | `docs/` | คู่มือโปรเจคที่ไม่ใช่ source code |
 | `.github/` | GitHub Actions; ไม่ย้ายเพราะ GitHub ใช้ตำแหน่งนี้โดยตรง |

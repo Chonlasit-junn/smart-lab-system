@@ -1,11 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 
+logo_icon = str(Path(SPECPATH).resolve().parent / "frontend" / "public" / "smart-lab-logo.ico")
 
 a = Analysis(
     ['agent.pyw'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[(logo_icon, ".")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,4 +37,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=logo_icon,
 )

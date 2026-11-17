@@ -27,6 +27,10 @@ def _base_path():
     return os.path.dirname(os.path.abspath(__file__))
 
 BASE_DIR = _base_path()
+BRAND_ASSETS = (
+    BASE_DIR if getattr(sys, "frozen", False)
+    else os.path.join(BASE_DIR, "..", "frontend", "public")
+)
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 CONFIG = {
@@ -72,6 +76,11 @@ class GatekeeperDemo(ctk.CTk):
     def __init__(self, force_registration=False):
         super().__init__()
         self.title("Smart Lab — AI Gatekeeper")
+        self.brand_icon_path = os.path.join(BRAND_ASSETS, "smart-lab-logo.ico")
+        if os.name == "nt":
+            self.iconbitmap(self.brand_icon_path)
+        with Image.open(os.path.join(BRAND_ASSETS, "smart-lab-logo.png")) as logo:
+            self.brand_image = ctk.CTkImage(light_image=logo.copy(), size=(36, 36))
         self.geometry("1024x620")
         self.resizable(False, False)
 
@@ -222,7 +231,10 @@ class GatekeeperDemo(ctk.CTk):
         self.panel.pack(side="right", padx=(0, 20), pady=20, fill="y")
         self.panel.pack_propagate(False)
 
-        ctk.CTkLabel(self.panel, text="🔐  LIVENESS CHECK", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(28, 8))
+        ctk.CTkLabel(
+            self.panel, text="LIVENESS CHECK", image=self.brand_image, compound="left",
+            padx=8, font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(pady=(20, 8))
 
         status_box = ctk.CTkFrame(self.panel, fg_color=CLR["dark_bg"], corner_radius=12)
         status_box.pack(padx=20, pady=8, fill="x")

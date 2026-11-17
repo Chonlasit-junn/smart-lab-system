@@ -1,5 +1,6 @@
 # smart_gatekeeper.spec
 import os
+from pathlib import Path
 import cv2
 from PyInstaller.utils.hooks import collect_data_files
 
@@ -12,6 +13,8 @@ ort_notices = collect_data_files("onnxruntime", includes=["LICENSE", "ThirdParty
 # cv2 haar cascade path
 cv2_data = os.path.dirname(cv2.__file__)
 model_root = 'Silent-Face-Anti-Spoofing'
+brand_assets = Path(SPECPATH).resolve().parent / "frontend" / "public"
+logo_icon = str(brand_assets / "smart-lab-logo.ico")
 runtime_data = [
     (os.path.join(model_root, 'resources', 'detection_model', 'deploy.prototxt'), os.path.join(model_root, 'resources', 'detection_model')),
     (os.path.join(model_root, 'resources', 'detection_model', 'Widerface-RetinaFace.caffemodel'), os.path.join(model_root, 'resources', 'detection_model')),
@@ -25,6 +28,8 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[
+        (logo_icon, "."),
+        (str(brand_assets / "smart-lab-logo.png"), "."),
         *ctk_datas,
         *ort_notices,
         (os.path.join(cv2_data, 'data', 'haarcascade_frontalface_default.xml'), os.path.join('cv2', 'data')),
@@ -86,5 +91,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='NONE',
+    icon=logo_icon,
 )

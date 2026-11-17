@@ -327,6 +327,21 @@ option,
   border-right: 1px solid var(--border-light);
 }
 
+.smart-lab-logo {
+  display: block;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.login-banner .smart-lab-logo {
+  width: clamp(42px, 8vw, 72px);
+  height: auto;
+  margin-bottom: 12px;
+}
+
 .sidebar-logo {
   display: flex;
   align-items: center;
@@ -917,14 +932,6 @@ textarea:focus-visible,
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-.admin-brand-mark {
-  display: flex;
-  padding: 8px;
-  border-radius: 10px;
-  background: var(--brand-color) !important;
-  box-shadow: 0 4px 10px var(--shadow-color);
-}
-
 .admin-brand-title {
   color: var(--text-dark);
   letter-spacing: -0.5px;
@@ -1128,10 +1135,6 @@ textarea:focus-visible,
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   border-color: var(--brand-color);
-}
-
-.app-layout:not(.admin-layout) .sidebar-logo > .MuiSvgIcon-root {
-  color: var(--brand-color) !important;
 }
 
 .room-card > .MuiBox-root:first-child {
@@ -1511,10 +1514,6 @@ textarea:focus-visible,
 
 :root[data-theme="dark"] .admin-user-details-dialog .MuiIconButton-root {
   color: var(--text-gray) !important;
-}
-
-:root[data-theme="dark"] .app-layout:not(.admin-layout) .sidebar-logo > .MuiSvgIcon-root {
-  color: var(--brand-color) !important;
 }
 
 /* Room cards contain nested Boxes with legacy light backgrounds. Keep the
