@@ -25,8 +25,8 @@ function Placeholder({ className = '' }) {
   return <span className={`loading-placeholder ${className}`} />;
 }
 
-function Brand() {
-  return <div className="loading-brand"><SmartLabLogo decorative />Smart Lab</div>;
+function Brand({ showLogo = true }) {
+  return <div className="loading-brand">{showLogo && <SmartLabLogo decorative />}Smart Lab</div>;
 }
 
 function CardPlaceholder() {
@@ -236,14 +236,15 @@ export function LoadingTableRows({ columns = 5, rows = 4, label }) {
 export default function PageLoadingState({ viewOverride }) {
   const { pathname } = useLocation();
   const { t } = useLanguage();
-  const routeView = pageViews[pathname.replace(/\/$/, '')];
+  const path = pathname.replace(/\/$/, '');
+  const routeView = pageViews[path];
   const view = viewOverride ? [routeView?.[0] || 'common.profile', viewOverride] : routeView;
 
   return <div className="page-loading" role="status" aria-live="polite">
     <span className="loading-sr-only">{t('common.loading')}</span>
     {!view ? (
       <div className="loading-auth" aria-hidden="true">
-        <div className="loading-auth-banner"><Brand /><h1>{t('common.brandTagline')}</h1></div>
+        <div className="loading-auth-banner"><Brand showLogo={path === '/forgot-password'} /><h1>{t('common.brandTagline')}</h1></div>
         <div className="loading-auth-panel">
           <div className="loading-auth-form">
             <Placeholder className="loading-line-title" />

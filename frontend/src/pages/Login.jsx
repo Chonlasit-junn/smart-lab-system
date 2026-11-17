@@ -1,4 +1,3 @@
-import SmartLabLogo from "../components/SmartLabLogo";
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
@@ -99,7 +98,6 @@ export default function Login() {
 
         {/* ฝั่งซ้าย: banner */}
         <div className="login-banner">
-          <SmartLabLogo />
           <h1 className="login-banner-title" style={{ whiteSpace: 'pre-line' }}>
             {t.bannerHeadline}
           </h1>

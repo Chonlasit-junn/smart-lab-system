@@ -19,6 +19,7 @@
         const path = location.pathname.replace(/\/$/, '');
         document.documentElement.dataset.startupLayout = ['', '/register', '/forgot-password'].includes(path) ? 'auth' : 'app';
         const startupViews = {
+          '/forgot-password': 'forgotPassword',
           '/booking': 'booking', '/reserved': 'table', '/history': 'table', '/my-tickets': 'table',
           '/profile': 'profile', '/admin': 'dashboard', '/admin/points': 'points',
           '/admin/points/policy': 'form', '/admin/roles': 'roles', '/manage-labs': 'cards',
@@ -49,7 +50,7 @@
         <span class="loading-sr-only"><span class="startup-th">กำลังโหลด...</span><span class="startup-en">Loading...</span></span>
         <div class="loading-auth" aria-hidden="true">
           <div class="loading-auth-banner">
-            <div class="loading-brand"><img class="smart-lab-logo" src="%BASE_URL%smart-lab-logo.png" width="44" height="44" alt="" />Smart Lab</div>
+            <div class="loading-brand"><img class="smart-lab-logo loading-auth-logo" src="%BASE_URL%smart-lab-logo.png" width="44" height="44" alt="" />Smart Lab</div>
             <h1><span class="startup-th">ระบบจองห้อง Lab</span><span class="startup-en">Lab reservation system</span></h1>
           </div>
           <div class="loading-auth-panel"><div class="loading-auth-form">

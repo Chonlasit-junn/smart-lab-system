@@ -1,4 +1,3 @@
-import SmartLabLogo from "../components/SmartLabLogo";
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import Webcam from 'react-webcam';
@@ -506,7 +505,6 @@ export default function Register() {
 
         {/* ฝั่งซ้าย: banner */}
         <div className="login-banner">
-          <SmartLabLogo />
           <h2 className="login-banner-title">{t.bannerTitle}</h2>
           <p className="login-banner-subtitle">{t.bannerSub}</p>
         </div>

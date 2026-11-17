@@ -140,6 +140,8 @@
 
 /* Only the static first frame has both layouts; React renders one layout. */
 .startup-screen .loading-auth { display: none; }
+.startup-screen .loading-auth-logo { display: none; }
+:root[data-startup-view="forgotPassword"] .startup-screen .loading-auth-logo { display: block; }
 .startup-screen .loading-startup-shape { display: none; }
 :root[data-startup-view="booking"] .startup-screen .loading-startup-shape--booking,
 :root[data-startup-view="blacklist"] .startup-screen .loading-startup-shape--blacklist,

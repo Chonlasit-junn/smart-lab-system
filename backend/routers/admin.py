@@ -40,7 +40,16 @@ def get_dashboard_summary(
     """Return only aggregate counts and the latest bookings for the dashboard."""
     total_requests = db.query(func.count(models.Booking.id)).scalar() or 0
     active_users = db.query(func.count(models.User.id)).scalar() or 0
-    support_tickets = db.query(func.count(models.Ticket.id)).scalar() or 0
+    # Ticket Manager displays a reply status as soon as a ticket is answered.
+    has_reply = db.query(models.TicketReply.id).filter(
+        models.TicketReply.ticket_id == models.Ticket.id
+    ).exists()
+    support_tickets = (
+        db.query(func.count(models.Ticket.id))
+        .filter(models.Ticket.status == "open", ~has_reply)
+        .scalar()
+        or 0
+    )
     pending_approvals = (
         db.query(func.count(models.UserPassport.id))
         .filter(models.UserPassport.is_active.is_(False))
