@@ -13,6 +13,11 @@ if ($agentFile.PSIsContainer -or $agentFile.Name -ne 'SmartLabDevice.exe') {
     throw 'AgentPath must point to an installed SmartLabDevice.exe.'
 }
 
+$settings = Get-ItemProperty -LiteralPath 'HKLM:\Software\Smart Lab\Device Agent' -ErrorAction SilentlyContinue
+if ($settings.RecoveryAgentPath -ne $agentFile.FullName) {
+    throw 'Select Agent Recovery in the MSI setup before registering the task.'
+}
+
 $recoveryPath = Join-Path $agentFile.DirectoryName 'SmartLabAgentRecovery.exe'
 if (-not (Test-Path -LiteralPath $recoveryPath -PathType Leaf)) {
     throw 'Install the Agent MSI that includes SmartLabAgentRecovery.exe first.'

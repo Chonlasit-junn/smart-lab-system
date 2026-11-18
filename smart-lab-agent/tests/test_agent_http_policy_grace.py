@@ -930,6 +930,55 @@ class AgentTelemetryTests(unittest.TestCase):
         dialog.exec.assert_called_once()
         get_active_window.assert_not_called()
 
+    def test_accepting_chances_restarts_scanning_until_third_detection(self):
+        instance = self.make_agent()
+        instance.seen_process_ids = set()
+        instance._violation_is_still_present = Mock(return_value=True)
+        instance.window_visibility_monitor = Mock()
+        instance.window_visibility_monitor.consume_shown_process_ids.side_effect = [
+            set(), set(), {123}, set(),
+        ]
+
+        def complete_scan(_key, operation, callback):
+            callback(operation(), None)
+            return True
+
+        instance.background_tasks = SimpleNamespace(submit=complete_scan)
+        process = SimpleNamespace(
+            info={"pid": 123, "name": "blocked.exe"},
+            exe=Mock(return_value=r"C:\blocked.exe"),
+        )
+        dialog = Mock()
+        dialog.exec.return_value = agent.QDialog.DialogCode.Accepted
+        clock = Mock(return_value=100.0)
+
+        with (
+            patch.object(agent, "ViolationDialog", return_value=dialog),
+            patch.object(agent.time, "monotonic", clock),
+            patch.object(agent.gw, "getActiveWindow", return_value=None),
+            patch.object(agent.psutil, "process_iter", return_value=[process]),
+            patch.object(agent, "_visible_window_handles_by_pid", return_value={123: {100}}),
+            patch.object(agent, "read_executable_identity", return_value={"original_filename": "blocked.exe"}),
+        ):
+            instance.track_usage()
+            instance.monitor_timer.start.assert_called_once_with(5000)
+
+            clock.return_value = 105.0
+            instance.track_usage()
+            self.assertEqual(instance.violation_state.attempts, 1)
+
+            clock.return_value = 110.0
+            instance.track_usage()
+            self.assertEqual(instance.violation_state.attempts, 2)
+            self.assertEqual(instance.monitor_timer.start.call_count, 2)
+
+            clock.return_value = 110.0 + instance.violation_state.grace_seconds + 1
+            instance.track_usage()
+
+        self.assertEqual(dialog.exec.call_count, 2)
+        self.assertEqual(instance.violation_state.attempts, 3)
+        instance._finalize_violation.assert_called_once()
+
     def test_open_app_after_warning_uses_original_timestamp_and_policy(self):
         instance = self.make_agent()
         instance._violation_is_still_present = Mock(return_value=True)

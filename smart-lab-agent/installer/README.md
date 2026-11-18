@@ -5,7 +5,13 @@ The MSI is built with Microsoft's **Visual Studio Installer Projects** extension
 - **Register This Computer** signs in with an Admin account, loads active Labs, and registers this computer to the selected Lab.
 - **Smart Lab Agent** uses that credential to report to the Backend and enforce the Lab policy.
 
-The MSI is per-machine and defaults to `Program Files\Smart Lab\Device Agent`; the setup wizard lets the installer choose another destination. It adds the Agent and registration shortcuts under **Start → Smart Lab**, plus an **Uninstall Smart Lab Agent** shortcut and a standard entry in Windows Apps/Programs. The installer also offers a checkbox to add both app shortcuts to the Desktop, selected by default. The Agent opens at Windows sign-in and returns to its own full-screen login lock when a Lab Session ends. It does not log off Windows and is not a Windows service; the face scanner does not auto-start.
+The MSI is per-machine and defaults to `Program Files\Smart Lab\Device Agent`; the setup wizard lets the installer choose another destination. It adds the Agent and registration shortcuts under **Start → Smart Lab**, plus an **Uninstall Smart Lab Agent** shortcut and a standard entry in Windows Apps/Programs. The checkbox for Desktop shortcuts is selected by default. The three Agent options are independently off by default:
+
+- **Start Agent when someone signs in to Windows** adds the Windows sign-in entry.
+- **Restart Agent automatically if it stops** authorizes the Agent to create a recovery task after it is opened in the registered Windows account. It can reopen the Agent only after it has already started in the current Windows sign-in session.
+- **Close apps and clear browser data and new downloads at session end** enables Session Cleanup.
+
+The Agent returns to its own full-screen login lock when a Lab Session ends. It does not log off Windows or run as a Windows service.
 
 ## Registering a Lab computer
 
@@ -20,7 +26,7 @@ The Backend URL saved with the device credential is used by the Agent. `SMART_LA
 
 ## Recover the Agent after End task
 
-Install the Agent MSI, then start the Agent from the shared Windows account used
+Select the Recovery option in Setup, then start the Agent from the shared Windows account used
 in the Lab. The MSI-installed Agent creates the recovery task for that account
 with normal privileges when it finds a local device registration. It keeps
 an existing task as configured, including a task disabled by an administrator.
@@ -42,8 +48,10 @@ It starts the MSI's `SmartLabAgentRecovery.exe` directly. The Agent updates a
 matching enabled task previously created by the Agent. For a task created by
 an administrator, edit its action in Task Scheduler to run the installed
 `SmartLabAgentRecovery.exe` with an empty arguments field.
-The MSI creates the usual sign-in entry on its own. Admins can manage the
-recovery task in Windows Task Scheduler.
+Admins can manage the recovery task in Windows Task Scheduler. If upgrading a
+machine whose old recovery task still calls PowerShell, disable that task before
+installing with Recovery off. The new opt-in setting is enforced by the installed
+recovery executable; a legacy PowerShell action runs independently of it.
 
 The Agent ignores window-close requests on the login and session windows. When
 it restarts with an interrupted session, it shows its login lock, checks the
@@ -59,7 +67,7 @@ SQLite outbox. On a crash, completed checkpoints survive; the most recent partia
 interval can still be lost. At the end of a warning, it checks whether the detected
 application is still present before ending the session.
 
-Session cleanup is enabled by default on the Agent MSI. When a Lab Session ends,
+When Session Cleanup is selected in Setup and a Lab Session ends,
 the Agent shows its login lock first, then closes applications owned by the current
 Windows user, clears browser cookies, saved logins, history and session/cache data,
 and deletes only files newly created in the Windows Downloads folder during that

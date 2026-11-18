@@ -198,6 +198,16 @@ function ConvertTo-VdprojValue([string]$Value) {
     return $Value.Replace('\', '\\').Replace('"', '\"')
 }
 
+function Invoke-MsiSql($Database, [string]$Sql) {
+    $sqlView = $Database.OpenView($Sql)
+    try {
+        $sqlView.Execute()
+    } finally {
+        $sqlView.Close()
+        [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($sqlView)
+    }
+}
+
 $recoveryFile = ""
 if ($Product -eq "Agent" -and -not $isQaAgent) {
     $compiler = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
@@ -403,6 +413,9 @@ try {
     $secureProperties = @($record.StringData(1) -split ';' | Where-Object { $_ })
     if ($secureProperties -notcontains 'CREATE_DESKTOP_SHORTCUTS') {
         $secureProperties += 'CREATE_DESKTOP_SHORTCUTS'
+    }
+    if ($Product -eq 'Agent' -and -not $isQaAgent) {
+        $secureProperties += 'ENABLE_AGENT_AUTOSTART', 'ENABLE_AGENT_RECOVERY', 'ENABLE_SESSION_CLEANUP'
     }
     $view.Close()
     [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)
@@ -619,8 +632,39 @@ try {
             throw "The MSI is missing '$appExeName' required for Agent auto-start."
         }
         $startupCommand = '"[#' + $fileKeysByName[$appExeName] + ']"' + $startupArguments
+        $startupCondition = 'NULL'
+        if (-not $isQaAgent) {
+            $startupCondition = '''ENABLE_AGENT_AUTOSTART = "1"'''
+            $setupOptions = @(
+                @{ Number = 2; Property = 'ENABLE_AGENT_AUTOSTART'; Label = 'Start Agent when someone signs in to Windows' },
+                @{ Number = 3; Property = 'ENABLE_AGENT_RECOVERY'; Label = 'Restart Agent automatically if it stops' },
+                @{ Number = 4; Property = 'ENABLE_SESSION_CLEANUP'; Label = 'Close apps and clear browser data and new downloads at session end' }
+            )
+            Invoke-MsiSql $database 'UPDATE `Control` SET `Text` = ''{\VSI_MS_Sans_Serif16.0_1_0}Smart Lab Agent options'' WHERE `Dialog_` = ''CustomCheckA'' AND `Control` = ''BannerText'''
+            Invoke-MsiSql $database 'UPDATE `Control` SET `Text` = ''{\VSI_MS_Sans_Serif13.0_0_0}Select the behavior approved for this shared Lab computer.'' WHERE `Dialog_` = ''CustomCheckA'' AND `Control` = ''BodyText'''
+            foreach ($option in $setupOptions) {
+                $control = 'Checkbox' + $option.Number
+                $legacyProperty = 'CHECKBOXA' + $option.Number
+                $label = '{\VSI_MS_Shell_Dlg13.0_0_0}' + $option.Label
+                Invoke-MsiSql $database "UPDATE ``Control`` SET ``Property`` = '$($option.Property)', ``Text`` = '$label', ``Attributes`` = 3, ``Width`` = 316 WHERE ``Dialog_`` = 'CustomCheckA' AND ``Control`` = '$control'"
+                Invoke-MsiSql $database "DELETE FROM ``Property`` WHERE ``Property`` = '$legacyProperty'"
+            }
 
-        $insertStartupComponentSql = "INSERT INTO ``Component`` (``Component``, ``ComponentId``, ``Directory_``, ``Attributes``, ``Condition``, ``KeyPath``) VALUES ('$startupComponent', '$($componentIds.Startup)', '$startMenuDirectory', 260, NULL, '$startupRegistryKeyPath')"
+            $policyComponents = @(
+                @{ Id = 'SmartLabAgentRecoveryOptIn'; Guid = '{94C793AF-71C7-4A2A-904D-6FE27468D563}'; Property = 'ENABLE_AGENT_RECOVERY'; Name = 'RecoveryAgentPath'; Value = '[#' + $fileKeysByName[$appExeName] + ']' },
+                @{ Id = 'SmartLabAgentCleanupOptIn'; Guid = '{94C793AF-71C7-4A2A-904D-6FE27468D564}'; Property = 'ENABLE_SESSION_CLEANUP'; Name = 'SessionCleanup'; Value = '1' }
+            )
+            foreach ($option in $policyComponents) {
+                $id = $option.Id
+                $keyPath = "${id}Value"
+                $condition = $option.Property + ' = "1"'
+                Invoke-MsiSql $database "INSERT INTO ``Component`` (``Component``, ``ComponentId``, ``Directory_``, ``Attributes``, ``Condition``, ``KeyPath``) VALUES ('$id', '$($option.Guid)', '$startMenuDirectory', 260, '$condition', '$keyPath')"
+                Invoke-MsiSql $database "INSERT INTO ``Registry`` (``Registry``, ``Root``, ``Key``, ``Name``, ``Value``, ``Component_``) VALUES ('$keyPath', 2, '$registryBasePath', '$($option.Name)', '$($option.Value)', '$id')"
+                Invoke-MsiSql $database "INSERT INTO ``FeatureComponents`` (``Feature_``, ``Component_``) VALUES ('DefaultFeature', '$id')"
+            }
+        }
+
+        $insertStartupComponentSql = "INSERT INTO ``Component`` (``Component``, ``ComponentId``, ``Directory_``, ``Attributes``, ``Condition``, ``KeyPath``) VALUES ('$startupComponent', '$($componentIds.Startup)', '$startMenuDirectory', 260, $startupCondition, '$startupRegistryKeyPath')"
         $view = $database.OpenView($insertStartupComponentSql)
         $view.Execute()
         $view.Close()

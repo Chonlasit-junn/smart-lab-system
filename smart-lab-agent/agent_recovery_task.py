@@ -12,34 +12,19 @@ import tempfile
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
+from agent_device import installed_agent_setting
+
 
 TASK_NAME = r"\Smart Lab Agent Recovery"
-RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RECOVERY_EXECUTABLE = "SmartLabAgentRecovery.exe"
 TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 TASK_DESCRIPTION = "Reopen Smart Lab Agent if it stops in the Lab Windows account."
 
 
 def installed_recovery_executable() -> Path | None:
-    if sys.platform != "win32" or not getattr(sys, "frozen", False):
-        return None
-
-    import winreg
-
     executable = Path(sys.executable)
-    try:
-        with winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE, RUN_KEY, 0,
-            winreg.KEY_QUERY_VALUE | winreg.KEY_WOW64_64KEY,
-        ) as key:
-            startup_command, _ = winreg.QueryValueEx(key, "SmartLabAgent")
-    except OSError:
-        return None
-    # Match the normal MSI's sign-in entry, including custom installation paths.
-    # The QA variant uses a separate sign-in entry and Windows task configuration.
-    if not isinstance(startup_command, str):
-        return None
-    if os.path.normcase(str(executable)) != os.path.normcase(startup_command.strip().strip('"')):
+    approved_path = installed_agent_setting("RecoveryAgentPath")
+    if not approved_path or os.path.normcase(str(executable)) != os.path.normcase(approved_path):
         return None
     return executable
 
@@ -133,6 +118,9 @@ def ensure_recovery_task() -> str:
         stdin=subprocess.DEVNULL, capture_output=True, timeout=15,
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
+    armed = subprocess.run([str(helper), "--arm"], **run_options)
+    if armed.returncode:
+        return f"recovery_arm_failed_{armed.returncode}"
     existing = subprocess.run([schtasks, "/Query", "/TN", TASK_NAME, "/XML"], **run_options)
 
     identity = subprocess.run(

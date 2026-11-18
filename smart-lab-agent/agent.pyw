@@ -12,7 +12,7 @@ import requests
 import pygetwindow as gw
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from agent_device import get_agent_data_dir, load_device_registration
+from agent_device import get_agent_data_dir, installed_agent_setting, load_device_registration
 from agent_device import append_agent_diagnostic as _append_agent_diagnostic
 from agent_clock import ServerClock
 from agent_outbox import AgentOutbox
@@ -301,13 +301,12 @@ DEBUG_MODE = (
     if _debug_override is not None
     else bool(BUILD_DEBUG_MODE)
 )
-# Session cleanup is enabled on shared Lab workstations; set this to 0 only
-# when a device needs temporary troubleshooting without cleanup.
-_cleanup_default = "1"
-SESSION_CLEANUP_ENABLED = os.getenv(
-    "SMART_LAB_SESSION_CLEANUP",
-    _cleanup_default,
-).strip().lower() in {"1", "true", "yes", "on"}
+# Packaged Agent cleanup requires an administrator's explicit Setup selection.
+SESSION_CLEANUP_ENABLED = (
+    installed_agent_setting("SessionCleanup") == "1"
+    if getattr(sys, "frozen", False)
+    else os.getenv("SMART_LAB_SESSION_CLEANUP", "1").strip().lower() in {"1", "true", "yes", "on"}
+)
 DEVICE_NAME = socket.gethostname()
 DEVICE_MAC  = ':'.join(f'{byte:02x}' for byte in uuid.getnode().to_bytes(6, 'big'))
 
@@ -2000,13 +1999,13 @@ class SmartLabAgent:
             self.violation_dialog_active = False
 
         if chance_requested:
-            grace_until = self.violation_state.grant_grace(time.monotonic())
+            self.violation_state.grant_grace(time.monotonic())
             self.violation_grace_context = context
-            print(
-                f"ให้โอกาสครั้งที่ {attempt.number} ถึง "
-                f"{grace_until.isoformat(timespec='seconds')}"
-            )
             self._resume_violation_monitors()
+            print(
+                f"ให้โอกาสครั้งที่ {attempt.number} เป็นเวลา "
+                f"{self.violation_state.grace_seconds} วินาที"
+            )
             return
 
         # The warning takes focus, so recheck executable identity directly.

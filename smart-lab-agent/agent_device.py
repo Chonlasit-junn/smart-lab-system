@@ -4,9 +4,30 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+
+INSTALL_SETTINGS_KEY = r"Software\Smart Lab\Device Agent"
+
+
+def installed_agent_setting(name: str) -> str | None:
+    """Read an administrator-selected setting from the 64-bit MSI registry."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return None
+    import winreg
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE, INSTALL_SETTINGS_KEY, 0,
+            winreg.KEY_QUERY_VALUE | winreg.KEY_WOW64_64KEY,
+        ) as key:
+            value, kind = winreg.QueryValueEx(key, name)
+    except OSError:
+        return None
+    return value if kind == winreg.REG_SZ else None
 
 
 def get_agent_data_dir() -> Path:
