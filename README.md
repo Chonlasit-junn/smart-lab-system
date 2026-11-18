@@ -402,6 +402,8 @@ npm run build
 docs/                       # คู่มือโครงสร้างและเทคโนโลยีโปรเจค
 scripts/                    # เครื่องมือตรวจสอบข้ามระบบ
 tests/fixtures/             # ข้อมูลทดสอบร่วมของ Frontend / Backend / Agent
+build/                      # release snapshot และ QA output ในเครื่อง (ไม่ commit)
+output/                     # benchmark/acceptance evidence ที่เอกสารอ้างอิง
 
 backend/
   main.py, models.py, database.py
@@ -427,8 +429,8 @@ smart-lab-agent/
   tests/                    # Agent tests
   build_msi/<build-id>/     # ไฟล์ระหว่าง build (ไม่ commit)
   build_msi/qa-archive/     # โฟลเดอร์ QA เบราว์เซอร์เก่า (ไม่ commit)
-  dist_msi/<build-id>/      # MSI ที่ build แล้ว; เก็บรุ่นที่ต้องการแจกจ่าย
-  dist_msi/archive/         # MSI รุ่นก่อนหน้า (ไม่ commit)
+  dist_msi/<build-id>/      # MSI/EXE ในเครื่องสำหรับแจกจ่าย (ไม่ commit)
+  dist_msi/archive/         # MSI รุ่นก่อนหน้าในเครื่อง (ไม่ commit)
 
 gatekeeper/
   smart_gatekeeper.py
@@ -437,9 +439,10 @@ gatekeeper/
   Silent-Face-Anti-Spoofing/ # Vendored anti-spoofing code และ model files
   runtime/                  # Runtime data (ไม่ commit)
   known_faces/              # Face data ในเครื่อง (ไม่ commit)
+  build_msi/<build-id>/     # ไฟล์ระหว่าง build; payload/cache ไม่ commit
 
 # Local-only environments / generated data
 backend/venv/  gatekeeper/venv/  smart-lab-agent/venv/
 ```
 
-โฟลเดอร์ `runtime/`, `known_faces/`, `venv/`, `node_modules/`, `dist/`, `build/`, `build_msi/` และ `dist_msi/` เป็นข้อมูลเฉพาะเครื่องหรือผลลัพธ์ที่สร้างใหม่ได้ โดยมีข้อยกเว้นคือ MSI ใน `dist_msi/` ที่ต้องการเก็บไว้แจกจ่าย ไม่ควรย้าย runtime data หรือ environment ระหว่างส่วนของระบบ เพราะแต่ละแอปคาดหวัง path ของตัวเอง
+โฟลเดอร์ `runtime/`, `known_faces/`, `venv/`, `node_modules/`, `dist/`, `build/`, `build_msi/` และ `dist_msi/` เป็นข้อมูลเฉพาะเครื่องหรือผลลัพธ์ที่สร้างใหม่ได้ ไฟล์ MSI และ EXE เก็บไว้ในเครื่องและไม่ commit ขึ้น Git ดู [คู่มือโครงสร้างโปรเจค](docs/PROJECT_STRUCTURE.md) ก่อนย้ายไฟล์ build เพราะ installer บางรุ่นอ้างอิง path เดิม ไม่ควรย้าย runtime data หรือ environment ระหว่างส่วนของระบบ เพราะแต่ละแอปคาดหวัง path ของตัวเอง
