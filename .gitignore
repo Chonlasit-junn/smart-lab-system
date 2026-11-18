@@ -8,6 +8,9 @@ dist/
 frontend/dist-*/
 smart-lab-agent/build_*/
 smart-lab-agent/dist_*/
+gatekeeper/build_msi/*/pyinstaller-work/
+gatekeeper/build_msi/*/payload/
+gatekeeper/build_msi/*/spec/
 build/
 .npm/
 
@@ -43,3 +46,6 @@ gatekeeper/embeddings_cache.pkl
 # --- OS Files ---
 .DS_Store
 Thumbs.db
+.vs/
+*.suo
+*.user
