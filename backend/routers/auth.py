@@ -38,6 +38,28 @@ from phone_utils import normalize_phone_number
 
 router = APIRouter(tags=["Authentication"])
 MAX_FACE_IMAGE_BYTES = 5 * 1024 * 1024
+STUDENT_ID_ALREADY_REGISTERED = "This student ID is already registered."
+REGISTRATION_DETAILS_ALREADY_USED = "Registration details are already in use."
+
+
+async def _cleanup_registration_profile_image(path):
+    """Do not let best-effort storage cleanup replace the registration error."""
+    if not path:
+        return
+    try:
+        await delete_profile_image(path)
+    except Exception:
+        return
+
+
+def _student_id_exists_and_release_connection(db, student_id):
+    """Check the unique value, then release the preflight read transaction."""
+    try:
+        return db.query(models.Student.id).filter(
+            models.Student.student_id == student_id,
+        ).first() is not None
+    finally:
+        db.rollback()
 
 
 def _prepare_registration_face(image_data, password):
@@ -146,6 +168,10 @@ async def register(
 
     # re-verify OTP at registration time so you can't skip step 2
     challenge_id = await run_in_threadpool(otp_service.verify_otp, db, normalized_email, otp)
+    if domain == "bumail.net" and await run_in_threadpool(
+        _student_id_exists_and_release_connection, db, student_id,
+    ):
+        raise HTTPException(status_code=409, detail=STUDENT_ID_ALREADY_REGISTERED)
 
     # verify_otp commits its preflight and releases the connection/row lock.
     # Do not query the database again until the worker has completed. The same
@@ -226,26 +252,30 @@ async def register(
         return {"message": "Registration successful!"}
     except ProfileStorageError:
         db.rollback()
-        if uploaded_object_path:
-            await delete_profile_image(uploaded_object_path)
+        await _cleanup_registration_profile_image(uploaded_object_path)
         raise HTTPException(
             status_code=503,
             detail="Profile image storage is unavailable. Please try again later.",
         )
     except HTTPException:
         db.rollback()
-        if uploaded_object_path:
-            await delete_profile_image(uploaded_object_path)
+        await _cleanup_registration_profile_image(uploaded_object_path)
         raise
-    except IntegrityError:
+    except IntegrityError as error:
         db.rollback()
-        if uploaded_object_path:
-            await delete_profile_image(uploaded_object_path)
-        raise HTTPException(status_code=409, detail="Registration details are already in use.")
+        await _cleanup_registration_profile_image(uploaded_object_path)
+        constraint_name = getattr(
+            getattr(error.orig, "diag", None), "constraint_name", None,
+        )
+        detail = (
+            STUDENT_ID_ALREADY_REGISTERED
+            if constraint_name == "students_student_id_key"
+            else REGISTRATION_DETAILS_ALREADY_USED
+        )
+        raise HTTPException(status_code=409, detail=detail) from None
     except Exception:
         db.rollback()
-        if uploaded_object_path:
-            await delete_profile_image(uploaded_object_path)
+        await _cleanup_registration_profile_image(uploaded_object_path)
         raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
     finally:
         if local_file_path and not keep_local_file and os.path.exists(local_file_path):

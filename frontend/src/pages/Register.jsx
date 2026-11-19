@@ -19,7 +19,7 @@ import { registerLocales, translateLocaleMessage } from '../utils/locales';
 import { BU_FACULTIES } from '../utils/buFaculties';
 import { isValidNewPassword } from '../utils/passwordPolicy';
 import { useLanguage } from '../context/language-context.js';
-import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil, shouldShowRegistrationOtpControls } from '../utils/registrationOtp';
+import { isOtpError, isStudentIdConflict, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil, shouldShowRegistrationOtpControls } from '../utils/registrationOtp';
 import { isValidPhoneNumber, normalizePhoneInput } from '../utils/phoneNumber';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -209,6 +209,7 @@ export default function Register() {
       navigate('/');
     } catch (err) {
       setError(otpErrorMessage(err, t, t.registrationFailed));
+      if (isStudentIdConflict(err)) setStep(3);
       if (isOtpError(err)) {
         if (requiresNewOtp(err)) {
           const now = Date.now();

@@ -129,13 +129,14 @@ async def delete_profile_image(path: str) -> None:
     try:
         _require_supabase_config()
         async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.delete(
+            response = await client.request(
+                "DELETE",
                 _bucket_object_url(),
                 json={"prefixes": [path]},
                 headers=_auth_headers(),
             )
         response.raise_for_status()
-    except (httpx.HTTPError, ProfileStorageError):
+    except Exception:
         # Cleanup must not hide the original registration/database error.
         return
 
@@ -147,14 +148,15 @@ def delete_profile_image_sync(path: str | None) -> None:
         return
     try:
         _require_supabase_config()
-        response = httpx.delete(
+        response = httpx.request(
+            "DELETE",
             _bucket_object_url(),
             json={"prefixes": [path]},
             headers=_auth_headers(),
             timeout=20,
         )
         response.raise_for_status()
-    except (httpx.HTTPError, ProfileStorageError):
+    except Exception:
         return
 
 

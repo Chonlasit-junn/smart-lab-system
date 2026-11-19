@@ -2,8 +2,9 @@ import os
 import sys
 import tempfile
 import unittest
+import asyncio
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -95,6 +96,55 @@ class ProfileStorageBatchSigningTests(unittest.TestCase):
         self.assertEqual(parts.path, f"uploads/profiles/{filename}")
         self.assertEqual(resolved, image_path)
         self.assertIsNone(rejected)
+
+
+class ProfileStorageDeletionTests(unittest.TestCase):
+    def test_async_delete_sends_json_with_generic_request_and_is_best_effort(self):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.request.return_value = response
+        with (
+            patch.object(profile_storage, "uses_supabase_storage", return_value=True),
+            patch.object(profile_storage, "_require_supabase_config"),
+            patch.object(profile_storage, "_bucket_object_url", return_value="https://storage.test/object"),
+            patch.object(profile_storage, "_auth_headers", return_value={"Authorization": "Bearer test"}),
+            patch.object(profile_storage.httpx, "AsyncClient", return_value=client),
+        ):
+            asyncio.run(profile_storage.delete_profile_image("profiles/8/avatar.jpg"))
+
+        client.request.assert_awaited_once_with(
+            "DELETE", "https://storage.test/object",
+            json={"prefixes": ["profiles/8/avatar.jpg"]},
+            headers={"Authorization": "Bearer test"},
+        )
+
+        client.request.side_effect = TypeError("cleanup request failed")
+        with (
+            patch.object(profile_storage, "uses_supabase_storage", return_value=True),
+            patch.object(profile_storage, "_require_supabase_config"),
+            patch.object(profile_storage.httpx, "AsyncClient", return_value=client),
+        ):
+            asyncio.run(profile_storage.delete_profile_image("profiles/8/avatar.jpg"))
+
+    def test_sync_delete_uses_generic_request_for_json_body(self):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        with (
+            patch.object(profile_storage, "uses_supabase_storage", return_value=True),
+            patch.object(profile_storage, "_require_supabase_config"),
+            patch.object(profile_storage, "_bucket_object_url", return_value="https://storage.test/object"),
+            patch.object(profile_storage, "_auth_headers", return_value={"Authorization": "Bearer test"}),
+            patch.object(profile_storage.httpx, "request", return_value=response) as request,
+        ):
+            profile_storage.delete_profile_image_sync("profiles/8/avatar.jpg")
+
+        request.assert_called_once_with(
+            "DELETE", "https://storage.test/object",
+            json={"prefixes": ["profiles/8/avatar.jpg"]},
+            headers={"Authorization": "Bearer test"}, timeout=20,
+        )
 
 
 if __name__ == "__main__":

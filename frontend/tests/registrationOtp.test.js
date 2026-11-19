@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerLocales } from '../src/utils/locales.js';
-import { isOtpError, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil, shouldShowRegistrationOtpControls } from '../src/utils/registrationOtp.js';
+import { isOtpError, isStudentIdConflict, otpDeadlines, otpErrorMessage, requiresNewOtp, retrySeconds, secondsUntil, shouldShowRegistrationOtpControls } from '../src/utils/registrationOtp.js';
 
 test('face errors are localized without sending registration back to the OTP step', () => {
   for (const t of Object.values(registerLocales)) {
@@ -19,6 +19,26 @@ test('face errors are localized without sending registration back to the OTP ste
       assert.equal(requiresNewOtp(error), false);
     }
   }
+});
+
+test('registration conflicts are localized and student ID conflicts return to profile details', () => {
+  for (const t of Object.values(registerLocales)) {
+    for (const [detail, key] of [
+      ['This email is already registered.', 'emailAlreadyRegistered'],
+      ['This student ID is already registered.', 'studentIdAlreadyRegistered'],
+      ['Registration details are already in use.', 'registrationDetailsInUse'],
+    ]) {
+      const error = { response: { data: { detail } } };
+      assert.ok(t[key]);
+      assert.equal(otpErrorMessage(error, t, 'fallback'), t[key]);
+      assert.equal(isOtpError(error), false);
+      assert.equal(requiresNewOtp(error), false);
+    }
+  }
+  assert.equal(isStudentIdConflict({
+    response: { data: { detail: 'This student ID is already registered.' } },
+  }), true);
+  assert.equal(isStudentIdConflict({ response: { data: { detail: 'Invalid OTP.' } } }), false);
 });
 
 test('OTP deadlines use remaining server durations, not a client/server clock comparison', () => {

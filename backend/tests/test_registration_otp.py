@@ -15,6 +15,7 @@ import httpx
 from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -331,6 +332,30 @@ class RegistrationOTPTests(unittest.TestCase):
         self.assertEqual(user.roles[0].name, "student")
         self.assertEqual(self.db.query(models.Student).filter_by(user_id=user.id).one().faculty, "Science")
 
+    def test_duplicate_student_id_is_rejected_before_face_processing_and_otp_consumption(self):
+        existing_user = models.User(
+            email="existing@bumail.net", password="hash",
+            first_name="Existing", last_name="Student",
+        )
+        self.db.add(existing_user)
+        self.db.flush()
+        self.db.add(models.Student(
+            student_id="S-DUPLICATE", user_id=existing_user.id,
+            faculty="Science", department="Computing", is_active=True,
+        ))
+        self.db.commit()
+
+        email = "duplicate@bumail.net"
+        _, code = self.issue(email)
+        with self.assertRaises(HTTPException) as caught:
+            self.register(code, email=email, student_id=" S-DUPLICATE ")
+
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(caught.exception.detail, auth.STUDENT_ID_ALREADY_REGISTERED)
+        self.assertIsNone(self.row(email).consumed_at)
+        self.assertEqual(self.db.query(models.User).count(), 1)
+        auth.get_deepface.return_value.represent.assert_not_called()
+
     def test_exact_expiration_and_expiry_after_verify(self):
         _, code = self.issue()
         otp.verify_otp(self.db, self.email, code)
@@ -477,6 +502,40 @@ class RegistrationOTPTests(unittest.TestCase):
         self.assertIsNone(self.row().consumed_at)
         self.assertEqual(list(Path(self.temp.name).iterdir()), [])
         otp.verify_otp(self.db, self.email, code)
+
+    def test_duplicate_student_id_race_stays_a_conflict_when_image_cleanup_throws(self):
+        email = "race@bumail.net"
+        _, code = self.issue(email)
+        commit = self.db.commit
+        calls = 0
+
+        def fail_final_commit():
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                diagnostic = SimpleNamespace(constraint_name="students_student_id_key")
+                raise IntegrityError("synthetic duplicate student ID", {}, SimpleNamespace(diag=diagnostic))
+            return commit()
+
+        cleanup = AsyncMock(side_effect=TypeError("unsupported JSON argument"))
+        with (
+            patch.object(auth, "uses_supabase_storage", return_value=True),
+            patch.object(auth, "upload_profile_image", AsyncMock()),
+            patch.object(auth, "profile_object_path", return_value="profiles/999/avatar.jpg"),
+            patch.object(auth, "delete_profile_image", cleanup),
+            patch.object(self.db, "commit", side_effect=fail_final_commit),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                self.register(code, email=email)
+
+        self.assertEqual(
+            caught.exception.status_code, 409,
+            f"detail={caught.exception.detail}; commit_calls={calls}",
+        )
+        self.assertEqual(caught.exception.detail, auth.STUDENT_ID_ALREADY_REGISTERED)
+        cleanup.assert_awaited_once_with("profiles/999/avatar.jpg")
+        self.assertIsNone(self.row(email).consumed_at)
+        self.assertEqual(self.db.query(models.User).count(), 0)
 
     def test_request_endpoint_normalization_timing_and_sanitized_mail_error(self):
         mail = AsyncMock()

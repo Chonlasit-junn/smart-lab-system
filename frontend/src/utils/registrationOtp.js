@@ -9,6 +9,12 @@ const errorKeys = {
   'OTP service is not configured. Please contact support.': 'otpNotConfigured',
 };
 
+const registrationErrorKeys = {
+  'This email is already registered.': 'emailAlreadyRegistered',
+  'This student ID is already registered.': 'studentIdAlreadyRegistered',
+  'Registration details are already in use.': 'registrationDetailsInUse',
+};
+
 export function otpErrorMessage(error, translations, fallback) {
   const detail = error?.response?.data?.detail;
   const faceErrors = {
@@ -27,8 +33,17 @@ export function otpErrorMessage(error, translations, fallback) {
     'Password must be at least 8 characters, include an uppercase letter, and at most 72 UTF-8 bytes.',
     'Password must be 8-72 printable ASCII characters, include an uppercase letter and a number; symbols are optional and spaces are not allowed.',
   ].includes(detail)) return translations.passwordInvalid || fallback;
+  const registrationKey = Object.hasOwn(registrationErrorKeys, detail)
+    ? registrationErrorKeys[detail]
+    : null;
+  if (registrationKey) return translations[registrationKey] || fallback;
   const key = Object.hasOwn(errorKeys, detail) ? errorKeys[detail] : null;
-  return key ? translations[key] || fallback : fallback;
+  if (key) return translations[key] || fallback;
+  return typeof detail === 'string' ? detail : fallback;
+}
+
+export function isStudentIdConflict(error) {
+  return error?.response?.data?.detail === 'This student ID is already registered.';
 }
 
 export function isOtpError(error) {
